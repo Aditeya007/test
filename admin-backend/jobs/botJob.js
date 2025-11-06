@@ -135,3 +135,116 @@ exports.runBotForUser = async (tenantContext, userInput, options = {}) => {
     }
   }
 };
+
+/**
+ * Reload Vector Store - Trigger immediate ChromaDB reload without restarting bot
+ * 
+ * Call this function after scraping/updating data to make new vectors available
+ * immediately in bot responses. The bot will reload from disk without restart.
+ * 
+ * @param {Object} tenantContext - Tenant context object
+ * @param {string} tenantContext.botEndpoint - FastAPI bot base URL
+ * @param {string} tenantContext.resourceId - Tenant resource ID
+ * @param {string} tenantContext.vectorStorePath - Path to ChromaDB vector store
+ * @param {string} tenantContext.databaseUri - MongoDB connection URI
+ * @returns {Promise<Object>} Reload result with document count and status
+ * @throws {Error} Throws error if reload fails
+ * 
+ * @example
+ * const result = await reloadVectors({
+ *   botEndpoint: 'http://localhost:8000',
+ *   resourceId: 'tenant-123',
+ *   vectorStorePath: '/path/to/chroma_db',
+ *   databaseUri: 'mongodb://localhost:27017/db'
+ * });
+ * console.log(`Reloaded ${result.documentCount} documents`);
+ */
+exports.reloadVectors = async (tenantContext) => {
+  if (!tenantContext || !tenantContext.resourceId) {
+    throw new Error('Tenant context with resourceId is required to reload vectors');
+  }
+
+  const { botEndpoint, resourceId, vectorStorePath, databaseUri } = tenantContext;
+  const fallbackBotUrl = process.env.FASTAPI_BOT_URL;
+  const baseUrl = botEndpoint || fallbackBotUrl;
+
+  if (!baseUrl) {
+    throw new Error('No bot endpoint configured and FASTAPI_BOT_URL is not set');
+  }
+
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+  const reloadApiUrl = `${normalizedBaseUrl}/reload_vectors`;
+  const timeout = parseInt(process.env.BOT_RELOAD_TIMEOUT, 10) || 15000;
+
+  try {
+    console.log(`🔄 Triggering vector store reload for resource: ${resourceId}`);
+    console.log(`   API: ${reloadApiUrl}`);
+
+    const response = await axios.post(
+      reloadApiUrl,
+      null,
+      {
+        params: {
+          resource_id: resourceId,
+          vector_store_path: vectorStorePath,
+          database_uri: databaseUri
+        },
+        timeout,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(process.env.FASTAPI_SHARED_SECRET && {
+            'X-Service-Secret': process.env.FASTAPI_SHARED_SECRET,
+          }),
+          'X-Resource-Id': resourceId
+        },
+        validateStatus: (status) => status < 500
+      }
+    );
+
+    if (response.status !== 200) {
+      console.error(`❌ Vector reload returned status ${response.status}:`, response.data);
+      throw new Error(`Vector reload error (${response.status}): ${response.data?.detail || 'Unknown error'}`);
+    }
+
+    if (!response.data || response.data.status !== 'success') {
+      console.error('❌ Invalid response from vector reload endpoint:', response.data);
+      throw new Error('Invalid response from vector reload service');
+    }
+
+    const docCount = response.data.document_count;
+    const actionTaken = response.data.action_taken;
+    
+    console.log(`✅ Vector reload successful!`);
+    console.log(`   Action: ${actionTaken}`);
+    if (docCount !== undefined) {
+      console.log(`   Document count: ${docCount}`);
+    }
+
+    return {
+      success: true,
+      documentCount: docCount,
+      actionTaken: actionTaken,
+      message: response.data.message,
+      resourceId: resourceId,
+      reloadedAt: response.data.reloaded_at
+    };
+  } catch (err) {
+    console.error('❌ Vector reload failed:', {
+      resourceId,
+      error: err.message,
+      code: err.code,
+      status: err.response?.status
+    });
+
+    if (err.code === 'ECONNREFUSED') {
+      throw new Error(`Cannot connect to bot API at ${reloadApiUrl} - service may not be running`);
+    } else if (err.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED') {
+      throw new Error(`Vector reload timeout after ${timeout}ms`);
+    } else if (err.response) {
+      const detail = err.response.data?.detail || err.response.statusText || 'Unknown error';
+      throw new Error(`Vector reload API error (${err.response.status}): ${detail}`);
+    } else {
+      throw new Error(`Vector reload failed: ${err.message}`);
+    }
+  }
+};

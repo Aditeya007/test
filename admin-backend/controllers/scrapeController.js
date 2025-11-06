@@ -9,42 +9,63 @@ const buildJobId = (prefix, resourceId) => {
 };
 
 /**
- * Mark bot data as updated after scraping/updating (LIGHTWEIGHT - no restart needed!)
- * This sets a "dirty flag" so the next chat request will auto-reload the vector store.
- * Much faster than destroying and recreating the bot instance.
+ * Reload bot vector store immediately after scraping/updating (NO RESTART NEEDED!)
+ * This triggers an immediate reload of the ChromaDB collection from disk, making new data
+ * available in bot responses right away without restarting the Python process.
+ * 
+ * @param {Object} tenantContext - Tenant context with botEndpoint, resourceId, vectorStorePath, etc.
+ * @returns {Promise<Object>} Result with success status, document count, and message
  */
-const refreshBotCache = async (tenantContext, forceInvalidate = true) => {
+const refreshBotCache = async (tenantContext) => {
   try {
     const botEndpoint = tenantContext.botEndpoint || process.env.FASTAPI_BOT_URL || 'http://localhost:8000';
     const sharedSecret = process.env.FASTAPI_SHARED_SECRET;
     
-    // Use the lightweight "mark dirty" endpoint instead of full refresh
-    const refreshUrl = `${botEndpoint}/mark-data-updated`;
+    // Use the NEW /reload_vectors endpoint for IMMEDIATE reload
+    const reloadUrl = `${botEndpoint}/reload_vectors`;
     const params = {
       resource_id: tenantContext.resourceId,
       vector_store_path: tenantContext.vectorStorePath,
       database_uri: tenantContext.databaseUri
     };
 
-    console.log(`🚩 Marking data as updated for resource: ${tenantContext.resourceId}`);
-    console.log(`   Next chat request will auto-reload vector store (no restart needed!)`);
+    console.log(`� Triggering IMMEDIATE vector store reload for resource: ${tenantContext.resourceId}`);
+    console.log(`   This will reload ChromaDB from disk WITHOUT restarting the bot!`);
     
-    const response = await axios.post(refreshUrl, null, {
+    const response = await axios.post(reloadUrl, null, {
       params,
       headers: sharedSecret ? { 'X-Service-Secret': sharedSecret } : {},
-      timeout: 5000 // 5 second timeout (much faster now)
+      timeout: 10000 // 10 second timeout (reload can take a moment)
     });
 
     if (response.data && response.data.status === 'success') {
-      console.log(`✅ Data marked as updated! Next chat will use fresh data.`);
-      return { success: true, message: response.data.message };
+      const docCount = response.data.document_count;
+      const action = response.data.action_taken;
+      
+      console.log(`✅ Vector store reload successful!`);
+      console.log(`   Action: ${action}`);
+      if (docCount !== undefined) {
+        console.log(`   Document count: ${docCount}`);
+      }
+      console.log(`   Bot will now answer with latest data (old + new)!`);
+      
+      return { 
+        success: true, 
+        message: response.data.message,
+        documentCount: docCount,
+        actionTaken: action
+      };
     } else {
-      console.warn('⚠️  Mark data updated returned unexpected response:', response.data);
+      console.warn('⚠️  Vector reload returned unexpected response:', response.data);
       return { success: false, error: 'Unexpected response from bot service' };
     }
   } catch (err) {
-    console.error('❌ Failed to mark data updated:', err.message);
-    // Don't fail the scrape job if marking fails
+    console.error('❌ Failed to reload vectors:', err.message);
+    if (err.response) {
+      console.error('   Response status:', err.response.status);
+      console.error('   Response data:', err.response.data);
+    }
+    // Don't fail the scrape job if reload fails - data is still saved
     return { success: false, error: err.message };
   }
 };
