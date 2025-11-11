@@ -6,241 +6,308 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(7, 10, 18, 0.85);
+  background: rgba(7, 10, 18, 0.92);
+  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1.5em;
+  padding: 2em;
   z-index: 2000;
   overflow-y: auto;
+  animation: fadeIn 0.3s ease-out;
 }
 
 .widget-installer-modal {
   width: 100%;
-  max-width: 720px;
-  background: #20293c;
-  border-radius: 18px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  max-width: 800px;
+  background: rgba(30, 41, 59, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 24px;
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 131, 7, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   max-height: 90vh;
   display: flex;
   flex-direction: column;
+  animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .widget-installer-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.8em 2em;
-  border-bottom: 1px solid rgba(255, 131, 7, 0.2);
+  padding: 2.5em 2.5em 2em;
+  border-bottom: 3px solid transparent;
+  background: linear-gradient(90deg, rgba(255, 131, 7, 0.8) 0%, rgba(255, 131, 7, 0.2) 50%, transparent 100%) bottom / 100% 3px no-repeat;
 }
 
 .widget-installer-header h3 {
   margin: 0;
-  color: #FF8307;
-  font-size: 1.5rem;
-  font-weight: 700;
+  background: linear-gradient(135deg, #FF8307 0%, #ffb366 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-size: 1.8rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .widget-installer-close {
-  background: transparent;
-  border: none;
-  color: #b5bdc9;
+  background: rgba(239, 68, 68, 0.2);
+  border: 2px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
   font-size: 1.8rem;
   cursor: pointer;
   padding: 0;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  transition: all 0.2s ease;
+  border-radius: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-weight: 700;
 }
 
 .widget-installer-close:hover {
-  background: rgba(255, 131, 7, 0.1);
-  color: #FF8307;
+  background: rgba(239, 68, 68, 0.35);
+  border-color: rgba(239, 68, 68, 0.6);
+  transform: scale(1.08);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
 }
 
 .widget-installer-content {
-  padding: 2em;
+  padding: 2.5em;
   overflow-y: auto;
   flex: 1;
 }
 
 .widget-installer-description {
-  color: #b5bdc9;
-  font-size: 1rem;
-  line-height: 1.6;
-  margin-bottom: 1.5em;
+  color: #94a3b8;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  margin-bottom: 2em;
+  font-weight: 500;
 }
 
 .widget-installer-description code {
-  background: rgba(255, 131, 7, 0.15);
-  padding: 0.2em 0.5em;
-  border-radius: 4px;
+  background: rgba(255, 131, 7, 0.18);
+  padding: 0.3em 0.6em;
+  border-radius: 6px;
   color: #FF8307;
-  font-family: 'Courier New', monospace;
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
   font-size: 0.9em;
+  font-weight: 600;
+  border: 1px solid rgba(255, 131, 7, 0.3);
 }
 
 .widget-installer-user-info {
-  background: rgba(109, 212, 126, 0.08);
-  border: 1px solid rgba(109, 212, 126, 0.25);
-  border-radius: 12px;
-  padding: 1.2em;
-  margin-bottom: 1.5em;
+  background: rgba(34, 197, 94, 0.1);
+  border: 2px solid rgba(34, 197, 94, 0.3);
+  border-radius: 16px;
+  padding: 1.5em;
+  margin-bottom: 2em;
+  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.1);
 }
 
 .widget-installer-user-info p {
-  margin: 0.4em 0;
-  color: #e0e5ec;
+  margin: 0.6em 0;
+  color: #f1f5f9;
   font-size: 0.95rem;
+  font-weight: 500;
 }
 
 .widget-installer-user-info strong {
-  color: #6dd47e;
+  color: #4ade80;
+  font-weight: 700;
 }
 
 .widget-installer-user-info code {
-  background: rgba(255, 255, 255, 0.08);
-  padding: 0.2em 0.5em;
-  border-radius: 4px;
-  color: #a8e6cf;
-  font-family: 'Courier New', monospace;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.3em 0.6em;
+  border-radius: 6px;
+  color: #86efac;
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
   font-size: 0.9em;
+  font-weight: 600;
+  border: 1px solid rgba(34, 197, 94, 0.2);
 }
 
 .widget-installer-snippet-container {
   position: relative;
-  margin-bottom: 1.8em;
+  margin-bottom: 2.5em;
 }
 
 .widget-installer-snippet {
-  background: #181f2a;
-  border: 1px solid rgba(255, 131, 7, 0.3);
-  border-radius: 12px;
-  padding: 1.5em;
-  color: #e0e5ec;
-  font-family: 'Courier New', Consolas, Monaco, monospace;
+  background: rgba(15, 23, 42, 0.8);
+  border: 2px solid rgba(255, 131, 7, 0.3);
+  border-radius: 16px;
+  padding: 2em;
+  color: #e2e8f0;
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
   font-size: 0.88rem;
-  line-height: 1.6;
+  line-height: 1.7;
   overflow-x: auto;
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
 }
 
 .widget-installer-copy-btn {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  background: #FF8307;
+  top: 16px;
+  right: 16px;
+  background: linear-gradient(135deg, #FF8307 0%, #e67506 100%);
   color: #fff;
   border: none;
-  padding: 0.6em 1.2em;
-  border-radius: 8px;
-  font-weight: 600;
+  padding: 0.7em 1.5em;
+  border-radius: 10px;
+  font-weight: 700;
   font-size: 0.9rem;
   cursor: pointer;
-  transition: all 0.25s ease;
-  box-shadow: 0 4px 12px rgba(255, 131, 7, 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 6px 16px rgba(255, 131, 7, 0.35);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .widget-installer-copy-btn:hover {
-  background: #e67506;
-  box-shadow: 0 6px 18px rgba(255, 131, 7, 0.45);
+  background: linear-gradient(135deg, #e67506 0%, #d66905 100%);
+  box-shadow: 0 10px 24px rgba(255, 131, 7, 0.5);
   transform: translateY(-2px);
 }
 
+.widget-installer-copy-btn:active {
+  transform: translateY(0);
+}
+
 .widget-installer-copy-btn.copied {
-  background: #6dd47e;
-  box-shadow: 0 4px 12px rgba(109, 212, 126, 0.3);
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  box-shadow: 0 6px 16px rgba(34, 197, 94, 0.35);
 }
 
 .widget-installer-instructions {
-  background: rgba(255, 131, 7, 0.06);
-  border-left: 4px solid #FF8307;
-  border-radius: 8px;
-  padding: 1.5em;
-  margin-bottom: 1.5em;
+  background: rgba(255, 131, 7, 0.08);
+  border-left: 5px solid #FF8307;
+  border-radius: 14px;
+  padding: 2em;
+  margin-bottom: 2em;
+  border: 1px solid rgba(255, 131, 7, 0.2);
+  box-shadow: 0 4px 16px rgba(255, 131, 7, 0.1);
 }
 
 .widget-installer-instructions h4 {
-  margin: 0 0 1em 0;
+  margin: 0 0 1.2em 0;
   color: #FF8307;
-  font-size: 1.1rem;
+  font-size: 1.3rem;
+  font-weight: 800;
 }
 
 .widget-installer-instructions ol {
   margin: 0;
-  padding-left: 1.5em;
-  color: #d3d9e5;
+  padding-left: 1.8em;
+  color: #cbd5e1;
 }
 
 .widget-installer-instructions li {
-  margin-bottom: 0.7em;
-  line-height: 1.5;
+  margin-bottom: 1em;
+  line-height: 1.7;
+  font-weight: 500;
 }
 
 .widget-installer-instructions code {
-  background: rgba(255, 255, 255, 0.1);
-  padding: 0.2em 0.5em;
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 0.3em 0.6em;
+  border-radius: 6px;
   color: #ffb366;
-  font-family: 'Courier New', monospace;
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
   font-size: 0.9em;
+  font-weight: 600;
+  border: 1px solid rgba(255, 131, 7, 0.2);
 }
 
 .widget-installer-features {
-  background: rgba(75, 85, 235, 0.08);
-  border: 1px solid rgba(75, 85, 235, 0.25);
-  border-radius: 12px;
-  padding: 1.5em;
-  margin-bottom: 1.5em;
+  background: rgba(99, 102, 241, 0.1);
+  border: 2px solid rgba(99, 102, 241, 0.3);
+  border-radius: 16px;
+  padding: 2em;
+  margin-bottom: 2em;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.1);
 }
 
 .widget-installer-features h4 {
-  margin: 0 0 1em 0;
-  color: #8b93ff;
-  font-size: 1.1rem;
+  margin: 0 0 1.2em 0;
+  color: #a78bfa;
+  font-size: 1.3rem;
+  font-weight: 800;
 }
 
 .widget-installer-features ul {
   margin: 0;
-  padding-left: 1.2em;
-  color: #d3d9e5;
+  padding-left: 1.5em;
+  color: #cbd5e1;
   list-style: none;
 }
 
 .widget-installer-features li {
-  margin-bottom: 0.6em;
-  line-height: 1.5;
+  margin-bottom: 0.8em;
+  line-height: 1.7;
   position: relative;
-  padding-left: 0.3em;
+  padding-left: 0.5em;
+  font-weight: 500;
+}
+
+.widget-installer-features li::before {
+  content: '✓';
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
+  color: white;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 20px;
+  margin-right: 0.8em;
+  font-weight: 800;
+  font-size: 0.8rem;
 }
 
 .widget-installer-preview-section {
-  margin-bottom: 1.5em;
+  margin-bottom: 2em;
 }
 
 .widget-installer-preview-btn {
-  background: #2b3547;
-  color: #f1f1f1;
-  border: 1px solid rgba(255, 131, 7, 0.3);
-  padding: 0.8em 1.5em;
-  border-radius: 10px;
-  font-weight: 600;
+  background: rgba(100, 116, 139, 0.3);
+  color: #f1f5f9;
+  border: 2px solid rgba(255, 131, 7, 0.4);
+  padding: 1em 2em;
+  border-radius: 12px;
+  font-weight: 700;
   font-size: 0.95rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   width: 100%;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .widget-installer-preview-btn:hover {
-  background: #353f52;
+  background: rgba(255, 131, 7, 0.15);
   border-color: #FF8307;
   color: #FF8307;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(255, 131, 7, 0.2);
 }
 
 .widget-installer-preview {
@@ -322,35 +389,54 @@
 }
 
 .widget-installer-notes {
-  background: rgba(255, 74, 85, 0.08);
-  border: 1px solid rgba(255, 74, 85, 0.25);
-  border-radius: 12px;
-  padding: 1.5em;
+  background: rgba(239, 68, 68, 0.1);
+  border: 2px solid rgba(239, 68, 68, 0.3);
+  border-radius: 16px;
+  padding: 2em;
   margin-bottom: 0;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.1);
 }
 
 .widget-installer-notes h4 {
-  margin: 0 0 1em 0;
-  color: #ff9999;
-  font-size: 1.1rem;
+  margin: 0 0 1.2em 0;
+  color: #fca5a5;
+  font-size: 1.3rem;
+  font-weight: 800;
 }
 
 .widget-installer-notes ul {
   margin: 0;
-  padding-left: 1.2em;
-  color: #d3d9e5;
+  padding-left: 1.5em;
+  color: #cbd5e1;
   list-style: none;
 }
 
 .widget-installer-notes li {
-  margin-bottom: 0.7em;
-  line-height: 1.5;
+  margin-bottom: 1em;
+  line-height: 1.7;
   position: relative;
-  padding-left: 0.3em;
+  padding-left: 0.5em;
+  font-weight: 500;
+}
+
+.widget-installer-notes li::before {
+  content: '⚠';
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  background: linear-gradient(135deg, #fca5a5 0%, #ef4444 100%);
+  color: white;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 20px;
+  margin-right: 0.8em;
+  font-weight: 800;
+  font-size: 0.8rem;
 }
 
 .widget-installer-notes strong {
-  color: #ffb3b3;
+  color: #fca5a5;
+  font-weight: 700;
 }
 
 .widget-installer-error {
@@ -366,104 +452,126 @@
 
 .widget-installer-actions {
   display: flex;
-  gap: 1em;
-  padding: 1.5em 2em;
-  border-top: 1px solid rgba(255, 131, 7, 0.2);
+  gap: 1.2em;
+  padding: 2em 2.5em;
+  border-top: 3px solid transparent;
+  background: linear-gradient(90deg, rgba(255, 131, 7, 0.8) 0%, rgba(255, 131, 7, 0.2) 50%, transparent 100%) top / 100% 3px no-repeat;
   flex-wrap: wrap;
 }
 
 .widget-installer-btn-primary,
 .widget-installer-btn-neutral {
   flex: 1;
-  min-width: 160px;
-  padding: 0.9em 1.2em;
-  border-radius: 10px;
-  font-weight: 600;
+  min-width: 180px;
+  padding: 1.1em 1.5em;
+  border-radius: 12px;
+  font-weight: 700;
   font-size: 0.95rem;
   border: none;
   cursor: pointer;
-  transition: all 0.2s ease-in-out;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .widget-installer-btn-primary {
-  background: #FF8307;
+  background: linear-gradient(135deg, #FF8307 0%, #e67506 100%);
   color: #fff;
-  box-shadow: 0 4px 12px rgba(255, 131, 7, 0.25);
+  box-shadow: 0 6px 16px rgba(255, 131, 7, 0.3);
 }
 
 .widget-installer-btn-primary:hover {
-  background: #e67506;
-  box-shadow: 0 6px 18px rgba(255, 131, 7, 0.4);
+  background: linear-gradient(135deg, #e67506 0%, #d66905 100%);
+  box-shadow: 0 10px 24px rgba(255, 131, 7, 0.45);
   transform: translateY(-2px);
 }
 
+.widget-installer-btn-primary:active {
+  transform: translateY(0);
+}
+
 .widget-installer-btn-neutral {
-  background: #2b3547;
-  color: #f1f1f1;
+  background: rgba(100, 116, 139, 0.3);
+  color: #f1f5f9;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .widget-installer-btn-neutral:hover {
-  background: #353f52;
+  background: rgba(100, 116, 139, 0.5);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 /* Loading and error states */
 .widget-installer-loading,
 .widget-installer-error {
-  padding: 3em 2em;
+  padding: 4em 2.5em;
   text-align: center;
 }
 
 .widget-installer-loading p {
-  color: #b5bdc9;
-  font-size: 1.1rem;
+  color: #94a3b8;
+  font-size: 1.2rem;
   margin: 0;
+  font-weight: 600;
 }
 
 .widget-installer-error {
-  background: rgba(255, 74, 85, 0.08);
-  border: 1px solid rgba(255, 74, 85, 0.25);
-  border-radius: 12px;
-  margin: 2em;
+  background: rgba(239, 68, 68, 0.1);
+  border: 2px solid rgba(239, 68, 68, 0.3);
+  border-radius: 16px;
+  margin: 2.5em;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.1);
 }
 
 .widget-installer-error p {
-  color: #ff9999;
-  font-size: 1rem;
-  margin: 0 0 1em 0;
+  color: #fca5a5;
+  font-size: 1.05rem;
+  margin: 0 0 1.5em 0;
+  font-weight: 600;
 }
 
 .widget-installer-retry-btn {
-  background: #FF8307;
+  background: linear-gradient(135deg, #FF8307 0%, #e67506 100%);
   color: #fff;
   border: none;
-  padding: 0.8em 1.5em;
-  border-radius: 8px;
-  font-weight: 600;
+  padding: 1em 2em;
+  border-radius: 12px;
+  font-weight: 700;
   font-size: 0.95rem;
   cursor: pointer;
-  transition: all 0.2s ease;
-  margin-top: 1em;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-top: 1.5em;
+  box-shadow: 0 6px 16px rgba(255, 131, 7, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .widget-installer-retry-btn:hover {
-  background: #e67506;
+  background: linear-gradient(135deg, #e67506 0%, #d66905 100%);
   transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(255, 131, 7, 0.45);
+}
+
+.widget-installer-retry-btn:active {
+  transform: translateY(0);
 }
 
 /* Security notice */
 .widget-installer-security-notice {
-  background: rgba(255, 193, 7, 0.08);
-  border: 1px solid rgba(255, 193, 7, 0.3);
-  border-radius: 10px;
-  padding: 1em 1.2em;
-  margin-bottom: 1.5em;
+  background: rgba(251, 191, 36, 0.1);
+  border: 2px solid rgba(251, 191, 36, 0.35);
+  border-radius: 14px;
+  padding: 1.2em 1.5em;
+  margin-bottom: 2em;
+  box-shadow: 0 4px 16px rgba(251, 191, 36, 0.1);
 }
 
 .widget-installer-security-notice p {
   margin: 0;
-  color: #ffd54f;
-  font-size: 0.9rem;
-  line-height: 1.5;
+  color: #fbbf24;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  font-weight: 600;
 }
 
 .widget-installer-security-notice strong {
