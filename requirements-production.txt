@@ -1,9 +1,0 @@
-# Production deployment requirements
-# Install after main requirements.txt
-# Usage: pip install -r requirements-production.txt
-
-# Production WSGI/ASGI server
-gunicorn==21.2.0
-uvicorn[standard]==0.24.0
-
-# Additional production dependencies if needed
