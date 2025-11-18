@@ -209,39 +209,22 @@ You should see `rag-backend` with status `online`.
 Create a system service for the Python bot:
 
 ```bash
-# Create log directory
+# Create log directory with proper permissions
 sudo mkdir -p /var/log/rag-bot
-sudo chown $USER:$USER /var/log/rag-bot
+sudo chown www-data:www-data /var/log/rag-bot
 
-# Update the service file with correct paths
+# Copy the pre-configured service file
+sudo cp deployment/rag-bot.service /etc/systemd/system/
+```
+
+**Note:** The service file is already configured to run as `www-data` (the standard web service user). If you deployed to a different path than `/var/www/rag-chatbot`, edit the file:
+
+```bash
 sudo nano /etc/systemd/system/rag-bot.service
+# Update WorkingDirectory and EnvironmentFile paths if needed
 ```
 
-Paste this content (replace `/var/www/rag-chatbot` if your path is different):
-
-```ini
-[Unit]
-Description=RAG Chatbot FastAPI Bot Service
-After=network.target mongodb.service
-
-[Service]
-Type=simple
-User=YOUR_USERNAME
-Group=YOUR_USERNAME
-WorkingDirectory=/var/www/rag-chatbot/BOT
-Environment="PATH=/var/www/rag-chatbot/venv/bin"
-EnvironmentFile=/var/www/rag-chatbot/.env
-ExecStart=/var/www/rag-chatbot/venv/bin/gunicorn app_20:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --access-logfile /var/log/rag-bot/access.log --error-logfile /var/log/rag-bot/error.log
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-**Replace `YOUR_USERNAME`** with your server username (run `whoami` to check).
-
-Save and start the service:
+Start the service:
 
 ```bash
 sudo systemctl daemon-reload
