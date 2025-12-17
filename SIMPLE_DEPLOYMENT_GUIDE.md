@@ -75,6 +75,9 @@ sudo apt install -y mongodb
 sudo systemctl start mongodb
 sudo systemctl enable mongodb
 
+# Verify MongoDB is working
+mongosh --eval "db.adminCommand('ping')" || mongo --eval "db.adminCommand('ping')"
+
 # Install Nginx (web server)
 sudo apt install -y nginx
 
@@ -138,6 +141,15 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 Copy each output and paste into `JWT_SECRET` and `FASTAPI_SHARED_SECRET`.
 
+**Validate your configuration:**
+
+```bash
+# Check if all required environment variables are set correctly
+node deployment/validate-env.js
+```
+
+Fix any errors before proceeding to the next step.
+
 ---
 
 ## 🏗️ Step 5: Build the Frontend
@@ -178,6 +190,21 @@ pip install -r requirements.txt
 ```
 
 This will take 5-10 minutes as it downloads AI models and libraries.
+
+**CRITICAL: Install Playwright Browsers (Required for Web Scraping)**
+
+```bash
+# Still in the virtual environment, install Playwright browsers
+playwright install chromium
+
+# Install system dependencies for Playwright (Ubuntu/Debian)
+sudo playwright install-deps chromium
+
+# Verify Playwright installation
+playwright --version
+```
+
+**Important:** Without Playwright browsers, the web scraping feature will completely fail. This step is mandatory!
 
 ---
 
@@ -384,7 +411,18 @@ https://mychatbot.com
 
 (Replace with your actual domain)
 
-You should see the login page. Create an account and start using your chatbot!
+You should see the login page.
+
+**Create Your First Admin Account:**
+
+1. Click on "Register" or "Sign Up"
+2. Fill in your details (email, password, username)
+3. Submit the registration form
+4. The first account created automatically gets admin privileges
+5. Login with your credentials
+6. Access the dashboard to start scraping websites and configuring your chatbot
+
+**Note:** The first registered user becomes the admin. Subsequent registrations will be regular users unless promoted by an admin.
 
 ---
 
