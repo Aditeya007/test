@@ -1,184 +1,58 @@
-# RAG-2 - Multi-Tenant RAG Chatbot System
+# Multi-Tenant RAG Chatbot System
 
-AI-powered chatbot system with admin backend, frontend, and bot service.
+This is a chatbot platform that lets multiple users create AI assistants trained on their own websites. Each user gets isolated resources and can scrape their site to build a knowledge base that powers their chatbot.
 
----
+## What It Does
 
-## 📋 What You Need
+The system has three main parts working together:
 
-- Node.js (v16+)
-- Python (3.8+)
-- MongoDB
-- Google API Key ([Get here](https://makersuite.google.com/app/apikey))
+**Admin Panel**
+- User registration and authentication with JWT tokens
+- Each user gets their own dedicated database, vector store, and bot endpoint
+- Dashboard to manage scrapers and chatbot settings
+- Built-in chat widget that can be embedded on any website
+- User management for administrators
 
----
+**Web Scraper**
+- Crawls websites and extracts text content from pages
+- Handles both static sites and JavaScript-heavy single-page apps using Playwright
+- Cleans up tracking parameters and filters out duplicate content
+- Stores raw scraped data in MongoDB with metadata like titles, descriptions, and timestamps
+- Can run on schedules or be triggered manually
 
-## 🚀 Quick Setup
+**RAG Chatbot**
+- Uses Retrieval-Augmented Generation to answer questions based on scraped content
+- Stores document embeddings in ChromaDB vector database
+- Semantic search finds relevant content chunks for each query
+- generates natural responses using the retrieved context
+- Cross-encoder reranking improves answer quality
+- Tracks conversation history and stores lead information when users provide contact details
 
-### Step 1: Create `.env` File
+## How Data Flows
 
-Create a `.env` file in the **root folder** (next to this README) with these settings:
+When a new user registers, the system provisions isolated resources for them. They can then start a scrape job which crawls their website and stores the content. The updater service processes this scraped content into embeddings stored in ChromaDB. When someone asks the chatbot a question, it searches the vector store for relevant passages and uses them to generate an answer.
 
-```env
-# Database
-MONGODB_URI=mongodb://localhost:27017
-MONGODB_DATABASE=rag_chatbot
-MONGO_URI=mongodb://localhost:27017/rag_chatbot
+## Multi-Tenancy
 
-# Security Secrets (Generate these - see below)
-JWT_SECRET=your_secret_here
-FASTAPI_SHARED_SECRET=your_secret_here
+Every user operates in complete isolation. Their database, vector store path, scraper endpoint, and bot endpoint are all unique to them. The system uses resource IDs to route requests and ensure no user can access another user's data or chatbot. Administrators can view tenant metadata but regular users only see their own resources.
 
-# Google AI
-GOOGLE_API_KEY=your_google_api_key
+## Key Features
 
-# Service URLs
-FASTAPI_BOT_URL=http://localhost:8000
-CORS_ORIGIN=http://localhost:3000
+- Automatic website content extraction from sitemaps and page crawling
+- Intelligent content chunking and duplicate detection
+- Semantic search over scraped content using embeddings
+- Context-aware responses with source attribution
+- Lead capture when users provide email or phone numbers
+- Scheduled updates to keep chatbot knowledge current
+- JWT authentication with role-based access control
+- CORS protection and rate limiting
+- Embeddable chat widget with customization options
 
-# Settings
-NODE_ENV=development
-PORT=5000
+## Project Structure
 
-# Python Path (use "python" or "python3" depending on your system)
-PYTHON_BIN=python
-
-# Other Settings
-UPDATER_MONGODB_URI=mongodb://localhost:27017/
-UPDATER_MONGODB_DATABASE=scraper_updater
-DEFAULT_VECTOR_BASE_PATH=./tenant-vector-stores
-CHROMA_DB_PATH=./test_DB
-CHROMA_COLLECTION_NAME=scraped_content
-DEFAULT_DATABASE_URI_BASE=mongodb://localhost:27017
-DEFAULT_BOT_BASE_URL=http://localhost:8000
-DEFAULT_SCHEDULER_BASE_URL=http://localhost:9000
-DEFAULT_SCRAPER_BASE_URL=http://localhost:7000
-SCRAPER_LOG_LEVEL=INFO
-UPDATER_LOG_LEVEL=INFO
-```
-
-**🔒 Generate Security Secrets:**
-
-Run this command twice to generate `JWT_SECRET` and `FASTAPI_SHARED_SECRET`:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-Copy each output into your `.env` file.
-
----
-
-### Step 2: Install Everything
-
-```bash
-# Install Python packages
-pip install -r requirements.txt
-
-# ⚠️ IMPORTANT: Install Playwright browsers (required for web scraping)
-playwright install chromium
-
-# Install backend packages
-cd admin-backend
-npm install
-cd ..
-
-# Install frontend packages
-cd admin-frontend
-npm install
-cd ..
-```
-
----
-
-### Step 3: Start Services
-
-Open **3 terminals** from the project root folder:
-
-**Terminal 1 - Backend:**
-```bash
-node admin-backend/server.js
-```
-
-**Terminal 2 - Bot:**
-```bash
-python BOT/app_20.py
-```
-
-**Terminal 3 - Frontend:**
-```bash
-cd admin-frontend
-npm start
-```
-
----
-
-## ✅ Check It's Working
-
-Open these in your browser:
-- **Frontend:** http://localhost:3000
-- **Backend:** http://localhost:5000/api/health
-- **Bot:** http://localhost:8000/health
-
----
-
-## 🌐 Production Deployment
-
-Ready to deploy to a live server? See the comprehensive deployment guide:
-
-**📖 [DEPLOYMENT.md](./DEPLOYMENT.md)** - Complete production deployment guide
-
-### Validate Your Configuration
-
-Before deploying, validate your `.env` file:
-
-```bash
-node deployment/validate-env.js
-```
-
-This checks for common configuration issues and security concerns.
-
-### Quick Deploy
-
-For quick production setup on your server:
-
-```bash
-# Make setup script executable
-chmod +x deployment/setup.sh
-
-# Run interactive setup
-./deployment/setup.sh
-```
-
-The deployment includes:
-- Automatic environment detection (dev/production)
-- Nginx reverse proxy configuration
-- SSL/HTTPS setup with Let's Encrypt
-- PM2 process management for Node.js
-- Systemd service for FastAPI bot
-- Production optimizations
-
----
-
-## 💡 Tips
-
-- All commands should be run from the **project root folder**
-- Only one `.env` file needed (in the root folder)
-- Make sure MongoDB is running before starting services
-- Each service needs its own terminal window
-- For production, set `NODE_ENV=production` in `.env`
-
----
-
-## ❓ Need Help?
-
-**Can't connect to MongoDB?**
-- Check MongoDB is running: `mongosh`
-- Verify `MONGODB_URI` in `.env`
-
-**Port already in use?**
-- Change `PORT` in `.env` or stop the other service
-
-**Missing JWT_SECRET error?**
-- Generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
-- Add to `.env` file
+- `admin-backend/` - Express API server handling auth, user management, and scraping jobs
+- `admin-frontend/` - React dashboard for managing bots and viewing analytics
+- `BOT/` - FastAPI service running the RAG pipeline and chatbot responses
+- `Scraping2/` - Scrapy spider for extracting website content
+- `UPDATER/` - Background service that detects changed pages and updates embeddings
+- `deployment/` - Production deployment scripts and configuration files
