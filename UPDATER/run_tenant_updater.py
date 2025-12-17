@@ -27,7 +27,7 @@ from UPDATER.updater import run_updater, build_url_tracking_collection  # noqa: 
 
 def _ensure_nltk_models() -> None:
     """Ensure sentence tokenizers are available for the chunking pipeline."""
-    for package in ("punkt", "punkt_tab"):
+    for package in ("punkt",):
         try:
             nltk.data.find(f"tokenizers/{package}")
         except LookupError:
