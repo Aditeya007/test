@@ -295,7 +295,7 @@ exports.runUpdater = async (req, res) => {
  */
 exports.startScheduler = async (req, res) => {
   const startUrl = typeof req.body.startUrl === 'string' ? req.body.startUrl.trim() : '';
-  const intervalMinutes = 5; // Fixed 5-minute interval
+  const intervalMinutes = 120; // Fixed 2-hour interval
   const runImmediately = true; // Always run immediately on scheduler start
   const sitemapUrl = typeof req.body.sitemapUrl === 'string' ? req.body.sitemapUrl.trim() : undefined;
   const embeddingModelName = typeof req.body.embeddingModelName === 'string' ? req.body.embeddingModelName.trim() : undefined;

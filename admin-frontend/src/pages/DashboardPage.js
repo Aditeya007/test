@@ -243,8 +243,8 @@ function DashboardPage() {
         setStatusMessage('✅ Scraping completed successfully. You can now interact with the bot using the refreshed knowledge base.');
         setJobResult(response);
       } else {
-        // Start a scheduled updater (runs every 5 minutes)
-        setStatusMessage('Starting scheduler (runs every 5 minutes)...');
+        // Start a scheduled updater (runs every 2 hours)
+        setStatusMessage('Starting scheduler (runs every 2 hours)...');
         
         const response = await apiRequest('/scrape/scheduler/start', {
           method: 'POST',
@@ -256,7 +256,7 @@ function DashboardPage() {
         });
 
         if (response.success) {
-          setStatusMessage('✅ Scheduler started! Your knowledge base will be updated every 5 minutes.');
+          setStatusMessage('✅ Scheduler started! Your knowledge base will be updated every 2 hours.');
           setSchedulerStatus('active');
           setSchedulerConfig(response.schedulerConfig);
           setJobResult({ summary: { status: 'scheduled', ...response.schedulerConfig } });
@@ -633,12 +633,12 @@ function DashboardPage() {
                   disabled={isProcessing}
                   style={{ width: '1.25rem', height: '1.25rem' }}
                 />
-                <span>Enable automatic updates (every 5 minutes)</span>
+                <span>Enable automatic updates (every 2 hours)</span>
               </label>
 
               {useScheduler && (
                 <p style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.5rem', marginLeft: '1.75rem' }}>
-                  ℹ️ The scheduler will run in the background and update your knowledge base every 5 minutes.
+                  ℹ️ The scheduler will run in the background and update your knowledge base every 2 hours.
                 </p>
               )}
             </div>

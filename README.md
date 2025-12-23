@@ -56,3 +56,19 @@ Every user operates in complete isolation. Their database, vector store path, sc
 - `Scraping2/` - Scrapy spider for extracting website content
 - `UPDATER/` - Background service that detects changed pages and updates embeddings
 - `deployment/` - Production deployment scripts and configuration files
+
+## Scheduler Feature
+
+The scheduler allows automatic periodic updates to keep your chatbot's knowledge base current.
+
+**Functions:**
+- `startScheduler` - Spawns a detached Python process that runs the updater on a 2-hour interval
+- `stopScheduler` - Terminates the running scheduler process for a tenant
+- `getSchedulerStatus` - Returns current scheduler state (active/stopped) and configuration
+
+**How it works:**
+1. User enables "automatic updates" checkbox in the scrape modal
+2. System starts a background scheduler that runs every 2 hours
+3. Scheduler crawls the configured website and updates the vector store with new/changed content
+4. Process runs independently until manually stopped or server restart
+
