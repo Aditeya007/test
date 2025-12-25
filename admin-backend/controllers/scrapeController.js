@@ -157,10 +157,10 @@ exports.startScrape = async (req, res) => {
 
     // Get Python executable
     const pythonExe = getPythonExecutable();
-    const scraperScript = path.resolve(repoRoot, 'Scraping2', 'run_tenant_spider.py');
+    
     
     // Build arguments for the scraper
-    const args = [scraperScript];
+    const args = ['-m', 'Scraping2.run_tenant_spider'];
     const pushArg = (flag, value) => {
       if (value !== undefined && value !== null) {
         if (typeof value === 'boolean') {
