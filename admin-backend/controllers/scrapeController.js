@@ -1,9 +1,9 @@
 const crypto = require('crypto');
-const axios = require('axios');
+
 const path = require('path');
 const fs = require('fs'); // Added missing fs import for stopScheduler
 const { spawn } = require('child_process');
-const { runTenantScrape, runTenantUpdater } = require('../jobs/scrapeJob');
+
 const { getUserTenantContext } = require('../services/userContextService');
 const User = require('../models/User');
 
@@ -35,34 +35,7 @@ const buildJobId = (prefix, resourceId) => {
  * @param {number} maxWaitMs - Maximum time to wait (default 30 seconds)
  * @returns {Promise<Object>} Result with success status
  */
-const waitForBotRestart = async (tenantContext, maxWaitMs = 30000) => {
-  // Use base bot URL, not the tenant-specific endpoint
-  const botBaseUrl = process.env.FASTAPI_BOT_URL || 'http://localhost:8000';
-  const startTime = Date.now();
-  const pollInterval = 2000; // Check every 2 seconds
-  
-  console.log(`⏳ Waiting for bot to restart and come back online...`);
-  
-  // Wait a moment for the restart to actually begin
-  await new Promise(resolve => setTimeout(resolve, 3000));
-  
-  while (Date.now() - startTime < maxWaitMs) {
-    try {
-      const response = await axios.get(`${botBaseUrl}/health`, { timeout: 2000 });
-      if (response.status === 200) {
-        console.log(`✅ Bot is back online! Ready to serve new data.`);
-        return { success: true, message: 'Bot restarted successfully' };
-      }
-    } catch (err) {
-      // Bot still restarting, continue waiting
-      console.log(`   Bot not ready yet, waiting...`);
-    }
-    await new Promise(resolve => setTimeout(resolve, pollInterval));
-  }
-  
-  console.warn(`⚠️  Bot did not come back online within ${maxWaitMs/1000} seconds`);
-  return { success: false, error: 'Bot restart timeout' };
-};
+
 
 const truncateLog = (value) => {
   if (!value) {
@@ -190,14 +163,25 @@ exports.startScrape = async (req, res) => {
     if (aggressiveDiscovery === true) args.push('--aggressive-discovery');
     else if (aggressiveDiscovery === false) args.push('--no-aggressive-discovery');
 
+    // Ensure tenant vector store directory exists
+    if (!fs.existsSync(tenantContext.vectorStorePath)) {
+      fs.mkdirSync(tenantContext.vectorStorePath, { recursive: true });
+      console.log(`📁 Created vector store directory: ${tenantContext.vectorStorePath}`);
+    }
+
+    // Create log file for the scraper
+    const logFilePath = path.join(tenantContext.vectorStorePath, 'scraper.log');
+    const logFile = fs.openSync(logFilePath, 'a');
+
     // Spawn as detached background process
     const child = spawn(pythonExe, args, {
       detached: true,
-      stdio: ['ignore', 'ignore', 'pipe'], // Don't pipe stdio (fully detached)
+      stdio: ['ignore', logFile, logFile], // Write stdout and stderr to log file
       cwd: repoRoot,
       env: {
         ...process.env, // Inherit all environment variables (RAG_DATA_ROOT, etc.)
-        PYTHONUNBUFFERED: '1'
+        PYTHONUNBUFFERED: '1',
+        PYTHONPATH: repoRoot
       }
     });
     
@@ -324,52 +308,27 @@ exports.runUpdater = async (req, res) => {
     if (aggressiveDiscovery === true) args.push('--aggressive-discovery');
     else if (aggressiveDiscovery === false) args.push('--no-aggressive-discovery');
 
+    // Ensure tenant vector store directory exists
+    if (!fs.existsSync(tenantContext.vectorStorePath)) {
+      fs.mkdirSync(tenantContext.vectorStorePath, { recursive: true });
+      console.log(`📁 Created vector store directory: ${tenantContext.vectorStorePath}`);
+    }
+
+    // Create log file for the updater
+    const logFilePath = path.join(tenantContext.vectorStorePath, 'scraper.log');
+    const logFile = fs.openSync(logFilePath, 'a');
+
     // Spawn as detached background process
-    const logFile = fs.openSync(
-  path.join(tenantContext.vectorStorePath, 'scraper.log'),
-  'a'
-);
-
-const child = spawn(pythonExe, args, {
-  detached: true,
-  stdio: ['ignore', logFile, logFile], // 👈 CAPTURE OUTPUT
-  cwd: repoRoot,
-  env: {
-    ...process.env,
-    PYTHONUNBUFFERED: '1',
-    PYTHONPATH: repoRoot
-  }
-});
-
-child.unref();
-
-
-child.stdout.on('data', d => {
-  console.log('[SCRAPER STDOUT]', d.toString());
-});
-
-child.stderr.on('data', d => {
-  console.error('[SCRAPER STDERR]', d.toString());
-});
-
-child.on('exit', code => {
-  console.log('[SCRAPER EXIT]', code);
-});
-
-
-child.stdout.on('data', d => {
-  console.log('[SCRAPER STDOUT]', d.toString());
-});
-
-child.stderr.on('data', d => {
-  console.error('[SCRAPER STDERR]', d.toString());
-});
-
-child.on('exit', code => {
-  console.log('[SCRAPER EXIT]', code);
-});
-
-
+    const child = spawn(pythonExe, args, {
+      detached: true,
+      stdio: ['ignore', logFile, logFile], // Write stdout and stderr to log file
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        PYTHONUNBUFFERED: '1',
+        PYTHONPATH: repoRoot
+      }
+    });
     
     // Unref so parent can exit without waiting
     child.unref();
