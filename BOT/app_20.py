@@ -17,6 +17,23 @@ import uuid
 import re
 import numpy as np
 from fastapi.middleware.cors import CORSMiddleware
+def get_tenant_context(resource_id: str):
+    """
+    Load tenant-specific context for RAG chatbot
+    """
+    base_path = "/var/www/rag-chatbot/tenant-vector-stores"
+
+    vector_store_path = f"{base_path}/{resource_id}"
+
+    if not os.path.exists(vector_store_path):
+        raise RuntimeError(f"Vector store not found for tenant: {resource_id}")
+
+    return {
+        "resource_id": resource_id,
+        "persist_directory": vector_store_path,
+        "collection_name": "scraped_content"
+    }
+
 
 # MongoDB imports are optional; gracefully degrade when unavailable.
 try:
