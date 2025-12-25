@@ -108,11 +108,6 @@ const parseIntegerOrUndefined = (value) => {
 };
 
 exports.startScrape = async (req, res) => {
-  req.setTimeout(0);
-  if (typeof res.setTimeout === 'function') {
-    res.setTimeout(0);
-  }
-
   const startUrl = typeof req.body.startUrl === 'string' ? req.body.startUrl.trim() : '';
   const sitemapUrl = typeof req.body.sitemapUrl === 'string' ? req.body.sitemapUrl.trim() : undefined;
   const embeddingModelName = typeof req.body.embeddingModelName === 'string' ? req.body.embeddingModelName.trim() : undefined;
@@ -134,65 +129,104 @@ exports.startScrape = async (req, res) => {
         error: 'Access denied: You can only scrape your own data'
       });
     }
+    
     const tenantContext = await getUserTenantContext(userId);
     ensureTenantResources(tenantContext);
 
-    console.log('🧭 Starting tenant scrape', {
+    // Validate required fields
+    if (!startUrl) {
+      return res.status(400).json({
+        success: false,
+        error: 'startUrl is required'
+      });
+    }
+
+    const jobId = buildJobId('scrape', tenantContext.resourceId);
+    
+    console.log('🚀 Starting tenant scrape (detached background process)', {
+      jobId,
       tenantUserId: tenantContext.userId,
       resourceId: tenantContext.resourceId,
       databaseUri: tenantContext.databaseUri,
-      vectorStorePath: tenantContext.vectorStorePath
+      vectorStorePath: tenantContext.vectorStorePath,
+      startUrl
     });
 
-    const jobId = buildJobId('scrape', tenantContext.resourceId);
-    const scrapeOptions = {
-      startUrl,
-      sitemapUrl,
-      resourceId: tenantContext.resourceId,
-      userId: tenantContext.userId,
-      vectorStorePath: tenantContext.vectorStorePath,
-      collectionName,
-      embeddingModelName,
-      domain,
-      maxDepth,
-      maxLinksPerPage,
-      respectRobots,
-      aggressiveDiscovery,
-      jobId,
-      logLevel: process.env.SCRAPER_LOG_LEVEL || 'INFO'
-    };
-
-    // Track active job to prevent shutdown
-    const app = req.app;
-    if (app.locals.jobTracking) {
-      app.locals.jobTracking.incrementActiveJobs();
-    }
-
-    try {
-      const result = await runTenantScrape(scrapeOptions);
-
-      // Bot restarts automatically after scrape (triggered in scrapeJob.js)
-      // Wait for it to come back online
-      const restartResult = await waitForBotRestart(tenantContext);
-
-      res.json({
-        success: true,
-        jobId,
-        resourceId: tenantContext.resourceId,
-        summary: result.summary,
-        stdout: truncateLog(result.stdout),
-        stderr: truncateLog(result.stderr),
-        botRestarted: restartResult.success
-      });
-    } finally {
-      // Always decrement job counter
-      if (app.locals.jobTracking) {
-        app.locals.jobTracking.decrementActiveJobs();
+    // Get Python executable
+    const pythonExe = getPythonExecutable();
+    const scraperScript = path.resolve(repoRoot, 'Scraping2', 'run_tenant_spider.py');
+    
+    // Build arguments for the scraper
+    const args = [scraperScript];
+    const pushArg = (flag, value) => {
+      if (value !== undefined && value !== null) {
+        if (typeof value === 'boolean') {
+          if (value) args.push(flag);
+        } else {
+          args.push(flag, String(value));
+        }
       }
-    }
+    };
+    
+    pushArg('--start-url', startUrl);
+    pushArg('--domain', domain);
+    pushArg('--resource-id', tenantContext.resourceId);
+    pushArg('--user-id', tenantContext.userId);
+    pushArg('--vector-store-path', tenantContext.vectorStorePath);
+    pushArg('--collection-name', collectionName);
+    pushArg('--embedding-model-name', embeddingModelName);
+    pushArg('--max-depth', maxDepth);
+    pushArg('--max-links-per-page', maxLinksPerPage);
+    pushArg('--sitemap-url', sitemapUrl);
+    pushArg('--job-id', jobId);
+    pushArg('--log-level', process.env.SCRAPER_LOG_LEVEL || 'INFO');
+    
+    if (respectRobots === true) args.push('--respect-robots');
+    else if (respectRobots === false) args.push('--no-respect-robots');
+    
+    if (aggressiveDiscovery === true) args.push('--aggressive-discovery');
+    else if (aggressiveDiscovery === false) args.push('--no-aggressive-discovery');
+
+    // Spawn as detached background process
+    const child = spawn(pythonExe, args, {
+      detached: true,
+      stdio: 'ignore', // Don't pipe stdio (fully detached)
+      cwd: repoRoot,
+      env: {
+        ...process.env, // Inherit all environment variables (RAG_DATA_ROOT, etc.)
+        PYTHONUNBUFFERED: '1'
+      }
+    });
+    
+    // Unref so parent can exit without waiting
+    child.unref();
+    
+    console.log('✅ Scraper spawned successfully', {
+      jobId,
+      pid: child.pid,
+      resourceId: tenantContext.resourceId,
+      vectorStorePath: tenantContext.vectorStorePath,
+      pythonExe,
+      script: scraperScript
+    });
+
+    // Immediately return 202 Accepted
+    return res.status(202).json({
+      success: true,
+      message: 'Scrape job started in background',
+      jobId,
+      pid: child.pid,
+      resourceId: tenantContext.resourceId,
+      vectorStorePath: tenantContext.vectorStorePath,
+      status: 'running'
+    });
+    
   } catch (err) {
-    console.error('❌ Scrape job failed:', {
+    console.error('❌ Failed to start scrape job:', {
       userId: req.tenantUserId || req.user.userId,
+      error: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
       error: err.message,
       code: err.code,
       stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
@@ -209,11 +243,6 @@ exports.startScrape = async (req, res) => {
 };
 
 exports.runUpdater = async (req, res) => {
-  req.setTimeout(0);
-  if (typeof res.setTimeout === 'function') {
-    res.setTimeout(0);
-  }
-
   const startUrl = typeof req.body.startUrl === 'string' ? req.body.startUrl.trim() : '';
   const sitemapUrl = typeof req.body.sitemapUrl === 'string' ? req.body.sitemapUrl.trim() : undefined;
   const embeddingModelName = typeof req.body.embeddingModelName === 'string' ? req.body.embeddingModelName.trim() : undefined;
@@ -236,67 +265,103 @@ exports.runUpdater = async (req, res) => {
         error: 'Access denied: You can only update your own data'
       });
     }
+    
     const tenantContext = await getUserTenantContext(userId);
     ensureTenantResources(tenantContext);
 
-    const effectiveMongoUri = mongoUriOverride || tenantContext.databaseUri;
+    // Validate required fields
+    if (!startUrl) {
+      return res.status(400).json({
+        success: false,
+        error: 'startUrl is required'
+      });
+    }
 
-    console.log('🧭 Starting tenant updater', {
+    const effectiveMongoUri = mongoUriOverride || tenantContext.databaseUri;
+    const jobId = buildJobId('update', tenantContext.resourceId);
+
+    console.log('🚀 Starting tenant updater (detached background process)', {
+      jobId,
       tenantUserId: tenantContext.userId,
       resourceId: tenantContext.resourceId,
       databaseUri: effectiveMongoUri,
-      vectorStorePath: tenantContext.vectorStorePath
+      vectorStorePath: tenantContext.vectorStorePath,
+      startUrl
     });
 
-    const jobId = buildJobId('update', tenantContext.resourceId);
-    const updaterOptions = {
-      startUrl,
-      sitemapUrl,
-      resourceId: tenantContext.resourceId,
-      userId: tenantContext.userId,
-      vectorStorePath: tenantContext.vectorStorePath,
-      collectionName,
-      embeddingModelName,
-      domain,
-      maxDepth,
-      maxLinksPerPage,
-      respectRobots,
-      aggressiveDiscovery,
-      mongoUri: effectiveMongoUri,
-      jobId,
-      logLevel: process.env.UPDATER_LOG_LEVEL || 'INFO'
-    };
-
-    // Track active job to prevent shutdown
-    const app = req.app;
-    if (app.locals.jobTracking) {
-      app.locals.jobTracking.incrementActiveJobs();
-    }
-
-    try {
-      const result = await runTenantUpdater(updaterOptions);
-
-      // Bot restarts automatically after update (triggered in scrapeJob.js)
-      // Wait for it to come back online
-      const restartResult = await waitForBotRestart(tenantContext);
-
-      res.json({
-        success: true,
-        jobId,
-        resourceId: tenantContext.resourceId,
-        summary: result.summary,
-        stdout: truncateLog(result.stdout),
-        stderr: truncateLog(result.stderr),
-        botRestarted: restartResult.success
-      });
-    } finally {
-      // Always decrement job counter
-      if (app.locals.jobTracking) {
-        app.locals.jobTracking.decrementActiveJobs();
+    // Get Python executable
+    const pythonExe = getPythonExecutable();
+    const updaterScript = path.resolve(repoRoot, 'UPDATER', 'run_tenant_updater.py');
+    
+    // Build arguments for the updater
+    const args = [updaterScript];
+    const pushArg = (flag, value) => {
+      if (value !== undefined && value !== null) {
+        if (typeof value === 'boolean') {
+          if (value) args.push(flag);
+        } else {
+          args.push(flag, String(value));
+        }
       }
-    }
+    };
+    
+    pushArg('--start-url', startUrl);
+    pushArg('--domain', domain);
+    pushArg('--resource-id', tenantContext.resourceId);
+    pushArg('--user-id', tenantContext.userId);
+    pushArg('--vector-store-path', tenantContext.vectorStorePath);
+    pushArg('--mongo-uri', effectiveMongoUri);
+    pushArg('--collection-name', collectionName);
+    pushArg('--embedding-model-name', embeddingModelName);
+    pushArg('--max-depth', maxDepth);
+    pushArg('--max-links-per-page', maxLinksPerPage);
+    pushArg('--sitemap-url', sitemapUrl);
+    pushArg('--job-id', jobId);
+    pushArg('--log-level', process.env.UPDATER_LOG_LEVEL || 'INFO');
+    
+    if (respectRobots === true) args.push('--respect-robots');
+    else if (respectRobots === false) args.push('--no-respect-robots');
+    
+    if (aggressiveDiscovery === true) args.push('--aggressive-discovery');
+    else if (aggressiveDiscovery === false) args.push('--no-aggressive-discovery');
+
+    // Spawn as detached background process
+    const child = spawn(pythonExe, args, {
+      detached: true,
+      stdio: 'ignore', // Don't pipe stdio (fully detached)
+      cwd: repoRoot,
+      env: {
+        ...process.env, // Inherit all environment variables (RAG_DATA_ROOT, etc.)
+        PYTHONUNBUFFERED: '1'
+      }
+    });
+    
+    // Unref so parent can exit without waiting
+    child.unref();
+    
+    console.log('✅ Updater spawned successfully', {
+      jobId,
+      pid: child.pid,
+      resourceId: tenantContext.resourceId,
+      vectorStorePath: tenantContext.vectorStorePath,
+      mongoUri: effectiveMongoUri,
+      pythonExe,
+      script: updaterScript
+    });
+
+    // Immediately return 202 Accepted
+    return res.status(202).json({
+      success: true,
+      message: 'Update job started in background',
+      jobId,
+      pid: child.pid,
+      resourceId: tenantContext.resourceId,
+      vectorStorePath: tenantContext.vectorStorePath,
+      status: 'running'
+    });
+    
   } catch (err) {
-    console.error('❌ Updater job failed:', {
+    console.error('❌ Failed to start updater job:', {
       userId: req.tenantUserId || req.user.userId,
       error: err.message,
       code: err.code,
