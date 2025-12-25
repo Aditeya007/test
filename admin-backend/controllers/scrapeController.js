@@ -326,16 +326,16 @@ exports.runUpdater = async (req, res) => {
 
     // Spawn as detached background process
     const child = spawn(pythonExe, args, {
-      detached: true,
-      stdio: ['ignore', 'ignore', 'pipe'], // Don't pipe stdio (fully detached)
-      cwd: repoRoot,
-      env: {
-        ...process.env, // Inherit all environment variables (RAG_DATA_ROOT, etc.)
-        PYTHONPATH: repoRoot,
+  detached: true,
+  stdio: ['ignore', 'ignore', 'pipe'],
+  cwd: repoRoot,
+  env: {
+    ...process.env,
+    PYTHONPATH: repoRoot,
+    PYTHONUNBUFFERED: '1'
+  }
+});
 
-        PYTHONUNBUFFERED: '1'
-      }
-    });
     
     // Unref so parent can exit without waiting
     child.unref();
