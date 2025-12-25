@@ -100,14 +100,16 @@ cd ..
 echo "✅ Backend started"
 
 echo ""
-echo "Step 6: Setting up FastAPI bot service..."
+echo "Step 6: Setting up FastAPI bot service with auto-restart..."
 sudo mkdir -p /var/log/rag-bot
-sudo chown $USER:$USER /var/log/rag-bot
+sudo chown www-data:www-data /var/log/rag-bot
+sudo touch /var/log/rag-bot/output.log /var/log/rag-bot/error.log
+sudo chown www-data:www-data /var/log/rag-bot/output.log /var/log/rag-bot/error.log
 sudo cp deployment/rag-bot.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable rag-bot
 sudo systemctl start rag-bot
-echo "✅ Bot service started"
+echo "✅ Bot service started with auto-restart capability"
 
 echo ""
 echo "Step 7: Configuring Nginx..."
@@ -147,7 +149,9 @@ echo "1. Configure firewall: sudo ufw allow 80 && sudo ufw allow 443"
 echo "2. Access your site at: https://$domain"
 echo "3. Monitor logs:"
 echo "   - Backend: pm2 logs rag-backend"
-echo "   - Bot: sudo journalctl -u rag-bot -f"
+echo "   - Bot (journal): sudo journalctl -u rag-bot -f"
+echo "   - Bot (output): sudo tail -f /var/log/rag-bot/output.log"
+echo "   - Bot (errors): sudo tail -f /var/log/rag-bot/error.log"
 echo ""
 echo "Deployment guide: See DEPLOYMENT.md for detailed information"
 echo ""

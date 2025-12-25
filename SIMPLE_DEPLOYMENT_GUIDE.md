@@ -240,22 +240,29 @@ You should see `rag-backend` with status `online`.
 
 ## 🤖 Step 9: Start the AI Bot Service
 
-**IMPORTANT:** The bot uses `run_bot_with_autorestart.py` which automatically restarts the bot after scrapes to ensure fresh database connections.
+**IMPORTANT:** The bot service now uses `run_bot_with_autorestart.py` which automatically restarts the bot after scrapes complete, ensuring fresh database connections and continuous operation.
 
-### Option A: Production with Systemd (Recommended)
+### Production with Systemd (Recommended)
 
-Create a system service for the Python bot:
+Create a system service for the Python bot with auto-restart capability:
 
 ```bash
-# Create log directory with proper permissions
+# Create log directory and files with proper permissions
 sudo mkdir -p /var/log/rag-bot
 sudo chown www-data:www-data /var/log/rag-bot
+sudo touch /var/log/rag-bot/output.log /var/log/rag-bot/error.log
+sudo chown www-data:www-data /var/log/rag-bot/output.log /var/log/rag-bot/error.log
 
 # Copy the pre-configured service file
 sudo cp deployment/rag-bot.service /etc/systemd/system/
 ```
 
-**Note:** The service file runs with Gunicorn which handles worker restarts automatically. For production with Gunicorn, this is the recommended approach.
+**What This Does:**
+- The systemd service runs `run_bot_with_autorestart.py` instead of directly running the bot
+- When the bot exits (e.g., after a scrape), the wrapper automatically restarts it
+- The systemd service itself also restarts if the wrapper crashes (double protection)
+- The bot continues running even if you disconnect from the server or turn off your PC
+- All output is logged to `/var/log/rag-bot/` for monitoring
 
 Start the service:
 
@@ -268,9 +275,22 @@ sudo systemctl status rag-bot
 
 You should see `active (running)` in green.
 
-### Option B: Development with Auto-Restart Wrapper
+**Monitor the Bot:**
 
-For development/testing environments, use the auto-restart wrapper instead:
+```bash
+# View real-time logs
+sudo journalctl -u rag-bot -f
+
+# Or view the output log file
+sudo tail -f /var/log/rag-bot/output.log
+
+# Check if bot is responding
+curl http://localhost:8000/health
+```
+
+### Development/Testing (Optional)
+
+For local development without systemd, run directly:
 
 ```bash
 cd /var/www/rag-chatbot
@@ -278,7 +298,7 @@ source venv/bin/activate
 python run_bot_with_autorestart.py
 ```
 
-This will automatically restart the bot after each scrape completes, ensuring fresh database connections without manual intervention.
+Press `Ctrl+C` to stop. This is useful for testing changes before deploying.
 
 ---
 
@@ -453,7 +473,12 @@ pm2 logs rag-backend
 
 **View Bot Logs:**
 ```bash
+# View systemd journal (includes both stdout and stderr)
 sudo journalctl -u rag-bot -f
+
+# Or view the dedicated log files
+sudo tail -f /var/log/rag-bot/output.log
+sudo tail -f /var/log/rag-bot/error.log
 ```
 
 **View Nginx Logs:**
@@ -487,7 +512,7 @@ pm2 restart rag-backend
 sudo systemctl restart rag-bot
 ```
 
-**Note:** If using the auto-restart wrapper (Option B), stop it with Ctrl+C and restart with `python run_bot_with_autorestart.py`
+**Note:** The systemd service automatically uses the auto-restart wrapper, so a simple restart is all you need. The bot will continue running even after you disconnect from the server.
 
 ---
 
@@ -524,14 +549,23 @@ nano /var/www/rag-chatbot/.env
 
 **Solution:**
 ```bash
-# Check bot logs
+# Check bot logs (systemd journal)
 sudo journalctl -u rag-bot -n 50
+
+# Or check the output log file
+sudo tail -100 /var/log/rag-bot/output.log
+
+# Check error log
+sudo tail -50 /var/log/rag-bot/error.log
 
 # Check if port 8000 is listening
 sudo netstat -tlnp | grep 8000
 
-# Restart bot
+# Restart bot (the auto-restart wrapper will also restart)
 sudo systemctl restart rag-bot
+
+# Check status
+sudo systemctl status rag-bot
 ```
 
 ### Problem: "Permission denied" errors

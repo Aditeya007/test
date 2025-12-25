@@ -1,20 +1,19 @@
 [Unit]
-Description=RAG Chatbot FastAPI Bot Service
+Description=RAG Chatbot FastAPI Bot Service with Auto-Restart
 After=network.target mongodb.service
 
 [Service]
 Type=simple
 User=www-data
 Group=www-data
-WorkingDirectory=/var/www/rag-chatbot/BOT
+WorkingDirectory=/var/www/rag-chatbot
 Environment="PATH=/var/www/rag-chatbot/venv/bin"
 EnvironmentFile=/var/www/rag-chatbot/.env
-ExecStart=/var/www/rag-chatbot/venv/bin/gunicorn app_20:app \
-    -w 4 \
-    -k uvicorn.workers.UvicornWorker \
-    --bind 0.0.0.0:8000 \
-    --access-logfile /var/log/rag-bot/access.log \
-    --error-logfile /var/log/rag-bot/error.log
+# Run the bot using the auto-restart wrapper
+# This ensures the bot automatically restarts after scrapes complete
+ExecStart=/var/www/rag-chatbot/venv/bin/python run_bot_with_autorestart.py
+StandardOutput=append:/var/log/rag-bot/output.log
+StandardError=append:/var/log/rag-bot/error.log
 Restart=always
 RestartSec=10
 

@@ -45,17 +45,17 @@ if [ ! -d "venv" ]; then
 fi
 
 source venv/bin/activate
-cd "$PROJECT_DIR/BOT"
 pip install --upgrade pip
-pip install -r ../requirements.txt
-pip install gunicorn uvicorn[standard]
+pip install -r requirements.txt
 
-# Create log directory
+# Create log directory and files
 sudo mkdir -p /var/log/rag-bot
 sudo chown www-data:www-data /var/log/rag-bot
+sudo touch /var/log/rag-bot/output.log /var/log/rag-bot/error.log
+sudo chown www-data:www-data /var/log/rag-bot/output.log /var/log/rag-bot/error.log
 
-# Install and start systemd service
-echo "Installing FastAPI bot service..."
+# Install and start systemd service with auto-restart wrapper
+echo "Installing FastAPI bot service with auto-restart..."
 sudo cp "$PROJECT_DIR/deployment/rag-bot.service" /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable rag-bot
@@ -72,4 +72,6 @@ sudo systemctl status rag-bot --no-pager
 echo ""
 echo "Check logs:"
 echo "  Backend: pm2 logs rag-backend"
-echo "  Bot: sudo journalctl -u rag-bot -f"
+echo "  Bot (journal): sudo journalctl -u rag-bot -f"
+echo "  Bot (output): sudo tail -f /var/log/rag-bot/output.log"
+echo "  Bot (errors): sudo tail -f /var/log/rag-bot/error.log"
