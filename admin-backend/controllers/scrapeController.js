@@ -331,6 +331,8 @@ exports.runUpdater = async (req, res) => {
       cwd: repoRoot,
       env: {
         ...process.env, // Inherit all environment variables (RAG_DATA_ROOT, etc.)
+        PYTHONPATH: repoRoot,
+
         PYTHONUNBUFFERED: '1'
       }
     });
