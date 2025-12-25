@@ -17,23 +17,6 @@ import uuid
 import re
 import numpy as np
 from fastapi.middleware.cors import CORSMiddleware
-def get_tenant_context(resource_id: str):
-    """
-    Load tenant-specific context for RAG chatbot
-    """
-    base_path = "/var/www/rag-chatbot/tenant-vector-stores"
-
-    vector_store_path = f"{base_path}/{resource_id}"
-
-    if not os.path.exists(vector_store_path):
-        raise RuntimeError(f"Vector store not found for tenant: {resource_id}")
-
-    return {
-        "resource_id": resource_id,
-        "persist_directory": vector_store_path,
-        "collection_name": "scraped_content"
-    }
-
 
 # MongoDB imports are optional; gracefully degrade when unavailable.
 try:
@@ -66,6 +49,34 @@ FASTAPI_SHARED_SECRET = os.getenv("FASTAPI_SHARED_SECRET")
 ENFORCE_SERVICE_SECRET = bool(
     FASTAPI_SHARED_SECRET and FASTAPI_SHARED_SECRET.strip().lower() not in {"", "change-me"}
 )
+
+
+def get_tenant_context(
+    resource_id: str,
+    database_uri: str = None,
+    vector_store_path: str = None
+) -> Dict[str, str]:
+    """
+    Validate and return tenant-specific context for RAG chatbot.
+    
+    Args:
+        resource_id: The tenant's resource identifier
+        database_uri: Optional database URI (passed through if provided)
+        vector_store_path: Optional vector store path (passed through if provided)
+    
+    Returns:
+        Dictionary containing validated tenant context
+    """
+    # Validate resource_id
+    if not resource_id or not resource_id.strip():
+        raise ValueError("resource_id is required and cannot be empty")
+    
+    # Return validated context - pass through provided values
+    return {
+        "resource_id": resource_id.strip(),
+        "database_uri": database_uri.strip() if database_uri else None,
+        "vector_store_path": vector_store_path.strip() if vector_store_path else None
+    }
 
 
 class ContactInformationExtractor:
