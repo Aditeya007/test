@@ -133,7 +133,7 @@ def main(argv: list[str]) -> int:
         max_depth=args.max_depth,
         sitemap_url=args.sitemap_url,
         max_links_per_page=args.max_links_per_page,
-    respect_robots=bool(args.respect_robots),
+        respect_robots=bool(args.respect_robots),
         aggressive_discovery=bool(args.aggressive_discovery),
         resource_id=args.resource_id,
         tenant_user_id=args.user_id,
