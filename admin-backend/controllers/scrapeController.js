@@ -210,7 +210,7 @@ exports.startScrape = async (req, res) => {
       resourceId: tenantContext.resourceId,
       vectorStorePath: tenantContext.vectorStorePath,
       pythonExe,
-      script: scraperScript
+      mode: 'python -m Scraping2.run_tenant_spider'
     });
 
     // Immediately return 202 Accepted
