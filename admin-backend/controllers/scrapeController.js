@@ -84,6 +84,11 @@ const parseIntegerOrUndefined = (value) => {
 };
 
 exports.startScrape = async (req, res) => {
+  console.log('🧭 DEBUG tenantContext:', {
+  resourceId: tenantContext.resourceId,
+  vectorStorePath: tenantContext.vectorStorePath,
+  cwd: process.cwd()
+});
   const startUrl = typeof req.body.startUrl === 'string' ? req.body.startUrl.trim() : '';
   const sitemapUrl = typeof req.body.sitemapUrl === 'string' ? req.body.sitemapUrl.trim() : undefined;
   const embeddingModelName = typeof req.body.embeddingModelName === 'string' ? req.body.embeddingModelName.trim() : undefined;
@@ -509,7 +514,7 @@ exports.startScheduler = async (req, res) => {
     const spawnOptions = {
       cwd: repoRoot,
       detached: true,
-      stdio: ['ignore', 'ignore', 'pipe'], // Fully ignore all stdio - process runs independently
+      stdio: ['ignore', 'ignore', 'ignore'], // Fully ignore all stdio - process runs independently
       env: {
         ...process.env,
         PYTHONUNBUFFERED: '1'
