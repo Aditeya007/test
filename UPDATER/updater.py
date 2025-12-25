@@ -116,6 +116,20 @@ class ContentChangeDetectorSpider(FixedUniversalSpider):
         self.collection_name = collection_name
         self.embedding_model_name = embedding_model_name
         self.scrape_job_id = scrape_job_id
+        
+        # CRITICAL: Validate tenant context before proceeding
+        if not vector_store_path or not vector_store_path.strip():
+            raise ValueError(
+                "vector_store_path is REQUIRED for tenant isolation. "
+                "Cannot proceed without explicit vector store path."
+            )
+        
+        # Ensure vector store directory exists
+        import os
+        resolved_vector_path = os.path.abspath(vector_store_path)
+        os.makedirs(resolved_vector_path, exist_ok=True)
+        self.vector_store_path = resolved_vector_path
+        logger.info(f"✅ Ensured vector store directory: {resolved_vector_path}")
 
         # Initialize parent spider with all its powerful extraction logic
         super().__init__(
@@ -141,7 +155,26 @@ class ContentChangeDetectorSpider(FixedUniversalSpider):
         )
 
         # MongoDB connection for URL tracking
-        self.mongo_uri = mongo_uri or MONGO_URI
+        # CRITICAL: Require explicit MongoDB URI for tenant isolation
+        self.mongo_uri = mongo_uri
+        
+        if not self.mongo_uri or not self.mongo_uri.strip():
+            raise ValueError(
+                f"mongo_uri is REQUIRED for tenant isolation (resource_id: {resource_id}). "
+                "Cannot proceed without explicit tenant-specific database URI."
+            )
+        
+        # Validate MongoDB URI format
+        if not self.mongo_uri.startswith(("mongodb://", "mongodb+srv://")):
+            raise ValueError(f"Invalid MongoDB URI format: {self.mongo_uri}")
+        
+        logger.info(f"\\n{'='*80}")
+        logger.info(f"🚀 Initializing MongoDB Connection for Tenant")
+        logger.info(f"{'='*80}")
+        logger.info(f"📌 Resource ID: {resource_id or 'NOT SET'}")
+        logger.info(f"🔗 MongoDB URI: {self.mongo_uri[:50]}..." if len(self.mongo_uri) > 50 else f"🔗 MongoDB URI: {self.mongo_uri}")
+        logger.info(f"📦 Collection: {self.url_tracking_collection_name}")
+        
         try:
             parsed_database = None
             if mongo_uri:
@@ -158,9 +191,10 @@ class ContentChangeDetectorSpider(FixedUniversalSpider):
 
             # Test connection
             self.mongo_client.admin.command('ping')
-            logger.info(f"✅ MongoDB connected successfully: {self.mongo_uri}")
-            logger.info(f"✅ Database: {self.db.name}")
-            logger.info(f"✅ Collection: {self.url_tracking_collection_name}")
+            logger.info(f"✅ MongoDB connected successfully")
+            logger.info(f"📊 Database: {self.db.name}")
+            logger.info(f"📋 Collection: {self.url_tracking_collection_name}")
+            logger.info(f"{'='*80}\\n")
         except Exception as e:
             logger.error(f"❌ MongoDB connection FAILED: {e}")
             logger.error(f"   URI: {self.mongo_uri}")
@@ -437,7 +471,33 @@ def run_updater(
     """
     Run the updater with proper pipeline configuration.
     Uses parent spider's extraction + our MongoDB tracking pipeline.
+    
+    REQUIRES tenant context: resource_id, vector_store_path, mongo_uri
     """
+    # CRITICAL: Validate tenant context before proceeding
+    if not resource_id or not resource_id.strip():
+        raise ValueError("resource_id is REQUIRED for tenant isolation")
+    
+    if not vector_store_path or not vector_store_path.strip():
+        raise ValueError("vector_store_path is REQUIRED for tenant isolation")
+    
+    if not mongo_uri or not mongo_uri.strip():
+        raise ValueError("mongo_uri is REQUIRED for tenant isolation")
+    
+    # Ensure vector store directory exists
+    import os
+    resolved_vector_path = os.path.abspath(vector_store_path)
+    os.makedirs(resolved_vector_path, exist_ok=True)
+    
+    logger.info(f"\\n{'='*80}")
+    logger.info(f"🚀 Starting Tenant Updater")
+    logger.info(f"{'='*80}")
+    logger.info(f"📌 Resource ID: {resource_id}")
+    logger.info(f"📁 Vector Store Path: {resolved_vector_path}")
+    logger.info(f"🔗 MongoDB URI: {mongo_uri[:50]}..." if len(mongo_uri) > 50 else f"🔗 MongoDB URI: {mongo_uri}")
+    logger.info(f"🌐 Domain: {domain}")
+    logger.info(f"🎯 Start URL: {start_url}")
+    
     settings = get_project_settings()
 
     # Configure pipelines: Use Scraping2's existing pipelines + our tracking pipeline
@@ -448,21 +508,8 @@ def run_updater(
         'updater_tracking_pipeline.MongoDBTrackingPipeline': 400,  # Update MongoDB tracking
     }
 
-    logger.info(f"\n{'='*80}")
-    logger.info(f"🚀 Starting Updater")
-    logger.info(f"{'='*80}")
     tenant_collection = build_url_tracking_collection(resource_id, tenant_user_id)
-
-    logger.info(f"Domain: {domain}")
-    logger.info(f"Start URL: {start_url}")
-    logger.info(f"MongoDB: {mongo_uri or MONGO_URI}")
-    logger.info(f"URL Tracking Collection: {tenant_collection}")
-    if resource_id:
-        logger.info(f"Resource ID: {resource_id}")
-    if tenant_user_id:
-        logger.info(f"Tenant User ID: {tenant_user_id}")
-    if vector_store_path:
-        logger.info(f"Chroma Path: {vector_store_path}")
+    logger.info(f"📋 URL Tracking Collection: {tenant_collection}")
     if collection_name:
         logger.info(f"Collection: {collection_name}")
     logger.info(f"Pipelines: ContentPipeline → ChunkingPipeline → ChromaDBPipeline → MongoDBTrackingPipeline")

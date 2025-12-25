@@ -46,7 +46,7 @@ class MongoDBTrackingPipeline:
     def open_spider(self, spider):
         """
         Initialize MongoDB connection when spider starts.
-        Tries to use spider's existing connection first, otherwise creates new one.
+        REQUIRES explicit tenant-scoped MongoDB URI - no fallbacks.
         """
         try:
             collection_name = getattr(
@@ -54,28 +54,62 @@ class MongoDBTrackingPipeline:
                 'url_tracking_collection_name',
                 MONGO_COLLECTION_URL_TRACKING
             )
+            
+            # Get tenant-specific MongoDB URI
+            tenant_mongo_uri = getattr(spider, 'mongo_uri', None)
+            
+            # CRITICAL: Require explicit MongoDB URI for tenant isolation
+            if not tenant_mongo_uri or not tenant_mongo_uri.strip():
+                logger.error(
+                    "❌ mongo_uri is REQUIRED for tenant isolation. "
+                    "Cannot proceed without tenant-specific database URI."
+                )
+                raise ValueError(
+                    "mongo_uri must be provided via spider argument for tenant isolation"
+                )
+            
+            # Validate MongoDB URI format
+            if not tenant_mongo_uri.startswith(("mongodb://", "mongodb+srv://")):
+                raise ValueError(f"Invalid MongoDB URI format: {tenant_mongo_uri}")
+            
+            tenant_resource_id = getattr(spider, 'resource_id', None)
+            
+            # Structured logging for tenant context
+            logger.info(f"\\n{'='*80}")
+            logger.info(f"🚀 MongoDBTrackingPipeline: Initializing for Tenant")
+            logger.info(f"{'='*80}")
+            logger.info(f"📌 Resource ID: {tenant_resource_id or 'NOT SET'}")
+            logger.info(f"🔗 MongoDB URI: {tenant_mongo_uri[:50]}..." if len(tenant_mongo_uri) > 50 else f"🔗 MongoDB URI: {tenant_mongo_uri}")
+            logger.info(f"📦 Collection: {collection_name}")
+            logger.info(f"{'='*80}\\n")
 
             # Try to use spider's existing MongoDB connection if available
             if hasattr(spider, 'url_tracking') and spider.url_tracking is not None:
                 self.url_tracking = spider.url_tracking
                 logger.info(
-                    "✅ MongoDBTrackingPipeline: Using spider's url_tracking collection (%s)",
+                    "✅ Using spider's existing url_tracking collection (%s)",
                     collection_name
                 )
             else:
-                # Create our own MongoDB connection
-                self.mongo_client = MongoClient(MONGO_URI)
-                self.db = self.mongo_client[MONGO_DATABASE]
+                # Create our own MongoDB connection with tenant URI
+                logger.info(f"🔄 Creating MongoDB connection...")
+                self.mongo_client = MongoClient(tenant_mongo_uri)
+                
+                # Parse database name from URI or use default
+                from pymongo.uri_parser import parse_uri
+                parsed_uri = parse_uri(tenant_mongo_uri)
+                database_name = parsed_uri.get("database") or MONGO_DATABASE
+                
+                logger.info(f"📊 Database: {database_name}")
+                self.db = self.mongo_client[database_name]
                 self.url_tracking = self.db[collection_name]
                 
                 # Ensure index on url field
                 self.url_tracking.create_index("url", unique=True)
-                logger.info(f"✅ MongoDBTrackingPipeline: Connected to MongoDB at {MONGO_URI}")
-                logger.info(f"   Database: {MONGO_DATABASE}")
-                logger.info(f"   Collection: {collection_name}")
+                logger.info(f"✅ MongoDB connection established successfully")
                 
         except Exception as e:
-            logger.error(f"❌ MongoDBTrackingPipeline: Failed to connect to MongoDB: {e}")
+            logger.error(f"❌ Failed to initialize MongoDB connection: {e}")
             raise
     
     def close_spider(self, spider):

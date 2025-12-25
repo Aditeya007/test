@@ -159,13 +159,19 @@ class ChromaDBPipeline:
                         # Fallback for older versions
                         from chromadb import embedding_functions
             
-            # Resolve tenant-specific vector store path
+            # Resolve tenant-specific vector store path - REQUIRED, NO FALLBACK
             vector_path = getattr(spider, 'vector_store_path', None) or spider.settings.get('CHROMA_DB_PATH')
-            if not vector_path:
-                raise ValueError('vector_store_path must be provided via spider argument or CHROMA_DB_PATH setting')
+            if not vector_path or not vector_path.strip():
+                raise ValueError(
+                    'vector_store_path is REQUIRED and must be provided via spider argument or CHROMA_DB_PATH setting. '
+                    'Cannot proceed without tenant-specific vector store path.'
+                )
 
             self.db_path = os.path.abspath(vector_path)
+            
+            # CRITICAL: Ensure directory exists before proceeding
             os.makedirs(self.db_path, exist_ok=True)
+            logger.info(f"✅ Ensured vector store directory exists: {self.db_path}")
 
             self.collection_name = getattr(spider, 'collection_name', None) or spider.settings.get('CHROMA_COLLECTION_NAME', 'scraped_content')
             self.embedding_model_name = (
@@ -174,37 +180,89 @@ class ChromaDBPipeline:
             )
             self.tenant_resource_id = getattr(spider, 'resource_id', None)
             self.tenant_user_id = getattr(spider, 'tenant_user_id', None)
+            
+            # Structured logging for tenant context
+            logger.info(f"\\n{'='*80}")
+            logger.info(f"🚀 ChromaDBPipeline: Initializing for Tenant")
+            logger.info(f"{'='*80}")
+            logger.info(f"📌 Resource ID: {self.tenant_resource_id or 'NOT SET'}")
+            logger.info(f"👤 User ID: {self.tenant_user_id or 'NOT SET'}")
+            logger.info(f"📁 Vector Store Path: {self.db_path}")
+            logger.info(f"📦 Collection Name: {self.collection_name}")
+            logger.info(f"🤖 Embedding Model: {self.embedding_model_name}")
+            logger.info(f"{'='*80}\\n")
 
             # Create persistent client scoped to tenant directory
+            logger.info(f"🔄 Creating ChromaDB PersistentClient...")
             self.client = chromadb.PersistentClient(path=self.db_path)
+            logger.info(f"✅ ChromaDB client created successfully")
             
             # Create embedding function
+            logger.info(f"🔄 Loading embedding model: {self.embedding_model_name}...")
             embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
                 model_name=self.embedding_model_name
             )
+            logger.info(f"✅ Embedding model loaded")
             
             # Get or create collection
+            logger.info(f"🔄 Getting/creating collection: {self.collection_name}...")
             self.collection = self.client.get_or_create_collection(
                 name=self.collection_name,
                 embedding_function=embedding_function
             )
             
-            logger.info(
-                "ChromaDB initialized for resource %s at %s (collection=%s)",
-                self.tenant_resource_id,
-                self.db_path,
-                self.collection_name
-            )
+            # Log existing document count
+            try:
+                existing_count = self.collection.count()
+                logger.info(f"📊 Existing documents in collection: {existing_count}")
+            except Exception as e:
+                logger.warning(f"⚠️ Could not get existing count: {e}")
+            
+            logger.info(f"✅ ChromaDB initialization complete for tenant {self.tenant_resource_id}")
             
         except Exception as e:
-            logger.error(f"Failed to initialize ChromaDB: {e}")
+            logger.error(f"❌ Failed to initialize ChromaDB: {e}")
             raise
 
     def close_spider(self, spider):
-        """Process any remaining items when spider closes"""
+        """Process any remaining items and ensure data is persisted when spider closes"""
         if self.batch_items:
             self._process_batch()
-        logger.info(f"ChromaDBPipeline finished. Total chunks stored: {self.items_stored}")
+        
+        # Structured logging for completion summary
+        logger.info(f"\\n{'='*80}")
+        logger.info(f"✅ ChromaDBPipeline: Spider Complete")
+        logger.info(f"{'='*80}")
+        logger.info(f"📊 Total chunks stored: {self.items_stored}")
+        logger.info(f"📌 Resource ID: {self.tenant_resource_id or 'NOT SET'}")
+        logger.info(f"📁 Vector Store Path: {self.db_path}")
+        logger.info(f"📦 Collection: {self.collection_name}")
+        
+        # Verify final document count
+        try:
+            final_count = self.collection.count()
+            logger.info(f"📈 Final document count in collection: {final_count}")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not verify final count: {e}")
+        
+        # CRITICAL: Explicitly persist data to disk
+        # ChromaDB PersistentClient should auto-persist, but we verify the directory exists
+        if self.db_path and os.path.isdir(self.db_path):
+            logger.info(f"✅ Vector store directory confirmed: {self.db_path}")
+            # List files in the directory for verification
+            try:
+                files = os.listdir(self.db_path)
+                logger.info(f"📂 Files in vector store: {len(files)} items")
+                if files:
+                    logger.info(f"   Sample files: {files[:5]}")
+                else:
+                    logger.warning(f"⚠️ WARNING: Vector store directory is empty!")
+            except Exception as e:
+                logger.warning(f"⚠️ Could not list directory contents: {e}")
+        else:
+            logger.error(f"❌ ERROR: Vector store directory does not exist: {self.db_path}")
+        
+        logger.info(f"{'='*80}\\n")
 
     def process_item(self, item, spider):
         """Process individual items and batch them for efficient storage"""

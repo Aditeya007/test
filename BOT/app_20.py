@@ -235,23 +235,44 @@ class SemanticIntelligentRAG:
         mongo_uri: Optional[str] = None,
         resource_id: Optional[str] = None
     ):
-        self.vector_store_path = chroma_db_path
+        # Validate and ensure vector store path exists
+        if not chroma_db_path or not chroma_db_path.strip():
+            raise ValueError("chroma_db_path (vector_store_path) is required and cannot be empty")
+        
+        resolved_path = os.path.abspath(chroma_db_path)
+        os.makedirs(resolved_path, exist_ok=True)
+        
+        self.vector_store_path = resolved_path
         self.resource_id = resource_id
+        
+        # Structured logging for tenant initialization
+        print(f"\n{'='*80}")
+        print(f"🚀 Initializing RAG Bot for Tenant")
+        print(f"{'='*80}")
+        print(f"📌 Resource ID: {resource_id or 'NOT SET'}")
+        print(f"📁 Vector Store Path: {resolved_path}")
+        print(f"💾 Collection Name: {collection_name}")
+        print(f"🔗 MongoDB URI: {mongo_uri[:50] + '...' if mongo_uri and len(mongo_uri) > 50 else mongo_uri or 'NOT SET'}")
+        print(f"{'='*80}\n")
 
         # Initialize ChromaDB client for this tenant
-        self.chroma_client = chromadb.PersistentClient(path=chroma_db_path)
+        print(f"🔄 Creating ChromaDB PersistentClient at: {resolved_path}")
+        self.chroma_client = chromadb.PersistentClient(path=resolved_path)
         self.name_collection_states = {}
         self.collection = self.chroma_client.get_or_create_collection(
             name=collection_name,
             metadata={"hnsw:space": "cosine"}
         )
+        print(f"✅ ChromaDB collection '{collection_name}' loaded/created")
 
         # Get total documents count
         try:
             total_docs = self.collection.count()
-            print(f"📊 Total documents in database: {total_docs}")
-        except:
-            print("❌ Could not get document count")
+            print(f"📊 Total documents in collection: {total_docs}")
+            if total_docs == 0:
+                print(f"⚠️  WARNING: Collection is empty! No data has been scraped yet.")
+        except Exception as e:
+            print(f"❌ Could not get document count: {e}")
 
         # Initialize embedding model
         print("🔄 Loading semantic embedding model...")
@@ -1303,12 +1324,41 @@ class TenantChatbotManager:
         resource_id: Optional[str],
         force_reload: bool = False
     ) -> SemanticIntelligentRAG:
-        if not vector_store_path:
-            raise ValueError("vector_store_path is required for tenant isolation")
-
-        resolved_path = self._prepare_vector_store_path(vector_store_path)
-        resolved_db_uri = database_uri or os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+        # CRITICAL: Validate all required tenant context parameters
+        if not vector_store_path or not vector_store_path.strip():
+            raise ValueError(
+                "vector_store_path is required for tenant isolation and cannot be empty"
+            )
+        
+        if not database_uri or not database_uri.strip():
+            raise ValueError(
+                "database_uri is required for tenant isolation and cannot be empty"
+            )
+        
+        if not resource_id or not resource_id.strip():
+            raise ValueError(
+                "resource_id is required to identify the tenant and cannot be empty"
+            )
+        
+        # Use validated tenant context
+        tenant_ctx = get_tenant_context(
+            resource_id=resource_id,
+            database_uri=database_uri,
+            vector_store_path=vector_store_path
+        )
+        
+        resolved_path = tenant_ctx["vector_store_path"]
+        resolved_db_uri = tenant_ctx["database_uri"]
+        resolved_resource_id = tenant_ctx["resource_id"]
+        
         cache_key = f"{resolved_path}::{resolved_db_uri}"
+        
+        print(f"\\n{'='*80}")
+        print(f"📦 TenantChatbotManager: get_chatbot()")
+        print(f"{'='*80}")
+        print(f"🔑 Cache Key: {cache_key[:100]}...")
+        print(f"🔄 Force Reload: {force_reload}")
+        print(f"{'='*80}\\n")
 
         # If force_reload is True, COMPLETELY DESTROY the old instance
         if force_reload:
@@ -1369,12 +1419,12 @@ class TenantChatbotManager:
                 return instance
 
             # Create completely fresh instance
-            print(f"🆕 Creating BRAND NEW chatbot instance for {resource_id or resolved_path}")
+            print(f"🆕 Creating BRAND NEW chatbot instance for {resolved_resource_id}")
             bot_instance = SemanticIntelligentRAG(
                 chroma_db_path=resolved_path,
                 collection_name=self.collection_name,
                 mongo_uri=resolved_db_uri,
-                resource_id=resource_id
+                resource_id=resolved_resource_id
             )
             
             doc_count = bot_instance.collection.count()
@@ -1453,14 +1503,27 @@ async def get_tenant_chatbot_or_error(
     if chatbot_manager is None:
         raise HTTPException(status_code=503, detail="Chat manager not initialized")
 
-    resolved_vector_path = vector_store_path or os.getenv("DEFAULT_VECTOR_BASE_PATH")
-    if not resolved_vector_path:
-        raise HTTPException(status_code=400, detail="vector_store_path is required")
+    # CRITICAL: No fallbacks - require explicit tenant context
+    if not vector_store_path or not vector_store_path.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="vector_store_path is required. Tenant context must be provided explicitly."
+        )
 
-    resolved_database_uri = database_uri or os.getenv("MONGODB_URI")
-    if not resolved_database_uri:
-        raise HTTPException(status_code=400, detail="database_uri is required")
-
+    if not database_uri or not database_uri.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="database_uri is required. Tenant context must be provided explicitly."
+        )
+    
+    if not resource_id and not user_id:
+        raise HTTPException(
+            status_code=400,
+            detail="resource_id or user_id is required to identify the tenant."
+        )
+    
+    resolved_vector_path = vector_store_path.strip()
+    resolved_database_uri = database_uri.strip()
     tenant_identifier = resource_id or user_id
 
     try:
