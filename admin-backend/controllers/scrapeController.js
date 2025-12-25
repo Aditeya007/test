@@ -15,11 +15,14 @@ const schedulerScriptPath = path.resolve(repoRoot, 'UPDATER', 'run_tenant_schedu
  * Get the Python executable path (reuse logic from pythonJob.js)
  */
 const getPythonExecutable = () => {
-  if (process.env.PYTHON_BIN && process.env.PYTHON_BIN.trim()) {
-    return process.env.PYTHON_BIN.trim();
+  if (!process.env.PYTHON_BIN) {
+    throw new Error(
+      'PYTHON_BIN not set. PM2 does not use your shell virtualenv.'
+    );
   }
-  return process.platform === 'win32' ? 'python' : 'python3';
+  return process.env.PYTHON_BIN.trim();
 };
+
 
 const buildJobId = (prefix, resourceId) => {
   const random = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(8).toString('hex');
