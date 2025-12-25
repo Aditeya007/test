@@ -89,63 +89,7 @@ mongoose.connection.on('reconnected', () => {
   console.log('🔄 Mongoose reconnected to MongoDB');
 });
 
-// Graceful shutdown handlers
-// These ensure clean database disconnect when the application terminates
-
-/**
- * Handle SIGINT (Ctrl+C)
- */
-process.on('SIGINT', async () => {
-  try {
-    await mongoose.connection.close();
-    console.log('🛑 MongoDB connection closed due to app termination (SIGINT)');
-    process.exit(0);
-  } catch (err) {
-    console.error('❌ Error closing MongoDB connection:', err.message);
-    process.exit(1);
-  }
-});
-
-/**
- * Handle SIGTERM (e.g., from Docker, Kubernetes, or process managers)
- */
-process.on('SIGTERM', async () => {
-  try {
-    await mongoose.connection.close();
-    console.log('🛑 MongoDB connection closed due to app termination (SIGTERM)');
-    process.exit(0);
-  } catch (err) {
-    console.error('❌ Error closing MongoDB connection:', err.message);
-    process.exit(1);
-  }
-});
-
-/**
- * Handle uncaught exceptions
- */
-process.on('uncaughtException', async (err) => {
-  console.error('❌ Uncaught Exception:', err);
-  try {
-    await mongoose.connection.close();
-    console.log('🛑 MongoDB connection closed due to uncaught exception');
-  } catch (closeErr) {
-    console.error('❌ Error closing MongoDB connection:', closeErr.message);
-  }
-  process.exit(1);
-});
-
-/**
- * Handle unhandled promise rejections
- */
-process.on('unhandledRejection', async (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-  try {
-    await mongoose.connection.close();
-    console.log('🛑 MongoDB connection closed due to unhandled rejection');
-  } catch (closeErr) {
-    console.error('❌ Error closing MongoDB connection:', closeErr.message);
-  }
-  process.exit(1);
-});
+// NOTE: Graceful shutdown and signal handlers are managed in server.js
+// This utility is responsible ONLY for establishing the MongoDB connection
 
 module.exports = dbConnect;
