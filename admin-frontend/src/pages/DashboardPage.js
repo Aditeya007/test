@@ -227,11 +227,11 @@ function DashboardPage() {
     try {
       const tenantUserId = tenantDetails.id || tenantDetails._id;
 
-      // If not using scheduler, run immediately via existing endpoint
+      // If not using scheduler, run full scrape immediately
       if (!useScheduler) {
-        setStatusMessage('Launching updater. This may take a while depending on site size...');
+        setStatusMessage('Launching full scrape. This may take a while depending on site size...');
         
-        const response = await apiRequest('/scrape/update', {
+        const response = await apiRequest('/scrape/run', {
           method: 'POST',
           token,
           data: {
