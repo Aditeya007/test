@@ -21,16 +21,12 @@ from Scraping2.spiders.spider import FixedUniversalSpider
 
 
 def _ensure_nltk_models() -> None:
-    """Best-effort download of tokenizers required by the pipelines."""
-    for package in ("punkt", "punkt_tab"):
-        try:
-            nltk.data.find(f"tokenizers/{package}")
-        except LookupError:
-            try:
-                nltk.download(package, quiet=True)
-            except Exception as exc:  # pragma: no cover - download failure shouldn't crash job
-                logging.warning("Failed to download NLTK package %s: %s", package, exc)
-
+    import nltk
+    try:
+        nltk.download("punkt", quiet=True)
+        nltk.download("punkt_tab", quiet=True)
+    except Exception as exc:
+        logging.warning("NLTK download failed: %s", exc)
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the universal scraper for a tenant")
