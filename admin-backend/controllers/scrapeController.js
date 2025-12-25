@@ -227,10 +227,6 @@ exports.startScrape = async (req, res) => {
       error: err.message,
       stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
-      error: err.message,
-      code: err.code,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    });
 
     const status = err.statusCode || 500;
     res.status(status).json({
