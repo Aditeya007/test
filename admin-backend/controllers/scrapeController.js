@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const axios = require('axios');
 const path = require('path');
+const fs = require('fs'); // Added missing fs import for stopScheduler
 const { spawn } = require('child_process');
 const { runTenantScrape, runTenantUpdater } = require('../jobs/scrapeJob');
 const { getUserTenantContext } = require('../services/userContextService');
@@ -27,8 +28,7 @@ const buildJobId = (prefix, resourceId) => {
 
 /**
  * Wait for bot to come back online after restart
- * 
- * @param {Object} tenantContext - Tenant context with botEndpoint
+ * * @param {Object} tenantContext - Tenant context with botEndpoint
  * @param {number} maxWaitMs - Maximum time to wait (default 30 seconds)
  * @returns {Promise<Object>} Result with success status
  */
@@ -376,8 +376,7 @@ exports.runUpdater = async (req, res) => {
 
 /**
  * Start a persistent scheduler for the tenant
- * 
- * Spawns a detached Python process that runs run_tenant_scheduler.py
+ * * Spawns a detached Python process that runs run_tenant_scheduler.py
  * which will execute the updater on the configured schedule.
  */
 exports.startScheduler = async (req, res) => {
