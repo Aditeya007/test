@@ -19,14 +19,31 @@ print(f"Bot script: {BOT_SCRIPT}")
 print("This will automatically restart the bot when it exits.")
 print("Press Ctrl+C to stop completely.")
 print("=" * 80)
+
+# Log environment variables for debugging
+rag_data_root = os.getenv("RAG_DATA_ROOT")
+if rag_data_root:
+    print(f"✅ RAG_DATA_ROOT detected: {rag_data_root}")
+else:
+    print("⚠️  RAG_DATA_ROOT not set - will use default: /var/lib/rag-data")
+
+print("=" * 80)
 print()
 
 restart_count = 0
 
-# Set environment variable to disable uvicorn's reload mode
-# This ensures os._exit(1) properly terminates the process
+# Copy parent environment to ensure ALL environment variables are inherited
+# This includes systemd variables like RAG_DATA_ROOT, Docker env vars, etc.
 env = os.environ.copy()
+# Set marker to indicate auto-restart mode (prevents uvicorn reload conflicts)
 env["BOT_AUTO_RESTART"] = "1"
+
+print("🔍 Environment check before starting bot:")
+print(f"   RAG_DATA_ROOT: {env.get('RAG_DATA_ROOT', 'NOT SET (will use default)')}")
+print(f"   MONGODB_URI: {env.get('MONGODB_URI', 'NOT SET')[:50] + '...' if env.get('MONGODB_URI') and len(env.get('MONGODB_URI', '')) > 50 else env.get('MONGODB_URI', 'NOT SET')}")
+print(f"   GOOGLE_API_KEY: {'SET ✓' if env.get('GOOGLE_API_KEY') else 'NOT SET ✗'}")
+print(f"   BOT_AUTO_RESTART: {env.get('BOT_AUTO_RESTART')}")
+print()
 
 while True:
     try:

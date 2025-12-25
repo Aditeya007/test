@@ -117,6 +117,10 @@ MONGO_URI=mongodb://localhost:27017/rag_chatbot_prod
 # Option B: Use MongoDB Atlas (recommended)
 # MONGO_URI=mongodb+srv://your-username:your-password@cluster.mongodb.net/rag_chatbot_prod
 
+# RAG Data Directory - Where tenant vector stores and data are stored
+# IMPORTANT: This directory will hold all scraped data for all tenants
+RAG_DATA_ROOT=/var/lib/rag-data
+
 # Generate two new secret keys using this command (run it twice):
 # You can run: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 JWT_SECRET=paste_first_generated_secret_here
@@ -162,6 +166,31 @@ node deployment/validate-env.js
 ```
 
 Fix any errors before proceeding to the next step.
+
+---
+
+## 📁 Step 4.5: Create Data Directory for Tenant Storage
+
+**CRITICAL STEP:** Create the directory where all tenant data will be stored:
+
+```bash
+# Create the data directory (must match RAG_DATA_ROOT in .env)
+sudo mkdir -p /var/lib/rag-data
+
+# Set proper permissions so the bot can write to it
+sudo chown -R www-data:www-data /var/lib/rag-data
+sudo chmod -R 755 /var/lib/rag-data
+
+# Verify the directory was created
+ls -la /var/lib/rag-data
+```
+
+**What this directory stores:**
+- Each tenant's vector store (ChromaDB embeddings)
+- Scraped website data
+- AI model cache
+
+**Note:** If you use a different path in `RAG_DATA_ROOT`, create that directory instead and adjust permissions accordingly.
 
 ---
 
@@ -493,6 +522,18 @@ sudo tail -f /var/log/nginx/error.log
 sudo tail -f /var/log/nginx/access.log
 ```
 
+**Check Tenant Data Storage:**
+```bash
+# List all tenant vector stores
+ls -la /var/lib/rag-data/
+
+# Check specific tenant's data
+ls -la /var/lib/rag-data/<resource-id>/
+
+# Check disk usage
+du -sh /var/lib/rag-data/*
+```
+
 ---
 
 ## 🔄 Updating Your Chatbot
@@ -516,6 +557,9 @@ pip install -r requirements.txt
 # Restart services
 pm2 restart rag-backend
 sudo systemctl restart rag-bot
+
+# Verify data directory permissions after update
+sudo chown -R www-data:www-data /var/lib/rag-data
 ```
 
 **Note:** The systemd service automatically uses the auto-restart wrapper, so a simple restart is all you need. The bot will continue running even after you disconnect from the server.
@@ -612,6 +656,34 @@ sudo chown -R $USER:$USER rag-chatbot
 
 # Fix permissions
 chmod -R 755 rag-chatbot
+
+# IMPORTANT: Fix data directory permissions
+sudo chown -R www-data:www-data /var/lib/rag-data
+sudo chmod -R 755 /var/lib/rag-data
+```
+
+### Problem: "No data persisting after scrape"
+
+**Solution:**
+```bash
+# Verify RAG_DATA_ROOT is set in .env
+grep RAG_DATA_ROOT /var/www/rag-chatbot/.env
+
+# Ensure directory exists
+sudo mkdir -p /var/lib/rag-data
+
+# Fix permissions
+sudo chown -R www-data:www-data /var/lib/rag-data
+sudo chmod -R 755 /var/lib/rag-data
+
+# Check if data directory is writable
+sudo -u www-data touch /var/lib/rag-data/test.txt && sudo rm /var/lib/rag-data/test.txt && echo "✅ Writable" || echo "❌ Not writable"
+
+# Restart bot to pick up environment changes
+sudo systemctl restart rag-bot
+
+# Check bot logs for tenant context validation
+sudo journalctl -u rag-bot -n 50 | grep -i "tenant\|vector\|mongodb"
 ```
 
 ### Problem: Website not loading
