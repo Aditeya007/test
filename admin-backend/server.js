@@ -33,15 +33,33 @@ if (!sharedSecret || sharedSecret.trim().toLowerCase() === 'change-me') {
   console.warn('⚠️  FASTAPI_SHARED_SECRET is not yet configured. Update it in .env to enforce secure bot communication.');
 }
 
-// Validate CORS_ORIGIN is not wildcard in production
+// Validate CORS_ORIGIN in production
 if (process.env.NODE_ENV === 'production' && process.env.CORS_ORIGIN === '*') {
-  console.error('❌ FATAL ERROR: CORS_ORIGIN cannot be "*" in production!');
-  console.error('   Please set specific allowed origins in your .env file.');
-  process.exit(1);
+  const enableWidget = process.env.ENABLE_WIDGET === 'true';
+  if (enableWidget) {
+    console.warn('⚠️  WARNING: CORS_ORIGIN="*" in production with widget embedding enabled!');
+    console.warn('   This allows ANY website to embed your widget.');
+    console.warn('   Consider implementing per-user domain whitelisting for production.');
+  } else {
+    console.error('❌ FATAL ERROR: CORS_ORIGIN cannot be "*" in production without ENABLE_WIDGET=true!');
+    console.error('   Set ENABLE_WIDGET=true to allow widget embedding, or set specific origins.');
+    process.exit(1);
+  }
 }
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// =============================================================================
+// TRUST PROXY CONFIGURATION
+// =============================================================================
+// Enable trust proxy when behind Nginx/reverse proxy
+// This fixes express-rate-limit ERR_ERL_UNEXPECTED_X_FORWARDED_FOR error
+// and allows proper IP detection from X-Forwarded-For header
+if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+  console.log('🔧 Trust proxy enabled for reverse proxy support');
+}
 
 // =============================================================================
 // SECURITY MIDDLEWARE
@@ -223,26 +241,92 @@ const server = app.listen(PORT, () => {
   }
 });
 
+// Track active Python jobs to prevent shutdown during execution
+let activeJobCount = 0;
+
+const incrementActiveJobs = () => {
+  activeJobCount++;
+  console.log(`📊 Active jobs: ${activeJobCount}`);
+};
+
+const decrementActiveJobs = () => {
+  activeJobCount = Math.max(0, activeJobCount - 1);
+  console.log(`📊 Active jobs: ${activeJobCount}`);
+};
+
+const getActiveJobCount = () => activeJobCount;
+
+// Export for use in controllers
+app.locals.jobTracking = {
+  incrementActiveJobs,
+  decrementActiveJobs,
+  getActiveJobCount
+};
+
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('🛑 SIGTERM signal received: closing HTTP server');
-  server.close(() => {
+  
+  // Wait for active jobs to complete
+  if (activeJobCount > 0) {
+    console.log(`⏳ Waiting for ${activeJobCount} active job(s) to complete...`);
+    const maxWaitTime = 60000; // 60 seconds
+    const startTime = Date.now();
+    
+    while (activeJobCount > 0 && (Date.now() - startTime) < maxWaitTime) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    if (activeJobCount > 0) {
+      console.warn(`⚠️  Forcing shutdown with ${activeJobCount} job(s) still running`);
+    } else {
+      console.log('✅ All jobs completed');
+    }
+  }
+  
+  server.close(async () => {
     console.log('✅ HTTP server closed');
-    mongoose.connection.close(false, () => {
+    try {
+      await mongoose.connection.close();
       console.log('✅ MongoDB connection closed');
       process.exit(0);
-    });
+    } catch (err) {
+      console.error('❌ Error closing MongoDB:', err.message);
+      process.exit(1);
+    }
   });
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('\n🛑 SIGINT signal received: closing HTTP server');
-  server.close(() => {
+  
+  // Wait for active jobs to complete
+  if (activeJobCount > 0) {
+    console.log(`⏳ Waiting for ${activeJobCount} active job(s) to complete...`);
+    const maxWaitTime = 60000; // 60 seconds
+    const startTime = Date.now();
+    
+    while (activeJobCount > 0 && (Date.now() - startTime) < maxWaitTime) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    if (activeJobCount > 0) {
+      console.warn(`⚠️  Forcing shutdown with ${activeJobCount} job(s) still running`);
+    } else {
+      console.log('✅ All jobs completed');
+    }
+  }
+  
+  server.close(async () => {
     console.log('✅ HTTP server closed');
-    mongoose.connection.close(false, () => {
+    try {
+      await mongoose.connection.close();
       console.log('✅ MongoDB connection closed');
       process.exit(0);
-    });
+    } catch (err) {
+      console.error('❌ Error closing MongoDB:', err.message);
+      process.exit(1);
+    }
   });
 });
 

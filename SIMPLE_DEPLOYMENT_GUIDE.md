@@ -136,6 +136,12 @@ GOOGLE_API_KEY=your_google_api_key_here
 FASTAPI_BOT_URL=https://mychatbot.com/bot
 CORS_ORIGIN=https://mychatbot.com
 
+# Enable widget embedding (set to true to allow CORS_ORIGIN=* for widgets)
+ENABLE_WIDGET=true
+
+# Trust proxy (enable when behind Nginx/reverse proxy)
+TRUST_PROXY=true
+
 # Server port
 PORT=5000
 ```
@@ -517,6 +523,34 @@ sudo systemctl restart rag-bot
 ---
 
 ## 🛠️ Troubleshooting
+
+### Problem: Backend crashes during scraper execution
+
+**Symptoms:**
+- Backend logs show "Python job exited with code 1"
+- Mongoose disconnection errors
+- ERR_ERL_UNEXPECTED_X_FORWARDED_FOR validation errors
+
+**Solution:**
+```bash
+# 1. Ensure trust proxy is enabled in .env
+nano /var/www/rag-chatbot/.env
+
+# Add or verify these lines:
+# TRUST_PROXY=true
+# ENABLE_WIDGET=true (if using widget with CORS_ORIGIN=*)
+
+# 2. Restart backend
+pm2 restart rag-backend
+
+# 3. Check logs for confirmation
+pm2 logs rag-backend --lines 50
+```
+
+**What this fixes:**
+- `TRUST_PROXY=true` fixes rate limiter issues when behind Nginx
+- `ENABLE_WIDGET=true` allows CORS_ORIGIN="*" for widget embedding
+- Job tracking prevents backend shutdown during Python scraper execution
 
 ### Problem: "502 Bad Gateway" error
 

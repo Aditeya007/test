@@ -162,21 +162,34 @@ exports.startScrape = async (req, res) => {
       logLevel: process.env.SCRAPER_LOG_LEVEL || 'INFO'
     };
 
-    const result = await runTenantScrape(scrapeOptions);
+    // Track active job to prevent shutdown
+    const app = req.app;
+    if (app.locals.jobTracking) {
+      app.locals.jobTracking.incrementActiveJobs();
+    }
 
-    // Bot restarts automatically after scrape (triggered in scrapeJob.js)
-    // Wait for it to come back online
-    const restartResult = await waitForBotRestart(tenantContext);
+    try {
+      const result = await runTenantScrape(scrapeOptions);
 
-    res.json({
-      success: true,
-      jobId,
-      resourceId: tenantContext.resourceId,
-      summary: result.summary,
-      stdout: truncateLog(result.stdout),
-      stderr: truncateLog(result.stderr),
-      botRestarted: restartResult.success
-    });
+      // Bot restarts automatically after scrape (triggered in scrapeJob.js)
+      // Wait for it to come back online
+      const restartResult = await waitForBotRestart(tenantContext);
+
+      res.json({
+        success: true,
+        jobId,
+        resourceId: tenantContext.resourceId,
+        summary: result.summary,
+        stdout: truncateLog(result.stdout),
+        stderr: truncateLog(result.stderr),
+        botRestarted: restartResult.success
+      });
+    } finally {
+      // Always decrement job counter
+      if (app.locals.jobTracking) {
+        app.locals.jobTracking.decrementActiveJobs();
+      }
+    }
   } catch (err) {
     console.error('❌ Scrape job failed:', {
       userId: req.tenantUserId || req.user.userId,
@@ -254,21 +267,34 @@ exports.runUpdater = async (req, res) => {
       logLevel: process.env.UPDATER_LOG_LEVEL || 'INFO'
     };
 
-    const result = await runTenantUpdater(updaterOptions);
+    // Track active job to prevent shutdown
+    const app = req.app;
+    if (app.locals.jobTracking) {
+      app.locals.jobTracking.incrementActiveJobs();
+    }
 
-    // Bot restarts automatically after update (triggered in scrapeJob.js)
-    // Wait for it to come back online
-    const restartResult = await waitForBotRestart(tenantContext);
+    try {
+      const result = await runTenantUpdater(updaterOptions);
 
-    res.json({
-      success: true,
-      jobId,
-      resourceId: tenantContext.resourceId,
-      summary: result.summary,
-      stdout: truncateLog(result.stdout),
-      stderr: truncateLog(result.stderr),
-      botRestarted: restartResult.success
-    });
+      // Bot restarts automatically after update (triggered in scrapeJob.js)
+      // Wait for it to come back online
+      const restartResult = await waitForBotRestart(tenantContext);
+
+      res.json({
+        success: true,
+        jobId,
+        resourceId: tenantContext.resourceId,
+        summary: result.summary,
+        stdout: truncateLog(result.stdout),
+        stderr: truncateLog(result.stderr),
+        botRestarted: restartResult.success
+      });
+    } finally {
+      // Always decrement job counter
+      if (app.locals.jobTracking) {
+        app.locals.jobTracking.decrementActiveJobs();
+      }
+    }
   } catch (err) {
     console.error('❌ Updater job failed:', {
       userId: req.tenantUserId || req.user.userId,
