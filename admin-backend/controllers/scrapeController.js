@@ -193,7 +193,7 @@ exports.startScrape = async (req, res) => {
     // Spawn as detached background process
     const child = spawn(pythonExe, args, {
       detached: true,
-      stdio: 'ignore', // Don't pipe stdio (fully detached)
+      stdio: ['ignore', 'ignore', 'pipe'], // Don't pipe stdio (fully detached)
       cwd: repoRoot,
       env: {
         ...process.env, // Inherit all environment variables (RAG_DATA_ROOT, etc.)
@@ -327,7 +327,7 @@ exports.runUpdater = async (req, res) => {
     // Spawn as detached background process
     const child = spawn(pythonExe, args, {
       detached: true,
-      stdio: 'ignore', // Don't pipe stdio (fully detached)
+      stdio: ['ignore', 'ignore', 'pipe'], // Don't pipe stdio (fully detached)
       cwd: repoRoot,
       env: {
         ...process.env, // Inherit all environment variables (RAG_DATA_ROOT, etc.)
@@ -514,7 +514,7 @@ exports.startScheduler = async (req, res) => {
     const spawnOptions = {
       cwd: repoRoot,
       detached: true,
-      stdio: 'ignore', // Fully ignore all stdio - process runs independently
+      stdio: ['ignore', 'ignore', 'pipe'], // Fully ignore all stdio - process runs independently
       env: {
         ...process.env,
         PYTHONUNBUFFERED: '1'
