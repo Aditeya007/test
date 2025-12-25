@@ -84,11 +84,6 @@ const parseIntegerOrUndefined = (value) => {
 };
 
 exports.startScrape = async (req, res) => {
-  console.log('🧭 DEBUG tenantContext:', {
-  resourceId: tenantContext.resourceId,
-  vectorStorePath: tenantContext.vectorStorePath,
-  cwd: process.cwd()
-});
   const startUrl = typeof req.body.startUrl === 'string' ? req.body.startUrl.trim() : '';
   const sitemapUrl = typeof req.body.sitemapUrl === 'string' ? req.body.sitemapUrl.trim() : undefined;
   const embeddingModelName = typeof req.body.embeddingModelName === 'string' ? req.body.embeddingModelName.trim() : undefined;
@@ -113,6 +108,12 @@ exports.startScrape = async (req, res) => {
     
     const tenantContext = await getUserTenantContext(userId);
     ensureTenantResources(tenantContext);
+
+    console.log('🧭 DEBUG tenantContext:', {
+      resourceId: tenantContext.resourceId,
+      vectorStorePath: tenantContext.vectorStorePath,
+      cwd: process.cwd()
+    });
 
     // Validate required fields
     if (!startUrl) {
