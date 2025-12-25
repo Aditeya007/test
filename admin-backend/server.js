@@ -263,44 +263,22 @@ app.locals.jobTracking = {
   getActiveJobCount
 };
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('🛑 SIGTERM signal received: closing HTTP server');
-  
-  // Wait for active jobs to complete
-  if (activeJobCount > 0) {
-    console.log(`⏳ Waiting for ${activeJobCount} active job(s) to complete...`);
-    const maxWaitTime = 60000; // 60 seconds
-    const startTime = Date.now();
-    
-    while (activeJobCount > 0 && (Date.now() - startTime) < maxWaitTime) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-    
-    if (activeJobCount > 0) {
-      console.warn(`⚠️  Forcing shutdown with ${activeJobCount} job(s) still running`);
-    } else {
-      console.log('✅ All jobs completed');
-    }
-  }
-  
-  server.close(async () => {
-    console.log('✅ HTTP server closed');
-    try {
-      await mongoose.connection.close();
-      console.log('✅ MongoDB connection closed');
-      process.exit(0);
-    } catch (err) {
-      console.error('❌ Error closing MongoDB:', err.message);
-      process.exit(1);
-    }
-  });
-});
+// =============================================================================
+// GRACEFUL SHUTDOWN HANDLER
+// =============================================================================
+let isShuttingDown = false;
 
-process.on('SIGINT', async () => {
-  console.log('\n🛑 SIGINT signal received: closing HTTP server');
+const gracefulShutdown = async (signal) => {
+  // Prevent multiple shutdown attempts
+  if (isShuttingDown) {
+    console.log(`⚠️  Shutdown already in progress, ignoring ${signal}`);
+    return;
+  }
   
-  // Wait for active jobs to complete
+  isShuttingDown = true;
+  console.log(`\n🛑 ${signal} signal received: initiating graceful shutdown`);
+  
+  // Step 1: Wait for active jobs to complete
   if (activeJobCount > 0) {
     console.log(`⏳ Waiting for ${activeJobCount} active job(s) to complete...`);
     const maxWaitTime = 60000; // 60 seconds
@@ -317,17 +295,27 @@ process.on('SIGINT', async () => {
     }
   }
   
-  server.close(async () => {
-    console.log('✅ HTTP server closed');
-    try {
-      await mongoose.connection.close();
-      console.log('✅ MongoDB connection closed');
-      process.exit(0);
-    } catch (err) {
-      console.error('❌ Error closing MongoDB:', err.message);
-      process.exit(1);
-    }
+  // Step 2: Close HTTP server (stop accepting new connections)
+  await new Promise((resolve) => {
+    server.close(() => {
+      console.log('✅ HTTP server closed');
+      resolve();
+    });
   });
-});
+  
+  // Step 3: Close MongoDB connection (outside server.close callback)
+  try {
+    await mongoose.connection.close();
+    console.log('✅ MongoDB connection closed');
+    process.exit(0);
+  } catch (err) {
+    console.error('❌ Error closing MongoDB:', err.message);
+    process.exit(1);
+  }
+};
+
+// Register signal handlers
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 
