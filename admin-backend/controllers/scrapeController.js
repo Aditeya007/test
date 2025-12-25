@@ -327,14 +327,27 @@ exports.runUpdater = async (req, res) => {
     // Spawn as detached background process
     const child = spawn(pythonExe, args, {
   detached: true,
-  stdio: ['ignore', 'ignore', 'pipe'],
+  stdio: ['ignore', 'pipe', 'pipe'], 
   cwd: repoRoot,
   env: {
     ...process.env,
-    PYTHONPATH: repoRoot,
+    PYTHONPATH: repoRoot,              
     PYTHONUNBUFFERED: '1'
   }
 });
+
+child.stdout.on('data', d => {
+  console.log('[SCRAPER STDOUT]', d.toString());
+});
+
+child.stderr.on('data', d => {
+  console.error('[SCRAPER STDERR]', d.toString());
+});
+
+child.on('exit', code => {
+  console.log('[SCRAPER EXIT]', code);
+});
+
 
     
     // Unref so parent can exit without waiting
