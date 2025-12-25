@@ -325,16 +325,24 @@ exports.runUpdater = async (req, res) => {
     else if (aggressiveDiscovery === false) args.push('--no-aggressive-discovery');
 
     // Spawn as detached background process
-    const child = spawn(pythonExe, args, {
-  detached: false,              // IMPORTANT
-  stdio: ['ignore', 'pipe', 'pipe'],
+    const logFile = fs.openSync(
+  path.join(tenantContext.vectorStorePath, 'scraper.log'),
+  'a'
+);
+
+const child = spawn(pythonExe, args, {
+  detached: true,
+  stdio: ['ignore', logFile, logFile], // 👈 CAPTURE OUTPUT
   cwd: repoRoot,
   env: {
     ...process.env,
-    PYTHONPATH: repoRoot,        // CRITICAL
-    PYTHONUNBUFFERED: '1'
+    PYTHONUNBUFFERED: '1',
+    PYTHONPATH: repoRoot
   }
 });
+
+child.unref();
+
 
 child.stdout.on('data', d => {
   console.log('[SCRAPER STDOUT]', d.toString());
