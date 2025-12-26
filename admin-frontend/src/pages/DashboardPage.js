@@ -100,10 +100,16 @@ function DashboardPage() {
     
     try {
       const tenantUserId = tenantDetails.id || tenantDetails._id;
+      const resourceId = tenantDetails.resourceId;
+      
+      // Send resourceId to match how notify-complete records completion
       const response = await apiRequest('/scrape/status', {
         method: 'GET',
         token,
-        params: { tenantUserId }
+        params: { 
+          tenantUserId,
+          resourceId: resourceId || undefined
+        }
       });
       
       if (response.success && response.status === 'completed') {

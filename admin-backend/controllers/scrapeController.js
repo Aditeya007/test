@@ -822,17 +822,28 @@ exports.notifyScrapeComplete = async (req, res) => {
  */
 exports.getScrapeStatus = async (req, res) => {
   try {
-    const tenantContext = req.tenantContext;
+    // Accept optional resourceId query parameter to resolve user
+    // This fixes mismatch where notify-complete uses resourceId but status was using userId
+    const resourceId = req.query.resourceId;
     
-    if (!tenantContext || !tenantContext.userId) {
-      return res.status(400).json({
-        success: false,
-        error: 'No tenant user context available'
-      });
+    let userDoc;
+    if (resourceId) {
+      // Look up by resourceId (same as notify-complete)
+      userDoc = await User.findOne({ resourceId });
+    } else {
+      // Fall back to userId from resolveTenant middleware or authenticated user
+      const userId = req.tenantUserId || req.user?.userId;
+      
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          error: 'No user identifier provided'
+        });
+      }
+      
+      userDoc = await User.findById(userId);
     }
-
-    // Fetch the user to get scheduler config
-    const userDoc = await User.findById(tenantContext.userId);
+    
     if (!userDoc) {
       return res.status(404).json({
         success: false,
