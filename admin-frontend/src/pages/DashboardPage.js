@@ -240,7 +240,7 @@ function DashboardPage() {
           }
         });
 
-        setStatusMessage('✅ Scraping completed successfully. You can now interact with the bot using the refreshed knowledge base.');
+        setStatusMessage('✅ Scraping started and running in background. The knowledge base will be updated once the scrape completes.');
         setJobResult(response);
       } else {
         // Start a scheduled updater (runs every 2 hours)
