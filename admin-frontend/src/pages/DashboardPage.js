@@ -29,6 +29,10 @@ function DashboardPage() {
   const [jobResult, setJobResult] = useState(null);
   const [isWidgetInstallerOpen, setWidgetInstallerOpen] = useState(false);
 
+  // Scrape status polling state
+  const [isScrapeRunning, setIsScrapeRunning] = useState(false);
+  const [scrapeStatusPollingInterval, setScrapeStatusPollingInterval] = useState(null);
+
   // Scheduler state
   const [useScheduler, setUseScheduler] = useState(false); // Toggle for immediate vs scheduled
   const [schedulerStatus, setSchedulerStatus] = useState('inactive');
@@ -89,6 +93,54 @@ function DashboardPage() {
     const interval = setInterval(fetchSchedulerStatus, 30000);
     return () => clearInterval(interval);
   }, [fetchSchedulerStatus]);
+
+  // Poll scrape status when a scrape is running
+  const checkScrapeStatus = useCallback(async () => {
+    if (!token || !tenantDetails || !isScrapeRunning) return;
+    
+    try {
+      const tenantUserId = tenantDetails.id || tenantDetails._id;
+      const response = await apiRequest('/scrape/status', {
+        method: 'GET',
+        token,
+        params: { tenantUserId }
+      });
+      
+      if (response.success && response.status === 'completed') {
+        // Scrape completed! Update UI and stop polling
+        setStatusMessage('✅ Scraping completed successfully. You can now interact with the bot using the refreshed knowledge base.');
+        setIsScrapeRunning(false);
+        
+        // Clear the polling interval
+        if (scrapeStatusPollingInterval) {
+          clearInterval(scrapeStatusPollingInterval);
+          setScrapeStatusPollingInterval(null);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to check scrape status:', err);
+      // Don't show error to user, keep polling
+    }
+  }, [token, tenantDetails, isScrapeRunning, scrapeStatusPollingInterval]);
+
+  // Set up polling interval when scrape starts running
+  useEffect(() => {
+    if (isScrapeRunning && !scrapeStatusPollingInterval) {
+      // Poll every 8 seconds
+      const interval = setInterval(checkScrapeStatus, 8000);
+      setScrapeStatusPollingInterval(interval);
+      
+      // Also check immediately
+      checkScrapeStatus();
+    }
+    
+    // Clean up interval when scrape stops or component unmounts
+    return () => {
+      if (scrapeStatusPollingInterval) {
+        clearInterval(scrapeStatusPollingInterval);
+      }
+    };
+  }, [isScrapeRunning, checkScrapeStatus, scrapeStatusPollingInterval]);
 
   useEffect(() => {
     if (!token) {
@@ -242,6 +294,9 @@ function DashboardPage() {
 
         setStatusMessage('✅ Scraping started and running in background. The knowledge base will be updated once the scrape completes.');
         setJobResult(response);
+        
+        // Start polling for scrape completion
+        setIsScrapeRunning(true);
       } else {
         // Start a scheduled updater (runs every 2 hours)
         setStatusMessage('Starting scheduler (runs every 2 hours)...');

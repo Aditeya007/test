@@ -815,3 +815,48 @@ exports.notifyScrapeComplete = async (req, res) => {
     });
   }
 };
+
+/**
+ * Get current scrape status for the authenticated user.
+ * Returns whether a scrape is running or completed based on lastScrapeCompleted timestamp.
+ */
+exports.getScrapeStatus = async (req, res) => {
+  try {
+    const tenantContext = req.tenantContext;
+    
+    if (!tenantContext || !tenantContext.userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'No tenant user context available'
+      });
+    }
+
+    // Fetch the user to get scheduler config
+    const userDoc = await User.findById(tenantContext.userId);
+    if (!userDoc) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    const schedulerConfig = userDoc.schedulerConfig || {};
+    const lastCompleted = schedulerConfig.lastScrapeCompleted || null;
+    
+    // If lastScrapeCompleted exists, consider the scrape completed
+    const status = lastCompleted ? 'completed' : 'running';
+
+    res.json({
+      success: true,
+      status,
+      lastCompleted
+    });
+
+  } catch (err) {
+    console.error('❌ Failed to get scrape status:', err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+};
