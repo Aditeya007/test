@@ -29,9 +29,13 @@ function DashboardPage() {
   const [jobResult, setJobResult] = useState(null);
   const [isWidgetInstallerOpen, setWidgetInstallerOpen] = useState(false);
 
-  // Scrape status polling state
-  const [isScrapeRunning, setIsScrapeRunning] = useState(false);
-  const [scrapeStatusPollingInterval, setScrapeStatusPollingInterval] = useState(null);
+  // Scrape status polling state - PERSIST USING LOCALSTORAGE
+  const [isScrapeRunning, setIsScrapeRunning] = useState(() => {
+    // Check localStorage on mount
+    const stored = localStorage.getItem('isScrapeRunning');
+    return stored === 'true';
+  });
+  const [scrapeCompletionMessage, setScrapeCompletionMessage] = useState('');
 
   // Scheduler state
   const [useScheduler, setUseScheduler] = useState(false); // Toggle for immediate vs scheduled
@@ -53,6 +57,11 @@ function DashboardPage() {
     }
     return activeTenant.id || activeTenant._id || null;
   }, [activeTenant]);
+
+  // Update localStorage whenever isScrapeRunning changes
+  useEffect(() => {
+    localStorage.setItem('isScrapeRunning', isScrapeRunning.toString());
+  }, [isScrapeRunning]);
 
   // Auto-set activeTenant for regular users on login
   useEffect(() => {
@@ -94,7 +103,7 @@ function DashboardPage() {
     return () => clearInterval(interval);
   }, [fetchSchedulerStatus]);
 
-  // Poll scrape status when a scrape is running
+  // Poll scrape status - RUNS CONTINUOUSLY, NOT TIED TO MODAL
   const checkScrapeStatus = useCallback(async () => {
     if (!token || !tenantDetails || !isScrapeRunning) return;
     
@@ -114,39 +123,44 @@ function DashboardPage() {
       
       if (response.success && response.status === 'completed') {
         // Scrape completed! Update UI and stop polling
-        setStatusMessage('✅ Scraping completed successfully. You can now interact with the bot using the refreshed knowledge base.');
+        const message = '✅ Scraping completed successfully! Your knowledge base has been updated and the bot is ready to use.';
+        setScrapeCompletionMessage(message);
         setIsScrapeRunning(false);
         
-        // Clear the polling interval
-        if (scrapeStatusPollingInterval) {
-          clearInterval(scrapeStatusPollingInterval);
-          setScrapeStatusPollingInterval(null);
+        // Show browser notification if supported
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Scraping Complete', {
+            body: 'Your knowledge base has been updated!',
+            icon: '/favicon.ico'
+          });
         }
+        
+        console.log('✅ Scraping completed!', response);
       }
     } catch (err) {
       console.error('Failed to check scrape status:', err);
       // Don't show error to user, keep polling
     }
-  }, [token, tenantDetails, isScrapeRunning, scrapeStatusPollingInterval]);
+  }, [token, tenantDetails, isScrapeRunning]);
 
-  // Set up polling interval when scrape starts running
+  // Set up PERSISTENT polling interval - not tied to modal state
   useEffect(() => {
-    if (isScrapeRunning && !scrapeStatusPollingInterval) {
-      // Poll every 8 seconds
-      const interval = setInterval(checkScrapeStatus, 8000);
-      setScrapeStatusPollingInterval(interval);
-      
-      // Also check immediately
-      checkScrapeStatus();
+    if (!isScrapeRunning) return;
+    
+    // Request notification permission when scrape starts
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
     }
     
+    // Check immediately
+    checkScrapeStatus();
+    
+    // Poll every 8 seconds while scrape is running
+    const interval = setInterval(checkScrapeStatus, 8000);
+    
     // Clean up interval when scrape stops or component unmounts
-    return () => {
-      if (scrapeStatusPollingInterval) {
-        clearInterval(scrapeStatusPollingInterval);
-      }
-    };
-  }, [isScrapeRunning, checkScrapeStatus, scrapeStatusPollingInterval]);
+    return () => clearInterval(interval);
+  }, [isScrapeRunning, checkScrapeStatus]);
 
   useEffect(() => {
     if (!token) {
@@ -211,6 +225,13 @@ function DashboardPage() {
     return () => window.clearTimeout(timeout);
   }, [createSuccess]);
 
+  // Auto-dismiss scrape completion message after 10 seconds
+  useEffect(() => {
+    if (!scrapeCompletionMessage) return;
+    const timeout = setTimeout(() => setScrapeCompletionMessage(''), 10000);
+    return () => clearTimeout(timeout);
+  }, [scrapeCompletionMessage]);
+
   const dbUri = tenantDetails?.databaseUri || 'Not provisioned yet';
   const botEndpoint = tenantDetails?.botEndpoint || 'Not provisioned yet';
   const schedulerEndpoint = tenantDetails?.schedulerEndpoint || 'Not provisioned yet';
@@ -249,9 +270,7 @@ function DashboardPage() {
   }
 
   function closeScrapeModal() {
-    if (isProcessing) {
-      return;
-    }
+    // Allow closing even if processing - polling will continue in background
     setScrapeModalOpen(false);
   }
 
@@ -301,8 +320,9 @@ function DashboardPage() {
         setStatusMessage('✅ Scraping started and running in background. The knowledge base will be updated once the scrape completes.');
         setJobResult(response);
         
-        // Start polling for scrape completion
+        // Start polling for scrape completion - NOW PERSISTS ACROSS MODAL CLOSE
         setIsScrapeRunning(true);
+        setScrapeCompletionMessage(''); // Clear any previous completion message
       } else {
         // Start a scheduled updater (runs every 2 hours)
         setStatusMessage('Starting scheduler (runs every 2 hours)...');
@@ -448,6 +468,28 @@ function DashboardPage() {
 
       {createSuccess && (
         <div className="dashboard-alert dashboard-alert--success">{createSuccess}</div>
+      )}
+
+      {/* SCRAPE COMPLETION NOTIFICATION - SHOWS EVEN WHEN MODAL IS CLOSED */}
+      {scrapeCompletionMessage && (
+        <div className="dashboard-alert dashboard-alert--success" style={{ 
+          animation: 'slideIn 0.3s ease-out',
+          border: '2px solid #10b981',
+          fontWeight: '500'
+        }}>
+          {scrapeCompletionMessage}
+        </div>
+      )}
+
+      {/* SCRAPE IN PROGRESS INDICATOR - SHOWS EVEN WHEN MODAL IS CLOSED */}
+      {isScrapeRunning && (
+        <div className="dashboard-alert dashboard-alert--info" style={{
+          background: '#dbeafe',
+          border: '1px solid #3b82f6',
+          color: '#1e40af'
+        }}>
+          <strong>🔄 Scraping in progress...</strong> Your knowledge base is being updated. You'll be notified when it's complete.
+        </div>
       )}
 
       {tenantError && (
@@ -750,7 +792,6 @@ function DashboardPage() {
                 type="button"
                 className="scrape-btn-neutral"
                 onClick={closeScrapeModal}
-                disabled={isProcessing}
               >
                 Close
               </button>
