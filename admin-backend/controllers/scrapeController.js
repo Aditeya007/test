@@ -179,6 +179,15 @@ exports.startScrape = async (req, res) => {
     const logFilePath = path.join(tenantContext.vectorStorePath, 'scraper.log');
     const logFile = fs.openSync(logFilePath, 'a');
 
+    // Clear previous scrape completion status before starting new scrape
+    await User.findByIdAndUpdate(userId, {
+      $set: {
+        'schedulerConfig.lastScrapeCompleted': null,
+        'schedulerConfig.botReady': false
+      }
+    });
+    console.log(`🔄 Cleared previous scrape status for ${tenantContext.resourceId}`);
+
     // Spawn as detached background process
     const child = spawn(pythonExe, args, {
       detached: true,
@@ -768,7 +777,7 @@ exports.notifyScrapeComplete = async (req, res) => {
       });
     }
 
-    const { resourceId, success, message, documentCount } = req.body;
+    const { resourceId, success, message, documentCount, botReady } = req.body;
 
     if (!resourceId) {
       return res.status(400).json({
@@ -778,7 +787,7 @@ exports.notifyScrapeComplete = async (req, res) => {
     }
 
     console.log(`📬 Scrape complete notification for ${resourceId}`);
-    console.log(`   Success: ${success}, Documents: ${documentCount || 'unknown'}`);
+    console.log(`   Success: ${success}, Bot Ready: ${botReady}, Documents: ${documentCount || 'unknown'}`);
 
     // Find user by resourceId
     const userDoc = await User.findOne({ resourceId });
@@ -792,19 +801,19 @@ exports.notifyScrapeComplete = async (req, res) => {
     // Update scheduler config with completion info
     const schedulerConfig = userDoc.schedulerConfig || {};
     schedulerConfig.lastScrapeCompleted = new Date();
-    schedulerConfig.botReady = success === true;
+    schedulerConfig.botReady = botReady !== undefined ? botReady : (success === true);
 
     await User.findByIdAndUpdate(userDoc._id, {
       schedulerConfig
     });
 
-    console.log(`✅ Updated scheduler config for ${resourceId}: botReady = ${success}`);
+    console.log(`✅ Updated scheduler config for ${resourceId}: botReady = ${schedulerConfig.botReady}`);
 
     res.json({
       success: true,
       message: 'Scrape completion recorded',
       resourceId,
-      botReady: success === true
+      botReady: schedulerConfig.botReady
     });
 
   } catch (err) {
@@ -853,6 +862,7 @@ exports.getScrapeStatus = async (req, res) => {
 
     const schedulerConfig = userDoc.schedulerConfig || {};
     const lastCompleted = schedulerConfig.lastScrapeCompleted || null;
+    const botReady = schedulerConfig.botReady || false;
     
     // If lastScrapeCompleted exists, consider the scrape completed
     const status = lastCompleted ? 'completed' : 'running';
@@ -860,7 +870,9 @@ exports.getScrapeStatus = async (req, res) => {
     res.json({
       success: true,
       status,
-      lastCompleted
+      lastCompleted,
+      botReady,
+      resourceId: userDoc.resourceId
     });
 
   } catch (err) {
