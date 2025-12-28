@@ -180,13 +180,25 @@ exports.startScrape = async (req, res) => {
     const logFile = fs.openSync(logFilePath, 'a');
 
     // Clear previous scrape completion status before starting new scrape
-    // Use $set to update only specific fields without replacing the entire schedulerConfig
-    await User.findByIdAndUpdate(userId, {
-      $set: {
-        'schedulerConfig.lastScrapeCompleted': null,
-        'schedulerConfig.botReady': false
-      }
-    });
+    // First check if schedulerConfig exists, if null initialize it
+    const userDoc = await User.findById(userId);
+    if (!userDoc.schedulerConfig) {
+      // Initialize schedulerConfig if it's null
+      await User.findByIdAndUpdate(userId, {
+        schedulerConfig: {
+          lastScrapeCompleted: null,
+          botReady: false
+        }
+      });
+    } else {
+      // schedulerConfig exists, just update the fields
+      await User.findByIdAndUpdate(userId, {
+        $set: {
+          'schedulerConfig.lastScrapeCompleted': null,
+          'schedulerConfig.botReady': false
+        }
+      });
+    }
     console.log(`🔄 Cleared previous scrape status for ${tenantContext.resourceId}`);
 
     // Spawn as detached background process
@@ -799,13 +811,23 @@ exports.notifyScrapeComplete = async (req, res) => {
       });
     }
 
-    // Use $set to update only the specific fields without replacing entire schedulerConfig
-    await User.findByIdAndUpdate(userDoc._id, {
-      $set: {
-        'schedulerConfig.lastScrapeCompleted': new Date(),
-        'schedulerConfig.botReady': botReady !== undefined ? botReady : (success === true)
-      }
-    });
+    // Check if schedulerConfig is null, initialize if needed
+    if (!userDoc.schedulerConfig) {
+      await User.findByIdAndUpdate(userDoc._id, {
+        schedulerConfig: {
+          lastScrapeCompleted: new Date(),
+          botReady: botReady !== undefined ? botReady : (success === true)
+        }
+      });
+    } else {
+      // schedulerConfig exists, use $set to update only specific fields
+      await User.findByIdAndUpdate(userDoc._id, {
+        $set: {
+          'schedulerConfig.lastScrapeCompleted': new Date(),
+          'schedulerConfig.botReady': botReady !== undefined ? botReady : (success === true)
+        }
+      });
+    }
 
     console.log(`✅ Updated scheduler config for ${resourceId}: botReady = ${botReady !== undefined ? botReady : (success === true)}`);
 
