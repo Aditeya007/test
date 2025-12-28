@@ -85,6 +85,58 @@ def _configure_logging(level: str) -> None:
     )
 
 
+def _notify_scrape_complete(args: argparse.Namespace, success: bool, stats: dict) -> None:
+    """Notify the admin backend that the update has completed."""
+    import urllib.request
+    import urllib.error
+    
+    backend_url = os.environ.get("ADMIN_BACKEND_URL", "http://localhost:5000")
+    service_secret = os.environ.get("SERVICE_SECRET", "default_service_secret")
+    
+    notify_url = f"{backend_url}/api/scrape/scheduler/scrape-complete"
+    
+    # Extract document count from stats if available
+    document_count = None
+    if stats:
+        # Check for URLs added/updated/deleted
+        document_count = (
+            stats.get('urls_added', 0) + 
+            stats.get('urls_updated', 0)
+        )
+    
+    payload = json.dumps({
+        "resourceId": args.resource_id,
+        "success": success,
+        "message": "Scheduled update completed successfully" if success else "Scheduled update completed with errors",
+        "documentCount": document_count if document_count > 0 else None,
+        "jobId": args.job_id
+    }).encode('utf-8')
+    
+    logging.info("📬 Notifying admin backend of update completion...")
+    
+    try:
+        request = urllib.request.Request(
+            notify_url,
+            data=payload,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "X-Service-Secret": service_secret
+            }
+        )
+        
+        with urllib.request.urlopen(request, timeout=10) as response:
+            response_data = response.read().decode('utf-8')
+            logging.info("✅ Admin backend notified of update completion")
+            logging.info("   Response: %s", response_data[:200])
+    except urllib.error.HTTPError as e:
+        logging.warning("⚠️ Backend notification HTTP error %d: %s", e.code, e.reason)
+    except urllib.error.URLError as e:
+        logging.warning("⚠️ Could not reach admin backend at %s: %s", backend_url, e.reason)
+    except Exception as e:
+        logging.warning("⚠️ Failed to notify admin backend: %s", e)
+
+
 def main(argv: list[str]) -> int:
     try:
         args = _parse_args(argv)
@@ -110,6 +162,9 @@ def main(argv: list[str]) -> int:
         }
     )
 
+    update_success = False
+    stats = {}
+    
     try:
         stats = run_updater(
             domain=args.domain,
@@ -127,23 +182,16 @@ def main(argv: list[str]) -> int:
             aggressive_discovery=args.aggressive_discovery,
             max_links_per_page=args.max_links_per_page,
         )
+        update_success = True
     except KeyboardInterrupt:  # pragma: no cover
         logging.warning("Updater interrupted by user")
         return 130
     except Exception as exc:
         logging.exception("Updater failed: %s", exc)
-        print(json.dumps({
-            "status": "failed",
-            "error": str(exc),
-            "resource_id": args.resource_id,
-            "user_id": args.user_id,
-            "job_id": args.job_id,
-            "timestamp": datetime.utcnow().isoformat()
-        }))
-        return 1
+        update_success = False
 
     summary = {
-        "status": "completed",
+        "status": "completed" if update_success else "failed",
         "resource_id": args.resource_id,
         "user_id": args.user_id,
         "job_id": args.job_id,
@@ -156,6 +204,9 @@ def main(argv: list[str]) -> int:
         "timestamp": datetime.utcnow().isoformat()
     }
 
+    # Notify admin backend of completion
+    _notify_scrape_complete(args, update_success, stats)
+
     if args.stats_output:
         try:
             with open(args.stats_output, "w", encoding="utf-8") as handle:
@@ -164,7 +215,7 @@ def main(argv: list[str]) -> int:
             logging.warning("Unable to write stats output %s: %s", args.stats_output, exc)
 
     print(json.dumps(summary, default=str))
-    return 0
+    return 0 if update_success else 1
 
 
 if __name__ == "__main__":
