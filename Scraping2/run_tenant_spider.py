@@ -86,7 +86,109 @@ def _configure_logging(level: str) -> None:
     )
 
 
-def _notify_scrape_complete(args: argparse.Namespace, success: bool, stats: dict) -> None:
+def _notify_bot_reload(args: argparse.Namespace) -> bool:
+    """Notify the bot to reload its vector store after scraping completes.
+    
+    Returns True if the bot was successfully notified, False otherwise.
+    """
+    import urllib.request
+    import urllib.error
+    
+    bot_base_url = os.environ.get("BOT_URL", "http://localhost:8000")
+    # Try both environment variable names for the service secret
+    service_secret = os.environ.get("FASTAPI_SHARED_SECRET") or os.environ.get("SERVICE_SECRET", "default_service_secret")
+    
+    # Build the reload URL with query parameters
+    try:
+        params = urllib.parse.urlencode({
+            "resource_id": args.resource_id,
+            "vector_store_path": args.vector_store_path,
+        })
+    except:
+        import urllib.parse
+        params = urllib.parse.urlencode({
+            "resource_id": args.resource_id,
+            "vector_store_path": args.vector_store_path,
+        })
+    
+    reload_url = f"{bot_base_url}/reload_vectors?{params}"
+    
+    logging.info("🔄 Notifying bot to reload vector store...")
+    logging.info("   URL: %s", reload_url)
+    
+    try:
+        request = urllib.request.Request(
+            reload_url,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "X-Service-Secret": service_secret
+            }
+        )
+        
+        with urllib.request.urlopen(request, timeout=30) as response:
+            response_data = response.read().decode('utf-8')
+            try:
+                result = json.loads(response_data)
+                doc_count = result.get('document_count', 'unknown')
+                logging.info("✅ Bot reloaded successfully! Document count: %s", doc_count)
+                logging.info("🤖 BOT IS NOW READY TO USE with updated knowledge base!")
+                return True
+            except json.JSONDecodeError:
+                logging.info("✅ Bot reload response: %s", response_data[:200])
+                return True
+                
+    except urllib.error.HTTPError as e:
+        logging.warning("⚠️ Bot reload HTTP error %d: %s", e.code, e.reason)
+        # Try the mark-data-updated endpoint as fallback
+        return _mark_data_updated_fallback(args, bot_base_url, service_secret)
+    except urllib.error.URLError as e:
+        logging.warning("⚠️ Could not reach bot at %s: %s", bot_base_url, e.reason)
+        logging.warning("   Bot may not be running. Data will be loaded on next bot startup.")
+        return False
+    except Exception as e:
+        logging.warning("⚠️ Failed to notify bot: %s", e)
+        return False
+
+
+def _mark_data_updated_fallback(args: argparse.Namespace, bot_base_url: str, service_secret: str) -> bool:
+    """Fallback: Mark data as updated so next request will reload."""
+    import urllib.request
+    import urllib.error
+    
+    try:
+        params = urllib.parse.urlencode({
+            "resource_id": args.resource_id,
+            "vector_store_path": args.vector_store_path,
+        })
+    except:
+        import urllib.parse
+        params = urllib.parse.urlencode({
+            "resource_id": args.resource_id,
+            "vector_store_path": args.vector_store_path,
+        })
+    
+    mark_url = f"{bot_base_url}/mark-data-updated?{params}"
+    
+    try:
+        request = urllib.request.Request(
+            mark_url,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "X-Service-Secret": service_secret
+            }
+        )
+        
+        with urllib.request.urlopen(request, timeout=10) as response:
+            logging.info("✅ Marked data as updated (lazy reload on next request)")
+            return True
+    except Exception as e:
+        logging.warning("⚠️ Fallback also failed: %s", e)
+        return False
+
+
+def _notify_scrape_complete(args: argparse.Namespace, success: bool, stats: dict, bot_notified: bool) -> None:
     """Notify the admin backend that the scrape has completed."""
     import urllib.request
     import urllib.error
@@ -108,10 +210,11 @@ def _notify_scrape_complete(args: argparse.Namespace, success: bool, stats: dict
     
     payload = json.dumps({
         "resourceId": args.resource_id,
-        "success": success,
+        "success": success and bot_notified,  # Only mark as success if bot was also notified
         "message": "Manual scrape completed successfully" if success else "Manual scrape completed with errors",
         "documentCount": document_count,
-        "jobId": args.job_id
+        "jobId": args.job_id,
+        "botReady": bot_notified
     }).encode('utf-8')
     
     logging.info("📬 Notifying admin backend of scrape completion...")
@@ -198,6 +301,7 @@ def main(argv: list[str]) -> int:
     try:
         process.start()
         scrape_success = True
+        logging.info("✅ Scraping completed successfully!")
     except KeyboardInterrupt:  # pragma: no cover
         logging.warning("Scrape interrupted by user")
         return 130
@@ -206,6 +310,17 @@ def main(argv: list[str]) -> int:
         scrape_success = False
 
     stats = crawler.stats.get_stats() if crawler.stats else {}
+    
+    # Notify the bot to reload its vector store
+    bot_notified = False
+    if scrape_success:
+        logging.info("📡 Notifying bot to reload vector store...")
+        bot_notified = _notify_bot_reload(args)
+        if bot_notified:
+            logging.info("✅ Bot successfully notified and reloaded!")
+        else:
+            logging.warning("⚠️ Bot notification failed - bot may need manual restart")
+    
     summary = {
         "status": "completed" if scrape_success else "failed",
         "resource_id": args.resource_id,
@@ -214,12 +329,13 @@ def main(argv: list[str]) -> int:
         "start_url": args.start_url,
         "vector_store_path": args.vector_store_path,
         "collection_name": args.collection_name,
+        "bot_notified": bot_notified,
         "stats": stats,
         "timestamp": datetime.utcnow().isoformat()
     }
 
-    # Notify admin backend of completion
-    _notify_scrape_complete(args, scrape_success, stats)
+    # Notify admin backend of completion (with bot notification status)
+    _notify_scrape_complete(args, scrape_success, stats, bot_notified)
 
     if args.stats_output:
         try:
@@ -229,6 +345,9 @@ def main(argv: list[str]) -> int:
             logging.warning("Unable to write stats output %s: %s", args.stats_output, exc)
 
     print(json.dumps(summary, default=str))
+    
+    # Exit with success if scrape completed (even if bot notification failed)
+    # The bot will auto-reload on next request thanks to the fallback
     return 0 if scrape_success else 1
 
 
