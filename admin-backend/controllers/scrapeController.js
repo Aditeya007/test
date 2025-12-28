@@ -180,28 +180,14 @@ exports.startScrape = async (req, res) => {
     const logFile = fs.openSync(logFilePath, 'a');
 
     // Clear previous scrape completion status before starting new scrape
-    // Fetch user first to check if schedulerConfig exists
-    const userDoc = await User.findById(userId);
-    if (userDoc) {
-      // If schedulerConfig is null, initialize it first
-      if (!userDoc.schedulerConfig) {
-        await User.findByIdAndUpdate(userId, {
-          schedulerConfig: {
-            lastScrapeCompleted: null,
-            botReady: false
-          }
-        });
-      } else {
-        // schedulerConfig exists, update nested fields
-        await User.findByIdAndUpdate(userId, {
-          $set: {
-            'schedulerConfig.lastScrapeCompleted': null,
-            'schedulerConfig.botReady': false
-          }
-        });
+    // Use $set to update only specific fields without replacing the entire schedulerConfig
+    await User.findByIdAndUpdate(userId, {
+      $set: {
+        'schedulerConfig.lastScrapeCompleted': null,
+        'schedulerConfig.botReady': false
       }
-      console.log(`🔄 Cleared previous scrape status for ${tenantContext.resourceId}`);
-    }
+    });
+    console.log(`🔄 Cleared previous scrape status for ${tenantContext.resourceId}`);
 
     // Spawn as detached background process
     const child = spawn(pythonExe, args, {
@@ -813,24 +799,21 @@ exports.notifyScrapeComplete = async (req, res) => {
       });
     }
 
-    // Build the update - handle case where schedulerConfig might be null
-    const updateData = {
-      schedulerConfig: {
-        ...(userDoc.schedulerConfig || {}),
-        lastScrapeCompleted: new Date(),
-        botReady: botReady !== undefined ? botReady : (success === true)
+    // Use $set to update only the specific fields without replacing entire schedulerConfig
+    await User.findByIdAndUpdate(userDoc._id, {
+      $set: {
+        'schedulerConfig.lastScrapeCompleted': new Date(),
+        'schedulerConfig.botReady': botReady !== undefined ? botReady : (success === true)
       }
-    };
+    });
 
-    await User.findByIdAndUpdate(userDoc._id, updateData);
-
-    console.log(`✅ Updated scheduler config for ${resourceId}: botReady = ${updateData.schedulerConfig.botReady}`);
+    console.log(`✅ Updated scheduler config for ${resourceId}: botReady = ${botReady !== undefined ? botReady : (success === true)}`);
 
     res.json({
       success: true,
       message: 'Scrape completion recorded',
       resourceId,
-      botReady: updateData.schedulerConfig.botReady
+      botReady: botReady !== undefined ? botReady : (success === true)
     });
 
   } catch (err) {
