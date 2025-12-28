@@ -72,6 +72,13 @@ function DashboardPage() {
     }
   }, [user, activeTenant, setActiveTenant]);
 
+  // Keep tenantDetails in sync with activeTenant (important when admin switches tenants)
+  useEffect(() => {
+    if (activeTenant) {
+      setTenantDetails(activeTenant);
+    }
+  }, [activeTenant]);
+
   // Fetch scheduler status
   const fetchSchedulerStatus = useCallback(async () => {
     if (!token || !tenantDetails) return;
