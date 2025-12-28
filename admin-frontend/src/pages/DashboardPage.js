@@ -169,6 +169,35 @@ function DashboardPage() {
     return () => clearInterval(interval);
   }, [isScrapeRunning, checkScrapeStatus]);
 
+  // Passive status check when tenant changes (catches completed scrapes even if polling stopped)
+  useEffect(() => {
+    if (!token || !tenantDetails) return;
+
+    (async () => {
+      try {
+        const tenantUserId = tenantDetails.id || tenantDetails._id;
+        const resourceId = tenantDetails.resourceId;
+
+        const response = await apiRequest('/scrape/status', {
+          method: 'GET',
+          token,
+          params: {
+            tenantUserId,
+            resourceId: resourceId || undefined
+          }
+        });
+
+        if (response.success && response.status === 'completed' && response.botReady) {
+          const message = '✅ Scraping completed successfully! Your knowledge base has been updated and the bot is ready to use.';
+          setScrapeCompletionMessage(message);
+          setIsScrapeRunning(false);
+        }
+      } catch (err) {
+        console.error('Passive scrape status check failed:', err);
+      }
+    })();
+  }, [token, tenantDetails]);
+
   useEffect(() => {
     if (!token) {
       setTenantDetails(null);
