@@ -86,6 +86,59 @@ def _configure_logging(level: str) -> None:
     )
 
 
+def _notify_scrape_complete(args: argparse.Namespace, success: bool, stats: dict) -> None:
+    """Notify the admin backend that the scrape has completed."""
+    import urllib.request
+    import urllib.error
+    
+    backend_url = os.environ.get("ADMIN_BACKEND_URL", "http://localhost:5000")
+    service_secret = os.environ.get("SERVICE_SECRET", "default_service_secret")
+    
+    notify_url = f"{backend_url}/api/scrape/scheduler/scrape-complete"
+    
+    # Extract document count from stats if available
+    document_count = None
+    if stats:
+        # Try common stat keys for document count
+        document_count = (
+            stats.get('item_scraped_count') or 
+            stats.get('item_count') or 
+            stats.get('response_received_count')
+        )
+    
+    payload = json.dumps({
+        "resourceId": args.resource_id,
+        "success": success,
+        "message": "Manual scrape completed successfully" if success else "Manual scrape completed with errors",
+        "documentCount": document_count,
+        "jobId": args.job_id
+    }).encode('utf-8')
+    
+    logging.info("📬 Notifying admin backend of scrape completion...")
+    
+    try:
+        request = urllib.request.Request(
+            notify_url,
+            data=payload,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "X-Service-Secret": service_secret
+            }
+        )
+        
+        with urllib.request.urlopen(request, timeout=10) as response:
+            response_data = response.read().decode('utf-8')
+            logging.info("✅ Admin backend notified of scrape completion")
+            logging.info("   Response: %s", response_data[:200])
+    except urllib.error.HTTPError as e:
+        logging.warning("⚠️ Backend notification HTTP error %d: %s", e.code, e.reason)
+    except urllib.error.URLError as e:
+        logging.warning("⚠️ Could not reach admin backend at %s: %s", backend_url, e.reason)
+    except Exception as e:
+        logging.warning("⚠️ Failed to notify admin backend: %s", e)
+
+
 def main(argv: list[str]) -> int:
     args = _parse_args(argv)
 
@@ -139,18 +192,22 @@ def main(argv: list[str]) -> int:
         scrape_job_id=args.job_id,
     )
 
+    scrape_success = False
+    stats = {}
+    
     try:
         process.start()
+        scrape_success = True
     except KeyboardInterrupt:  # pragma: no cover
         logging.warning("Scrape interrupted by user")
         return 130
     except Exception as exc:
         logging.exception("Scrape failed: %s", exc)
-        return 1
+        scrape_success = False
 
     stats = crawler.stats.get_stats() if crawler.stats else {}
     summary = {
-        "status": "completed",
+        "status": "completed" if scrape_success else "failed",
         "resource_id": args.resource_id,
         "user_id": args.user_id,
         "job_id": args.job_id,
@@ -161,6 +218,9 @@ def main(argv: list[str]) -> int:
         "timestamp": datetime.utcnow().isoformat()
     }
 
+    # Notify admin backend of completion
+    _notify_scrape_complete(args, scrape_success, stats)
+
     if args.stats_output:
         try:
             with open(args.stats_output, "w", encoding="utf-8") as handle:
@@ -169,7 +229,7 @@ def main(argv: list[str]) -> int:
             logging.warning("Unable to write stats output %s: %s", args.stats_output, exc)
 
     print(json.dumps(summary, default=str))
-    return 0
+    return 0 if scrape_success else 1
 
 
 if __name__ == "__main__":
