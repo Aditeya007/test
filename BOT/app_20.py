@@ -1800,84 +1800,48 @@ async def refresh_cache(
 
 @app.post("/reload_vectors", dependencies=[Depends(require_service_secret)])
 async def reload_vectors(
+    background_tasks: BackgroundTasks,
     resource_id: Optional[str] = Query(None),
     vector_store_path: Optional[str] = Query(None),
     database_uri: Optional[str] = Query(None),
     user_id: Optional[str] = Query(None)
 ):
     """
-    IMMEDIATE RELOAD endpoint: Instantly reloads the vector store from disk without restarting the bot.
+    BOT RESTART endpoint: Triggers a clean shutdown to reload all vector stores from disk.
     
-    This endpoint triggers an immediate reload of the ChromaDB collection, ensuring the bot
-    can answer with the latest data (old + new) right away.
+    This endpoint initiates a graceful shutdown of the bot process. The run_bot_with_autorestart.py
+    wrapper will automatically restart the bot, which will load fresh vector stores from disk.
     
-    - Call this after a scrape/update completes to make new data available immediately
-    - Idempotent: safe to call multiple times
-    - Returns the new document count for confirmation
-    - Does NOT restart the server or interrupt ongoing conversations
-    - Handles both cached and uncached bot instances gracefully
+    - Call this after a scrape/update completes to ensure all data is reloaded cleanly
+    - Provides a clean restart rather than hot-reloading in-memory data
+    - The autorestart wrapper ensures the bot comes back up automatically
+    - Returns success immediately, then shuts down after 0.5 seconds
     
-    Use this instead of restarting the bot process!
+    Use this to restart the bot process after scraping!
     """
-    global chatbot_manager
-    
-    if not chatbot_manager:
-        raise HTTPException(status_code=503, detail="Chat manager not initialized")
-    
-    resolved_vector_path = vector_store_path or os.getenv("DEFAULT_VECTOR_BASE_PATH")
-    if not resolved_vector_path:
-        raise HTTPException(status_code=400, detail="vector_store_path is required")
-    
-    resolved_database_uri = database_uri or os.getenv("MONGODB_URI")
     tenant_identifier = resource_id or user_id
     
-    try:
-        resolved_path = chatbot_manager._prepare_vector_store_path(resolved_vector_path)
-        cache_key = f"{resolved_path}::{resolved_database_uri}"
-        
-        # Check if bot instance exists
-        bot_instance = chatbot_manager._instances.get(cache_key)
-        
-        if bot_instance:
-            # Bot instance exists - reload it immediately
-            print(f"🔄 IMMEDIATE RELOAD triggered for {tenant_identifier}")
-            print(f"   Bot instance found - reloading vector store from disk...")
-            
-            doc_count = bot_instance.reload_vector_store(chatbot_manager.collection_name)
-            chatbot_manager._last_reload[cache_key] = datetime.datetime.now()
-            chatbot_manager._needs_reload[cache_key] = False
-            
-            print(f"✅ RELOAD COMPLETE! New document count: {doc_count}")
-            
-            return {
-                "status": "success",
-                "message": "Vector store reloaded immediately from disk",
-                "resource_id": tenant_identifier,
-                "document_count": doc_count,
-                "reloaded_at": datetime.datetime.now().isoformat(),
-                "cache_key": cache_key,
-                "action_taken": "immediate_reload"
-            }
-        else:
-            # Bot instance doesn't exist yet - set dirty flag for when it gets created
-            print(f"🚩 Bot instance not cached yet for {tenant_identifier}")
-            print(f"   Setting dirty flag - will load fresh data on first request")
-            
-            chatbot_manager._needs_reload[cache_key] = True
-            
-            return {
-                "status": "success",
-                "message": "Bot not yet initialized. Fresh data will be loaded on first request.",
-                "resource_id": tenant_identifier,
-                "cache_key": cache_key,
-                "action_taken": "dirty_flag_set",
-                "note": "No reload needed - bot will load fresh data when first accessed"
-            }
-    except Exception as e:
-        print(f"❌ Failed to reload vectors: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to reload vectors: {str(e)}")
+    print(f"🔄 BOT RESTART requested for {tenant_identifier}")
+    print(f"   Scheduling clean shutdown in 0.5 seconds...")
+    print(f"   Bot will automatically restart via run_bot_with_autorestart.py")
+    
+    async def delayed_shutdown():
+        """Wait briefly to allow response to send, then exit cleanly."""
+        await asyncio.sleep(0.5)
+        print("🔄 Initiating restart...")
+        print("✅ Exiting with code 0 - autorestart wrapper will restart the bot")
+        os._exit(0)
+    
+    # Schedule the shutdown in the background
+    background_tasks.add_task(delayed_shutdown)
+    
+    return {
+        "success": True,
+        "message": "Bot restart initiated - will reload all vector stores from disk",
+        "resource_id": tenant_identifier,
+        "action_taken": "restart_scheduled",
+        "note": "Bot will restart automatically and load fresh data"
+    }
 
 
 @app.post("/mark-data-updated", dependencies=[Depends(require_service_secret)])
