@@ -317,37 +317,106 @@ const markScrapeCompleted = async (botId) => {
  * POST /bot/:botId/scrape/complete
  * Internal endpoint to mark scrape as completed
  * Called by Python scraper when job finishes
+ * Supports both JWT and service secret authentication
  */
-exports.markBotScrapeComplete = [
-  resolveBotContext,
-  async (req, res) => {
-    try {
-      const bot = req.bot;
-      const botId = bot._id.toString();
+exports.markBotScrapeComplete = async (req, res) => {
+  try {
+    const { botId } = req.params;
+    
+    // Check for service secret authentication (from Python scraper)
+    const serviceSecret = req.headers['x-service-secret'];
+    const expectedSecret = process.env.SERVICE_SECRET || 'default_service_secret';
+    
+    if (serviceSecret === expectedSecret) {
+      // Service secret auth: skip ownership validation
+      console.log(`📬 Bot scrape complete notification (service secret auth): ${botId}`);
       
       const success = await markScrapeCompleted(botId);
       
       if (success) {
-        res.json({
+        return res.json({
           success: true,
           message: 'Scrape marked as completed',
           botId
         });
       } else {
-        res.status(500).json({
+        return res.status(500).json({
           success: false,
           error: 'Failed to mark scrape as completed'
         });
       }
-    } catch (err) {
-      console.error('❌ Failed to mark bot scrape complete:', err.message);
-      res.status(500).json({
+    }
+    
+    // Fallback to JWT auth (for manual API calls)
+    // This path requires auth middleware to have run first
+    if (!req.user) {
+      return res.status(401).json({
         success: false,
-        error: err.message
+        error: 'Authentication required'
       });
     }
+    
+    // Load bot and validate ownership
+    const bot = await Bot.findById(botId);
+    
+    if (!bot) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bot not found'
+      });
+    }
+    
+    if (!bot.isActive) {
+      return res.status(403).json({
+        success: false,
+        error: 'Bot is inactive'
+      });
+    }
+    
+    // Validate ownership
+    const authenticatedUserId = req.user.userId;
+    const authenticatedUserRole = req.user.role;
+    
+    const isOwner = bot.userId.toString() === authenticatedUserId;
+    
+    let isAuthorized = isOwner;
+    
+    if (!isOwner && authenticatedUserRole === 'admin') {
+      const botOwner = await User.findById(bot.userId);
+      if (botOwner && botOwner.adminId && botOwner.adminId.toString() === authenticatedUserId) {
+        isAuthorized = true;
+      }
+    }
+    
+    if (!isAuthorized) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied: You do not have permission to access this bot'
+      });
+    }
+    
+    const success = await markScrapeCompleted(botId);
+    
+    if (success) {
+      res.json({
+        success: true,
+        message: 'Scrape marked as completed',
+        botId
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to mark scrape as completed'
+      });
+    }
+  } catch (err) {
+    console.error('❌ Failed to mark bot scrape complete:', err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
-];
+};
 
 /**
  * GET /bot/:botId/scrape/status

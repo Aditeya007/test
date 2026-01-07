@@ -62,10 +62,10 @@ router.get('/:botId/scrape/status', auth, botScrapeController.getBotScrapeStatus
 /**
  * @route   POST /api/bot/:botId/scrape/complete
  * @desc    Mark scrape as completed for this bot (called by Python scraper)
- * @access  Protected (requires JWT, validates bot ownership)
+ * @access  Internal (requires service secret or JWT)
  * @returns { success: boolean, message: string }
  */
-router.post('/:botId/scrape/complete', auth, botScrapeController.markBotScrapeComplete);
+router.post('/:botId/scrape/complete', botScrapeController.markBotScrapeComplete);
 
 /**
  * @route   POST /api/bot/:botId/scheduler/start

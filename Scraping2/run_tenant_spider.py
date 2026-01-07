@@ -242,6 +242,66 @@ def _notify_scrape_complete(args: argparse.Namespace, success: bool, stats: dict
         logging.warning("⚠️ Failed to notify admin backend: %s", e)
 
 
+def _notify_bot_scrape_complete(bot_id: str) -> bool:
+    """Notify the admin backend that this bot's scrape is complete.
+    
+    This is the new bot-specific completion endpoint.
+    Args:
+        bot_id: The bot's resource identifier (botId)
+    
+    Returns:
+        True if notification was successful, False otherwise
+    """
+    import urllib.request
+    import urllib.error
+    
+    backend_url = os.environ.get("ADMIN_BACKEND_URL", "http://localhost:5000")
+    service_secret = os.environ.get("SERVICE_SECRET", "default_service_secret")
+    
+    notify_url = f"{backend_url}/api/bot/{bot_id}/scrape/complete"
+    
+    logging.info("🔔 Notifying bot scrape completion endpoint...")
+    logging.info("   URL: %s", notify_url)
+    
+    try:
+        request = urllib.request.Request(
+            notify_url,
+            data=b'{}',  # Empty JSON body
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "X-Service-Secret": service_secret
+            }
+        )
+        
+        with urllib.request.urlopen(request, timeout=10) as response:
+            response_data = response.read().decode('utf-8')
+            try:
+                result = json.loads(response_data)
+                logging.info("✅ Bot scrape completion notified successfully!")
+                logging.info("   Response: %s", result)
+                return True
+            except json.JSONDecodeError:
+                logging.info("✅ Bot scrape completion response: %s", response_data[:200])
+                return True
+                
+    except urllib.error.HTTPError as e:
+        logging.warning("⚠️ Bot scrape completion HTTP error %d: %s", e.code, e.reason)
+        try:
+            error_body = e.read().decode('utf-8')
+            logging.warning("   Error details: %s", error_body[:200])
+        except:
+            pass
+        return False
+    except urllib.error.URLError as e:
+        logging.warning("⚠️ Could not reach backend at %s: %s", backend_url, e.reason)
+        return False
+    except Exception as e:
+        logging.warning("⚠️ Failed to notify bot scrape completion: %s", e)
+        return False
+
+
+
 def main(argv: list[str]) -> int:
     args = _parse_args(argv)
 
@@ -320,6 +380,13 @@ def main(argv: list[str]) -> int:
             logging.info("✅ Bot successfully notified and reloaded!")
         else:
             logging.warning("⚠️ Bot notification failed - bot may need manual restart")
+    
+    # Notify bot-specific scrape completion endpoint
+    # This is the primary notification that updates the bot's scrape status
+    if scrape_success:
+        bot_completion_notified = _notify_bot_scrape_complete(args.resource_id)
+        if not bot_completion_notified:
+            logging.warning("⚠️ Failed to notify bot scrape completion - status may not update in dashboard")
     
     summary = {
         "status": "completed" if scrape_success else "failed",
