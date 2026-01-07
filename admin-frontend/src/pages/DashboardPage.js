@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useChatWidget } from '../context/ChatWidgetContext';
 import { apiRequest, getUserBots, getUserOwnBots, createBot } from '../api';
 import UserForm from '../components/users/UserForm';
 import Loader from '../components/Loader';
@@ -13,6 +14,7 @@ import '../styles/index.css';
 
 function DashboardPage() {
   const { user, token, logout, activeTenant, setActiveTenant } = useAuth();
+  const { selectedBotId, activateWidget, closeWidget } = useChatWidget();
   const navigate = useNavigate();
 
   const [tenantDetails, setTenantDetails] = useState(activeTenant);
@@ -28,7 +30,11 @@ function DashboardPage() {
   const [bots, setBots] = useState([]);
   const [botsLoading, setBotsLoading] = useState(false);
   const [botsError, setBotsError] = useState('');
-  const [selectedBot, setSelectedBot] = useState(null);
+  
+  // Derive selectedBot from context - SINGLE SOURCE OF TRUTH
+  const selectedBot = useMemo(() => {
+    return bots.find(b => (b._id || b.id) === selectedBotId) || null;
+  }, [bots, selectedBotId]);
   
   // Add website modal state
   const [addWebsiteModalOpen, setAddWebsiteModalOpen] = useState(false);
@@ -201,7 +207,10 @@ function DashboardPage() {
   }
 
   function handleBotSelect(bot) {
-    setSelectedBot(bot);
+    const botId = bot?._id || bot?.id;
+    if (botId) {
+      activateWidget(botId);
+    }
   }
 
   async function handleAddWebsite() {
@@ -234,9 +243,12 @@ function DashboardPage() {
       // Refetch bots from backend to get authoritative list
       await fetchBots();
       
-      // Select the newly created bot
+      // Select the newly created bot via context
       if (response.bot) {
-        setSelectedBot(response.bot);
+        const botId = response.bot._id || response.bot.id;
+        if (botId) {
+          activateWidget(botId);
+        }
       }
     } catch (err) {
       setAddWebsiteError(err.message || 'Failed to add website');
@@ -285,13 +297,19 @@ function DashboardPage() {
     setScrapeError('');
     setScrapeSuccess('');
     
+    const botId = selectedBot._id || selectedBot.id;
+    
     try {
-      const botId = selectedBot._id || selectedBot.id;
       await apiRequest(`/bot/${botId}/scrape`, {
         method: 'POST',
         token
       });
       setScrapeSuccess('Scrape job started successfully!');
+      
+      // Refetch all bots from backend to get updated status
+      await fetchBots();
+      
+      // Clear success message after a delay
       setTimeout(() => setScrapeSuccess(''), 3000);
     } catch (err) {
       setScrapeError(err.message || 'Failed to start scrape');
@@ -495,7 +513,7 @@ function DashboardPage() {
                             }}
                           >
                             <div style={{ flex: 1 }}>
-                              {bot.scrapedWebsites && bot.scrapedWebsites.length > 0 ? (
+                              {bot.scrapedWebsites && bot.scrapedWebsites.length > 0 && bot.scrapedWebsites[0] ? (
                                 <a
                                   href={bot.scrapedWebsites[0]}
                                   target="_blank"
@@ -538,7 +556,7 @@ function DashboardPage() {
                     }}>
                       {/* Close Button */}
                       <button
-                        onClick={() => setSelectedBot(null)}
+                        onClick={() => closeWidget()}
                         style={{
                           position: 'absolute',
                           top: '1rem',
@@ -575,8 +593,107 @@ function DashboardPage() {
                         Website Actions
                       </h4>
                       <p style={{ margin: '0 0 1rem 0', fontSize: '0.875rem', color: '#475569' }}>
-                        Manage chatbot for: <strong>{selectedBot.scrapedWebsites?.[0] || 'this website'}</strong>
+                        Manage chatbot for: <strong>{(selectedBot.scrapedWebsites && selectedBot.scrapedWebsites[0]) ? selectedBot.scrapedWebsites[0] : 'this website'}</strong>
                       </p>
+
+                      {/* Scrape Status & Metadata Display */}
+                      <div style={{
+                        padding: '1rem',
+                        background: '#ffffff',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '6px',
+                        marginBottom: '1rem'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                          <span style={{ fontSize: '0.875rem', fontWeight: '600', color: '#334155' }}>Scrape Status</span>
+                          {selectedBot.schedulerConfig?.scrapeStatus === 'running' && (
+                            <span style={{
+                              padding: '0.25rem 0.75rem',
+                              background: '#dbeafe',
+                              color: '#1e40af',
+                              fontSize: '0.75rem',
+                              fontWeight: '600',
+                              borderRadius: '12px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.5rem'
+                            }}>
+                              <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#3b82f6', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}></span>
+                              Scrape in progress
+                            </span>
+                          )}
+                          {selectedBot.schedulerConfig?.scrapeStatus === 'completed' && (
+                            <span style={{
+                              padding: '0.25rem 0.75rem',
+                              background: '#d1fae5',
+                              color: '#065f46',
+                              fontSize: '0.75rem',
+                              fontWeight: '600',
+                              borderRadius: '12px'
+                            }}>
+                              ✓ Completed
+                            </span>
+                          )}
+                          {selectedBot.schedulerConfig?.scrapeStatus === 'failed' && (
+                            <span style={{
+                              padding: '0.25rem 0.75rem',
+                              background: '#fee2e2',
+                              color: '#991b1b',
+                              fontSize: '0.75rem',
+                              fontWeight: '600',
+                              borderRadius: '12px'
+                            }}>
+                              ✗ Failed
+                            </span>
+                          )}
+                          {!selectedBot.schedulerConfig?.scrapeStatus && (
+                            <span style={{
+                              padding: '0.25rem 0.75rem',
+                              background: '#f3f4f6',
+                              color: '#6b7280',
+                              fontSize: '0.75rem',
+                              fontWeight: '600',
+                              borderRadius: '12px'
+                            }}>
+                              Not started
+                            </span>
+                          )}
+                        </div>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', fontSize: '0.8125rem' }}>
+                          <div>
+                            <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Last Scrape</div>
+                            <div style={{ color: '#1e293b', fontWeight: '500' }}>
+                              {selectedBot.schedulerConfig?.lastScrapeAt
+                                ? new Date(selectedBot.schedulerConfig.lastScrapeAt).toLocaleString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })
+                                : 'Never'}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Bot Status</div>
+                            <div style={{ color: '#1e293b', fontWeight: '500' }}>
+                              {selectedBot.schedulerConfig?.botReady
+                                ? <span style={{ color: '#059669' }}>✓ Ready</span>
+                                : <span style={{ color: '#dc2626' }}>Not Ready</span>}
+                            </div>
+                          </div>
+                        </div>
+
+                        {selectedBot.schedulerConfig?.totalDocuments !== undefined && selectedBot.schedulerConfig.totalDocuments > 0 && (
+                          <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
+                            <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>Documents Scraped</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#0ea5e9', marginTop: '0.25rem' }}>
+                              {selectedBot.schedulerConfig.totalDocuments.toLocaleString()}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     
                     {scrapeSuccess && (
                       <div style={{

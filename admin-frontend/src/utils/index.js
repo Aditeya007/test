@@ -86,6 +86,7 @@ export function isValidName(name) {
  * @returns {string} Capitalized string
  */
 export function capitalize(str = '') {
+  if (!str || typeof str !== 'string') return '';
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
@@ -108,7 +109,8 @@ export function formatError(error) {
  * @returns {string} Truncated text
  */
 export function truncate(text, maxLength = 50) {
-  if (!text || text.length <= maxLength) return text;
+  if (!text || typeof text !== 'string') return text || '';
+  if (text.length <= maxLength) return text;
   return text.substring(0, maxLength) + '...';
 }
 

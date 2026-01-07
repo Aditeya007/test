@@ -2271,3 +2271,16 @@ tbody td:first-child {
     color: #f1f5f9;
   }
 }
+
+/* ============================================
+   SCRAPE STATUS ANIMATIONS
+   ============================================ */
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}

@@ -191,7 +191,7 @@ const WidgetInstaller = ({ isOpen, onClose, bots = null }) => {
                   </div>
                 )}
                 <p style={{ marginTop: '0.5em' }}>
-                  <strong>Auth Token:</strong> <code style={{fontSize: '0.75em'}}>{apiTokens[botId].substring(0, 16)}...●●●●</code>
+                  <strong>Auth Token:</strong> <code style={{fontSize: '0.75em'}}>{apiTokens[botId] ? (apiTokens[botId].substring(0, 16) + '...●●●●') : 'Loading...'}</code>
                 </p>
               </div>
 

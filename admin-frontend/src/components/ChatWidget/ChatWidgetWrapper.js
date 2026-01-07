@@ -22,12 +22,15 @@ const CloseIcon = () => (
 );
 
 function ChatWidgetWrapper() {
-  const { isWidgetActive, isWidgetOpen, toggleWidget } = useChatWidget();
+  const { isWidgetActive, isWidgetOpen, selectedBotId, toggleWidget } = useChatWidget();
 
-  // Don't render anything if widget hasn't been activated
+  // CRITICAL FIX #2: Don't render anything if widget hasn't been activated
   if (!isWidgetActive) {
     return null;
   }
+
+  // CRITICAL FIX #2: Show message if no bot selected but widget is activated
+  const hasValidBot = Boolean(selectedBotId);
 
   return (
     // This is the "force field" ID. All our styles will be scoped to this.
@@ -37,7 +40,22 @@ function ChatWidgetWrapper() {
       {/* It's always in the DOM, but its visibility and position are controlled by the 'open' class. */}
       <div className={`chatbot-window-container ${isWidgetOpen ? 'open' : ''}`}>
         {/* We pass the toggle function down so the chatbot can close itself. */}
-        <ChatWidget toggleChatbot={toggleWidget} />
+        {hasValidBot ? (
+          <ChatWidget toggleChatbot={toggleWidget} />
+        ) : (
+          <div className="rag-chatbot-container">
+            <div className="chatbot-header">
+              <h3>AI Assistant</h3>
+              <button onClick={toggleWidget} className="close-chatbot-btn" aria-label="Close Chatbot">
+                <HeaderCloseIcon />
+              </button>
+            </div>
+            <div className="chatbot-messages" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+              <p style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>No website selected</p>
+              <p style={{ fontSize: '0.875rem' }}>Please select a website from your dashboard to start chatting.</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* The Launcher Button */}
