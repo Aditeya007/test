@@ -19,7 +19,7 @@ exports.runBot = async (req, res) => {
   const userId = req.tenantUserId || req.user.userId;
   const username = req.user.username;
   const userRole = req.user.role;
-  const { input, sessionId: clientSessionId } = req.body;
+  const { input, sessionId: clientSessionId, botId } = req.body;
 
   // Regular users can only access their own bot
   // Admins can access any bot via tenantUserId parameter
@@ -32,6 +32,34 @@ exports.runBot = async (req, res) => {
   }
   
   try {
+    // Validate botId
+    if (!botId) {
+      return res.status(400).json({
+        success: false,
+        error: 'botId is required',
+        errorType: 'BAD_REQUEST'
+      });
+    }
+
+    // Load the specific bot
+    const bot = await Bot.findById(botId);
+    if (!bot) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bot not found',
+        errorType: 'NOT_FOUND'
+      });
+    }
+
+    // Verify bot ownership
+    if (bot.userId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied: You can only access your own bots',
+        errorType: 'AUTHORIZATION_ERROR'
+      });
+    }
+
     // Sanitize input
     const sanitizedInput = input.trim();
     
@@ -43,17 +71,28 @@ exports.runBot = async (req, res) => {
       console.log(`🤖 Bot request from user: ${username}`);
     }
     
-    // Load tenant-specific resource metadata
-    // CRITICAL: tenantContext is for resource paths and endpoints ONLY.
-    // NEVER use tenantContext for quota enforcement, limits, or authorization.
+    // Load tenant-specific resource metadata for shared infrastructure
+    // CRITICAL: tenantContext is for shared infrastructure ONLY (databaseUri, botEndpoint, resourceId).
+    // NEVER use tenantContext.vectorStorePath - each bot has its own vectorStorePath.
     // All quota/limit checks MUST query MongoDB directly to get authoritative values.
     const tenantContext = await getUserTenantContext(userId);
 
-    if (!tenantContext.vectorStorePath || !tenantContext.databaseUri) {
+    if (!tenantContext.databaseUri) {
       const error = new Error('Tenant resources are not fully provisioned');
       error.statusCode = 503;
       throw error;
     }
+
+    // CRITICAL: Use bot-specific vectorStorePath, not tenant-level path
+    if (!bot.vectorStorePath) {
+      return res.status(503).json({
+        success: false,
+        error: 'Bot vector store not initialized. Please scrape websites first.',
+        errorType: 'SERVICE_UNAVAILABLE'
+      });
+    }
+
+    console.log("🧠 Chat using vector store:", bot.vectorStorePath);
 
     // Call the bot job to interact with FastAPI backend for this tenant
     const normalizedSessionId =
@@ -67,7 +106,7 @@ exports.runBot = async (req, res) => {
         username,
         botEndpoint: tenantContext.botEndpoint,
         resourceId: tenantContext.resourceId,
-        vectorStorePath: tenantContext.vectorStorePath,
+        vectorStorePath: bot.vectorStorePath, // ✅ Use bot-specific path
         databaseUri: tenantContext.databaseUri
       },
       sanitizedInput,
