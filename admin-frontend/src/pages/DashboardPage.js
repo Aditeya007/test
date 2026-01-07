@@ -66,7 +66,15 @@ function DashboardPage() {
 
   // Fetch bots for the current tenant
   const fetchBots = useCallback(async () => {
-    if (!token || !tenantDetails) return;
+    // Only fetch bots for authenticated users with valid tenant details
+    if (!token || !user || !tenantDetails) return;
+    
+    // For regular users, ensure tenantDetails matches the logged-in user
+    if (user.role === 'user') {
+      const userId = user.id || user._id;
+      const tenantId = tenantDetails.id || tenantDetails._id;
+      if (userId !== tenantId) return; // Not ready yet
+    }
     
     setBotsLoading(true);
     setBotsError('');
@@ -80,11 +88,14 @@ function DashboardPage() {
       }
     } catch (err) {
       console.error('Failed to fetch bots:', err);
-      setBotsError(err.message || 'Failed to load bots');
+      // Don't show error on initial load - only for explicit actions
+      if (bots.length > 0 || (err.status && err.status !== 403)) {
+        setBotsError(err.message || 'Failed to load bots');
+      }
     } finally {
       setBotsLoading(false);
     }
-  }, [token, tenantDetails]);
+  }, [token, user, tenantDetails, bots.length]);
 
   // Fetch bots when tenant details change
   useEffect(() => {
@@ -392,17 +403,17 @@ function DashboardPage() {
                 marginBottom: '1.5rem',
                 fontSize: '1rem'
               }}>
-                <strong>You can create up to {tenantDetails.maxBots || 1} chatbot{(tenantDetails.maxBots || 1) > 1 ? 's' : ''}</strong>
+                <strong>You can create up to {user.maxBots || 1} chatbot{(user.maxBots || 1) > 1 ? 's' : ''}</strong>
                 {bots.length > 0 && (
                   <span style={{ marginLeft: '0.5rem', color: '#1e40af' }}>
-                    ({bots.length} / {tenantDetails.maxBots || 1} created)
+                    ({bots.length} / {user.maxBots || 1} created)
                   </span>
                 )}
               </div>
               
               {botsLoading && <Loader message="Loading websites..." size="small" />}
               
-              {botsError && (
+              {botsError && bots.length > 0 && (
                 <div style={{
                   padding: '1rem',
                   background: '#fee2e2',
@@ -418,7 +429,7 @@ function DashboardPage() {
               {!botsLoading && !botsError && (
                 <>
                   {/* Add Website Button */}
-                  {bots.length < (tenantDetails.maxBots || 1) && (
+                  {bots.length < (user.maxBots || 1) && (
                     <div style={{ marginBottom: '1rem' }}>
                       <button
                         className="dashboard-action-btn"
