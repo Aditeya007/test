@@ -153,14 +153,20 @@ exports.validateLogin = (req, res, next) => {
  * Required: input (the user's query/message)
  */
 exports.validateBotRun = (req, res, next) => {
-  const { input } = req.body;
+  const { message } = req.body;
 
-  if (!input || input.trim() === '') {
-    return res.status(400).json({ error: 'Input query is required' });
+  if (!message || typeof message !== 'string' || message.trim() === '') {
+    return res.status(400).json({ 
+      error: 'message is required and must be a non-empty string',
+      widgetError: true
+    });
   }
 
-  if (input.length > 1000) {
-    return res.status(400).json({ error: 'Input query is too long (max 1000 characters)' });
+  if (message.length > 1000) {
+    return res.status(400).json({ 
+      error: 'Message is too long (max 1000 characters)',
+      widgetError: true
+    });
   }
 
   next();

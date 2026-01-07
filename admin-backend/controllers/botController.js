@@ -10,71 +10,43 @@ const User = require('../models/User');
 /**
  * Run the RAG bot with user's query
  * @route   POST /api/bot/run
- * @access  Protected (requires JWT)
- * @param   {Object} req.body - { input: string }
- * @returns {Object} { answer: string, session_id: string, user_id: string } - The bot's response from FastAPI
+ * @access  Protected (requires bot API token)
+ * @param   {Object} req.body - { botId: string, message: string }
+ * @returns {Object} { answer: string, session_id: string } - The bot's response from FastAPI
  */
 exports.runBot = async (req, res) => {
-  // Get user info from JWT (set by auth middleware)
-  const userId = req.tenantUserId || req.user.userId;
-  const username = req.user.username;
-  const userRole = req.user.role;
-  const { input, sessionId: clientSessionId, botId } = req.body;
+  // Bot is already authenticated and attached by authenticateBotToken middleware
+  const bot = req.bot;
+  const { message, sessionId: clientSessionId } = req.body;
 
-  // Regular users can only access their own bot
-  // Admins can access any bot via tenantUserId parameter
-  if (userRole === 'user' && req.tenantUserId && req.tenantUserId !== req.user.userId) {
-    return res.status(403).json({
+  // Validate message
+  if (!message || typeof message !== 'string') {
+    return res.status(400).json({
       success: false,
-      error: 'Access denied: You can only access your own chatbot',
-      errorType: 'AUTHORIZATION_ERROR'
+      error: 'message is required and must be a string',
+      errorType: 'BAD_REQUEST',
+      widgetError: true
     });
   }
-  
+
   try {
-    // Validate botId
-    if (!botId) {
-      return res.status(400).json({
-        success: false,
-        error: 'botId is required',
-        errorType: 'BAD_REQUEST'
-      });
-    }
-
-    // Load the specific bot
-    const bot = await Bot.findById(botId);
-    if (!bot) {
-      return res.status(404).json({
-        success: false,
-        error: 'Bot not found',
-        errorType: 'NOT_FOUND'
-      });
-    }
-
-    // Verify bot ownership
-    if (bot.userId.toString() !== userId) {
-      return res.status(403).json({
-        success: false,
-        error: 'Access denied: You can only access your own bots',
-        errorType: 'AUTHORIZATION_ERROR'
-      });
-    }
-
     // Sanitize input
-    const sanitizedInput = input.trim();
+    const sanitizedInput = message.trim();
     
-    // Log request (mask sensitive data in production)
+    // Log request
     if (process.env.NODE_ENV === 'development') {
-      console.log(`🤖 Bot request from user: ${username} (${userId})`);
+      console.log(`🤖 Bot request: ${bot._id}`);
       console.log(`   Query: "${sanitizedInput}"`);
     } else {
-      console.log(`🤖 Bot request from user: ${username}`);
+      console.log(`🤖 Bot request: ${bot._id}`);
     }
+    
+    // Get userId from bot for tenant context
+    const userId = bot.userId.toString();
     
     // Load tenant-specific resource metadata for shared infrastructure
     // CRITICAL: tenantContext is for shared infrastructure ONLY (databaseUri, botEndpoint, resourceId).
     // NEVER use tenantContext.vectorStorePath - each bot has its own vectorStorePath.
-    // All quota/limit checks MUST query MongoDB directly to get authoritative values.
     const tenantContext = await getUserTenantContext(userId);
 
     if (!tenantContext.databaseUri) {
@@ -88,7 +60,8 @@ exports.runBot = async (req, res) => {
       return res.status(503).json({
         success: false,
         error: 'Bot vector store not initialized. Please scrape websites first.',
-        errorType: 'SERVICE_UNAVAILABLE'
+        errorType: 'SERVICE_UNAVAILABLE',
+        widgetError: true
       });
     }
 
@@ -103,7 +76,7 @@ exports.runBot = async (req, res) => {
     const botResult = await botJob.runBotForUser(
       {
         userId,
-        username,
+        username: `bot_${bot._id}`,
         botEndpoint: tenantContext.botEndpoint,
         resourceId: tenantContext.resourceId,
         vectorStorePath: bot.vectorStorePath, // ✅ Use bot-specific path
@@ -114,14 +87,13 @@ exports.runBot = async (req, res) => {
     );
     
     // FastAPI returns answer, session identifier, and optional metadata
-    console.log(`✅ Bot response received for user: ${username}`);
+    console.log(`✅ Bot response received for bot: ${bot._id}`);
     
-    // Return comprehensive response matching frontend expectations
+    // Return comprehensive response matching widget expectations
     res.json({
       success: true,
       answer: botResult.answer,
-      session_id: botResult.session_id || `user_${userId}_${Date.now()}`,
-      user_id: userId,
+      session_id: botResult.session_id || `bot_${bot._id}_${Date.now()}`,
       resource_id: tenantContext.resourceId,
       timestamp: new Date().toISOString(),
       ...(botResult.sources && { sources: botResult.sources }), // Include sources if available
@@ -129,7 +101,7 @@ exports.runBot = async (req, res) => {
       ...(botResult.metadata && { metadata: botResult.metadata })
     });
   } catch (err) {
-    console.error(`❌ Bot error for user ${username}:`, {
+    console.error(`❌ Bot error for bot ${bot._id}:`, {
       message: err.message,
       code: err.code,
       stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
@@ -162,6 +134,7 @@ exports.runBot = async (req, res) => {
       success: false,
       error: errorMessage,
       errorType,
+      widgetError: true,
       timestamp: new Date().toISOString(),
       // Include technical details only in development
       ...(process.env.NODE_ENV === 'development' && { 
