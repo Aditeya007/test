@@ -368,7 +368,7 @@ function DashboardPage() {
                   <strong>Email:</strong> {tenantDetails.email}
                 </p>
                 <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#374151' }}>
-                  <strong>Capacity:</strong> {tenantDetails.maxBots || 1} chatbot{(tenantDetails.maxBots || 1) > 1 ? 's' : ''} allowed
+                  <strong>Capacity:</strong> {tenantDetails.maxBots} chatbot{tenantDetails.maxBots > 1 ? 's' : ''} allowed
                 </p>
               </div>
               <div style={{
@@ -402,10 +402,10 @@ function DashboardPage() {
                 marginBottom: '1.5rem',
                 fontSize: '1rem'
               }}>
-                <strong>You can create up to {user.maxBots || 1} chatbot{(user.maxBots || 1) > 1 ? 's' : ''}</strong>
+                <strong>You can create up to {user.maxBots} chatbot{user.maxBots > 1 ? 's' : ''}</strong>
                 {bots.length > 0 && (
                   <span style={{ marginLeft: '0.5rem', color: '#1e40af' }}>
-                    ({bots.length} / {user.maxBots || 1} created)
+                    ({bots.length} / {user.maxBots} created)
                   </span>
                 )}
               </div>
@@ -428,7 +428,7 @@ function DashboardPage() {
               {!botsLoading && !botsError && (
                 <>
                   {/* Add Website Button */}
-                  {bots.length < (user.maxBots || 1) && (
+                  {bots.length < user.maxBots && (
                     <div style={{ marginBottom: '1rem' }}>
                       <button
                         className="dashboard-action-btn"

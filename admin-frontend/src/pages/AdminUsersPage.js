@@ -76,7 +76,7 @@ function AdminUsersPage() {
           email: values.email.trim(),
           username: values.username.trim(),
           password: values.password,
-          maxBots: values.maxBots || 1
+          maxBots: values.maxBots
         }
       });
       
@@ -84,9 +84,14 @@ function AdminUsersPage() {
       
       setFormResetKey((key) => key + 1);
       
-      // Set the user as active tenant
+      // Refetch the created user to get exact DB values
       if (response.user) {
-        setActiveTenant(response.user);
+        const userId = response.user.id || response.user._id;
+        const freshUser = await apiRequest(`/users/${userId}`, {
+          method: 'GET',
+          token
+        });
+        setActiveTenant(freshUser.user);
       }
       
       await handleRefresh();

@@ -254,7 +254,7 @@ exports.createBot = async (req, res) => {
 
     // Check how many bots the user already has
     const existingBotCount = await Bot.countDocuments({ userId: currentUserId });
-    const maxBots = user.maxBots || 1;
+    const maxBots = user.maxBots;
 
     if (existingBotCount >= maxBots) {
       return res.status(403).json({

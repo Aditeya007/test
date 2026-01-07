@@ -241,12 +241,8 @@ exports.createUser = async (req, res) => {
     const sanitizedName = name.trim();
     const isActive = normalizeBoolean(requestedActive, true);
     
-    // Parse and clamp maxBots between 1 and 10
-    const userMaxBots = Math.min(10, Math.max(1, Number(maxBots) || 1));
-    
-    // Debug logs to verify maxBots parsing
-    console.log('CreateUser maxBots received:', maxBots);
-    console.log('CreateUser maxBots parsed:', userMaxBots);
+    // Parse maxBots exactly as provided by admin
+    const userMaxBots = Number(maxBots);
 
     // Check for duplicate email and username for the ONE user
     const [existingEmail, existingUsername] = await Promise.all([

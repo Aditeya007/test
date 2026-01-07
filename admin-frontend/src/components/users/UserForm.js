@@ -78,8 +78,8 @@ function UserForm({
 
     if (!isEditMode) {
       const maxBots = parseInt(values.maxBots, 10);
-      if (isNaN(maxBots) || maxBots < 1 || maxBots > 10) {
-        errors.maxBots = 'Max bots allowed must be between 1 and 10';
+      if (isNaN(maxBots) || maxBots < 1) {
+        errors.maxBots = 'Max bots must be a positive integer';
       }
     }
 
