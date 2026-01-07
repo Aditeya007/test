@@ -7,7 +7,8 @@ const defaultValues = {
   email: '',
   username: '',
   password: '',
-  botCount: 1
+  botCount: 1,
+  websites: []
 };
 
 function UserForm({
@@ -36,6 +37,17 @@ function UserForm({
     setValues({ ...mergedInitialValues });
     setFieldErrors({});
   }, [mergedInitialValues, resetKey]);
+
+  // Automatically resize websites array when botCount changes
+  useEffect(() => {
+    if (!isEditMode) {
+      const count = parseInt(values.botCount, 10) || 1;
+      setValues((prev) => ({
+        ...prev,
+        websites: Array.from({ length: count }, (_, i) => prev.websites[i] || '')
+      }));
+    }
+  }, [values.botCount, isEditMode]);
 
   const updateValue = (field, value) => {
     setValues((prev) => ({
@@ -212,6 +224,33 @@ function UserForm({
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {parseInt(values.botCount, 10) > 1 && (
+            <div style={{ marginBottom: '1.5em' }}>
+              <strong style={{ display: 'block', marginBottom: '0.8em' }}>Website URLs (One per Bot)</strong>
+              {Array.from({ length: Math.min(parseInt(values.botCount, 10) || 1, 10) }, (_, i) => (
+                <div key={i} style={{ marginBottom: '0.8em' }}>
+                  <label htmlFor={`website-${i}`}>Website for Bot {i + 1}</label>
+                  <input
+                    id={`website-${i}`}
+                    type="url"
+                    placeholder={`https://example${i + 1}.com`}
+                    value={values.websites[i] || ''}
+                    onChange={(e) => {
+                      const newWebsites = [...values.websites];
+                      newWebsites[i] = e.target.value;
+                      updateValue('websites', newWebsites);
+                    }}
+                    disabled={loading}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              ))}
+              <small style={{ display: 'block', marginTop: '0.3em', color: '#666' }}>
+                Specify the website URL for each bot to scrape and train on.
+              </small>
             </div>
           )}
         </>

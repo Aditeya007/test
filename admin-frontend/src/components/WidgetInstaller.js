@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../config';
 import '../styles/WidgetInstaller.css';
 
-const WidgetInstaller = ({ isOpen, onClose, users = null }) => {
+const WidgetInstaller = ({ isOpen, onClose, bots = null }) => {
   const { user, activeTenant } = useAuth();
   const [copied, setCopied] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -15,16 +15,14 @@ const WidgetInstaller = ({ isOpen, onClose, users = null }) => {
   const [activeTab, setActiveTab] = useState(0);
 
   // Determine the bots to display
-  // If users prop is provided (batch creation), use it as bots
-  // Otherwise, use the current user/tenant
+  // If bots prop is provided, use it
+  // Otherwise, use empty array (no fallback to user/tenant)
   const displayBots = useMemo(() => {
-    if (users && Array.isArray(users) && users.length > 0) {
-      return users;
+    if (bots && Array.isArray(bots) && bots.length > 0) {
+      return bots;
     }
-    const isUserRole = user?.role === 'user';
-    const effectiveUser = isUserRole ? user : activeTenant;
-    return effectiveUser ? [effectiveUser] : [];
-  }, [users, user, activeTenant]);
+    return [];
+  }, [bots]);
 
   const currentBot = displayBots[activeTab] || null;
   const botId = currentBot?.id || currentBot?._id;
@@ -140,7 +138,7 @@ const WidgetInstaller = ({ isOpen, onClose, users = null }) => {
 
         {displayBots.length === 0 ? (
           <div className="widget-installer-error">
-            <p>Please create or select a user before installing the widget.</p>
+            <p>Please create bots before installing the widget.</p>
           </div>
         ) : loadingTokens ? (
           <div className="widget-installer-loading">
@@ -152,10 +150,6 @@ const WidgetInstaller = ({ isOpen, onClose, users = null }) => {
             <button onClick={fetchAllApiTokens} className="widget-installer-retry-btn">
               🔄 Retry
             </button>
-          </div>
-        ) : !apiTokens[botId] ? (
-          <div className="widget-installer-loading">
-            <p>⏳ Loading widget configuration...</p>
           </div>
         ) : (
           <>
@@ -273,7 +267,7 @@ const WidgetInstaller = ({ isOpen, onClose, users = null }) => {
                 <h4>📝 Important Notes:</h4>
                 <ul>
                   <li><strong>No functionality changes:</strong> The widget uses the same bot logic and features as your dashboard chatbot.</li>
-                  <li><strong>Secure:</strong> All requests are authenticated using your unique user ID.</li>
+                  <li><strong>Secure:</strong> All requests are authenticated using your unique bot API token.</li>
                   <li><strong>Data context:</strong> The widget automatically uses your knowledge base and trained data.</li>
                   <li><strong>Customization:</strong> Contact support if you need to customize colors or positioning.</li>
                 </ul>
