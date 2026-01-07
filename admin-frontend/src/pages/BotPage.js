@@ -26,8 +26,8 @@ function BotPage() {
 
   const handleOpenChat = () => {
     if (!isWidgetActive) {
-      // First time - activate the widget
-      activateWidget();
+      // First time - activate the widget with botId
+      activateWidget(botId);
     } else {
       // Widget already exists, just open it
       openWidget();

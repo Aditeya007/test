@@ -10,6 +10,7 @@
  *   window.RAGWidget.init({
  *     apiBase: "https://yourdomain.com/api",
  *     userId: "USER_UNIQUE_ID",
+ *     botId: "BOT_ID",
  *     authToken: "YOUR_API_TOKEN"
  *   });
  * </script>
@@ -28,6 +29,7 @@
   let config = {
     apiBase: '',
     userId: '',
+    botId: '', // Bot ID for multi-bot support
     authToken: '', // API token for authentication
     position: 'bottom-right', // bottom-right, bottom-left
     theme: 'default'
@@ -383,6 +385,10 @@
       addMessage('Widget not configured properly. Missing user ID.', 'bot', true);
       return;
     }
+    if (!config.botId) {
+      addMessage('Widget not configured properly. Missing bot ID.', 'bot', true);
+      return;
+    }
     if (!config.authToken) {
       addMessage('Widget not configured properly. Missing authentication token.', 'bot', true);
       return;
@@ -415,7 +421,8 @@
         body: JSON.stringify({
           input: message,
           sessionId: state.sessionId,
-          tenantUserId: config.userId
+          tenantUserId: config.userId,
+          botId: config.botId
         })
       });
 

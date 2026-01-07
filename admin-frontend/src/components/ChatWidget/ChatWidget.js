@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useChatWidget } from '../../context/ChatWidgetContext';
 import useApi from '../../hooks/useApi';
 import './ChatWidget.css';
 
@@ -16,6 +17,7 @@ const HeaderCloseIcon = () => (
 const ChatWidget = ({ toggleChatbot }) => {
     const { user, activeTenant } = useAuth();
     const { execute, loading } = useApi();
+    const { selectedBotId } = useChatWidget();
     
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
@@ -70,13 +72,25 @@ const ChatWidget = ({ toggleChatbot }) => {
         const currentInput = input;
         setInput('');
 
-        // Call the backend API
+        // Validate botId is available
+        if (!selectedBotId) {
+            setMessages(prev => [...prev, {
+                text: 'Please select a bot from the dashboard before chatting.',
+                sender: 'bot',
+                isError: true,
+                id: `error_${Date.now()}`
+            }]);
+            return;
+        }
+
+        // Call the backend API with botId
         const result = await execute('/bot/run', {
             method: 'POST',
             data: { 
                 input: currentInput, 
                 sessionId, 
-                tenantUserId: effectiveTenantId 
+                tenantUserId: effectiveTenantId,
+                botId: selectedBotId
             },
         });
 
@@ -108,7 +122,7 @@ const ChatWidget = ({ toggleChatbot }) => {
                 id: `error_${Date.now()}`
             }]);
         }
-    }, [input, loading, effectiveTenantId, sessionId, execute, user]);
+    }, [input, loading, effectiveTenantId, sessionId, selectedBotId, execute, user]);
 
     // Allows sending message with the Enter key
     const handleKeyPress = (event) => {
