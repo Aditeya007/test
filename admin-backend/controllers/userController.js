@@ -240,12 +240,13 @@ exports.createUser = async (req, res) => {
     const sanitizedUsername = username.trim();
     const sanitizedName = name.trim();
     const isActive = normalizeBoolean(requestedActive, true);
-    const userMaxBots = parseInt(maxBots, 10) || 1;
-
-    // Validate maxBots range
-    if (userMaxBots < 1 || userMaxBots > 10) {
-      return res.status(400).json({ error: 'maxBots must be between 1 and 10', field: 'maxBots' });
-    }
+    
+    // Parse and clamp maxBots between 1 and 10
+    const userMaxBots = Math.min(10, Math.max(1, Number(maxBots) || 1));
+    
+    // Debug logs to verify maxBots parsing
+    console.log('CreateUser maxBots received:', maxBots);
+    console.log('CreateUser maxBots parsed:', userMaxBots);
 
     // Check for duplicate email and username for the ONE user
     const [existingEmail, existingUsername] = await Promise.all([
