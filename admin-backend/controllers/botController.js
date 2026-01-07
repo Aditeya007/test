@@ -2,6 +2,8 @@
 
 const botJob = require('../jobs/botJob');
 const { getUserTenantContext } = require('../services/userContextService');
+const Bot = require('../models/Bot');
+const User = require('../models/User');
 
 /**
  * Run the RAG bot with user's query
@@ -122,6 +124,90 @@ exports.runBot = async (req, res) => {
         details: err.message,
         code: err.code 
       })
+    });
+  }
+};
+
+/**
+ * Update a bot's configuration (e.g., scrapedWebsites)
+ * @route   PUT /api/bot/:botId
+ * @access  Protected (requires JWT)
+ * @param   {Object} req.body - { scrapedWebsites: string[] }
+ * @returns {Object} { success: boolean, bot: Object } - The updated bot
+ */
+exports.updateBot = async (req, res) => {
+  try {
+    const { botId } = req.params;
+    const { scrapedWebsites } = req.body;
+    const currentUserId = req.user.userId;
+    const currentUserRole = req.user.role;
+
+    // Validate input
+    if (!scrapedWebsites || !Array.isArray(scrapedWebsites)) {
+      return res.status(400).json({
+        success: false,
+        error: 'scrapedWebsites must be an array'
+      });
+    }
+
+    // Find the bot
+    const bot = await Bot.findById(botId);
+    if (!bot) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bot not found'
+      });
+    }
+
+    // Authorization: Check if user owns this bot
+    if (currentUserRole === 'user') {
+      // Regular users can only update their own bots
+      if (bot.userId.toString() !== currentUserId) {
+        return res.status(403).json({
+          success: false,
+          error: 'Access denied: You can only update your own bots'
+        });
+      }
+    } else if (currentUserRole === 'admin') {
+      // Admins can only update bots for users they created
+      const botOwner = await User.findById(bot.userId);
+      if (!botOwner) {
+        return res.status(404).json({
+          success: false,
+          error: 'Bot owner not found'
+        });
+      }
+      if (botOwner.adminId && botOwner.adminId.toString() !== currentUserId) {
+        return res.status(403).json({
+          success: false,
+          error: 'Access denied: You can only update bots for users you created'
+        });
+      }
+    }
+
+    // Update the bot
+    bot.scrapedWebsites = scrapedWebsites;
+    await bot.save();
+
+    console.log(`✅ Bot ${botId} updated by ${currentUserRole} ${currentUserId}`);
+
+    // Return the updated bot with id field
+    const botObj = bot.toObject({ versionKey: false });
+    res.json({
+      success: true,
+      bot: {
+        ...botObj,
+        id: botObj._id
+      }
+    });
+  } catch (err) {
+    console.error('❌ Error updating bot:', {
+      message: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update bot'
     });
   }
 };

@@ -58,3 +58,31 @@ export async function apiRequest(endpoint, { method = 'GET', token, data, params
     throw error;
   }
 }
+
+/**
+ * Get all bots for a user
+ * @param {string} userId - User ID
+ * @param {string} token - JWT token
+ * @returns {Promise<Object>} { bots: Array, count: number }
+ */
+export async function getUserBots(userId, token) {
+  return apiRequest(`/users/${userId}/bots`, {
+    method: 'GET',
+    token
+  });
+}
+
+/**
+ * Update a bot's configuration
+ * @param {string} botId - Bot ID
+ * @param {Object} data - Update data (e.g., { scrapedWebsites: string[] })
+ * @param {string} token - JWT token
+ * @returns {Promise<Object>} { success: boolean, bot: Object }
+ */
+export async function updateBot(botId, data, token) {
+  return apiRequest(`/bot/${botId}`, {
+    method: 'PUT',
+    token,
+    data
+  });
+}

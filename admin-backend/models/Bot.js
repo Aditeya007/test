@@ -33,6 +33,20 @@ const botSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  // Scheduler state (per-bot)
+  schedulerPid: {
+    type: Number,
+    default: null
+  },
+  schedulerStatus: {
+    type: String,
+    enum: ['active', 'inactive'],
+    default: 'inactive'
+  },
+  schedulerConfig: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now
