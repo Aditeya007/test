@@ -232,13 +232,25 @@ exports.startBotScrape = [
       const logFile = fs.openSync(logFilePath, 'a');
 
       // Clear previous scrape completion status and set to 'running' before starting new scrape
-      await Bot.findByIdAndUpdate(botId, {
-        $set: {
-          'schedulerConfig.lastScrapeCompleted': null,
-          'schedulerConfig.botReady': false,
-          'schedulerConfig.scrapeStatus': 'running'
-        }
-      });
+      // CRITICAL: Initialize schedulerConfig if null to prevent MongoDB error
+      const botDoc = await Bot.findById(botId);
+      if (!botDoc.schedulerConfig) {
+        await Bot.findByIdAndUpdate(botId, {
+          schedulerConfig: {
+            lastScrapeCompleted: null,
+            botReady: false,
+            scrapeStatus: 'running'
+          }
+        });
+      } else {
+        await Bot.findByIdAndUpdate(botId, {
+          $set: {
+            'schedulerConfig.lastScrapeCompleted': null,
+            'schedulerConfig.botReady': false,
+            'schedulerConfig.scrapeStatus': 'running'
+          }
+        });
+      }
       console.log(`🔄 Set scrape status to 'running' for bot ${bot.name}`);
 
       // Spawn as detached background process (reuse spawn logic from scrapeController)
@@ -298,13 +310,30 @@ exports.startBotScrape = [
  */
 const markScrapeCompleted = async (botId) => {
   try {
-    await Bot.findByIdAndUpdate(botId, {
-      $set: {
-        'schedulerConfig.lastScrapeCompleted': new Date(),
-        'schedulerConfig.botReady': true,
-        'schedulerConfig.scrapeStatus': 'completed'
-      }
-    });
+    // CRITICAL: Initialize schedulerConfig if null to prevent MongoDB error
+    const botDoc = await Bot.findById(botId);
+    if (!botDoc) {
+      console.error(`❌ Bot ${botId} not found`);
+      return false;
+    }
+    
+    if (!botDoc.schedulerConfig) {
+      await Bot.findByIdAndUpdate(botId, {
+        schedulerConfig: {
+          lastScrapeCompleted: new Date(),
+          botReady: true,
+          scrapeStatus: 'completed'
+        }
+      });
+    } else {
+      await Bot.findByIdAndUpdate(botId, {
+        $set: {
+          'schedulerConfig.lastScrapeCompleted': new Date(),
+          'schedulerConfig.botReady': true,
+          'schedulerConfig.scrapeStatus': 'completed'
+        }
+      });
+    }
     console.log(`✅ Scrape marked as completed for bot ${botId}`);
     return true;
   } catch (err) {

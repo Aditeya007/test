@@ -243,8 +243,8 @@ exports.createBot = async (req, res) => {
       });
     }
 
-    // Get current user to check maxBots limit
-    const user = await User.findById(currentUserId);
+    // Get current user from database to check maxBots limit (MUST be authoritative from DB)
+    const user = await User.findById(currentUserId).select('maxBots username');
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -254,8 +254,9 @@ exports.createBot = async (req, res) => {
 
     // Check how many bots the user already has
     const existingBotCount = await Bot.countDocuments({ userId: currentUserId });
-    const maxBots = user.maxBots;
+    const maxBots = user.maxBots; // Authoritative from database, not from JWT
 
+    // Allow bot creation ONLY if under the limit
     if (existingBotCount >= maxBots) {
       return res.status(403).json({
         success: false,

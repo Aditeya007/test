@@ -367,7 +367,7 @@ exports.getUserResources = async (req, res) => {
 
 exports.updateUser = async (req, res) => {
   const { id } = req.params;
-  const { name, email, username, password, isActive } = req.body;
+  const { name, email, username, password, isActive, maxBots } = req.body;
 
   const updates = {};
 
@@ -382,6 +382,17 @@ exports.updateUser = async (req, res) => {
   }
   if (typeof isActive !== 'undefined') {
     updates.isActive = normalizeBoolean(isActive, true);
+  }
+  // Allow admins to update maxBots
+  if (typeof maxBots !== 'undefined') {
+    const parsedMaxBots = Number(maxBots);
+    if (isNaN(parsedMaxBots) || parsedMaxBots < 1 || parsedMaxBots > 10) {
+      return res.status(400).json({ 
+        error: 'maxBots must be a number between 1 and 10',
+        field: 'maxBots'
+      });
+    }
+    updates.maxBots = parsedMaxBots;
   }
 
   try {

@@ -120,6 +120,10 @@ function AdminUsersPage() {
     if (values.password) {
       payload.password = values.password;
     }
+    // Include maxBots if changed
+    if (values.maxBots !== editingUser.maxBots) {
+      payload.maxBots = values.maxBots;
+    }
     if (Object.keys(payload).length === 0) {
       setErrorMessage('No changes detected to update.');
       return;

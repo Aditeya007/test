@@ -99,9 +99,11 @@ function DashboardPage() {
 
   // Fetch bots when tenant details change
   useEffect(() => {
-    if (user?.role === 'admin') {
-    fetchBots();
-  }}, [fetchBots,user]);
+    // Fetch bots for both admins viewing users and regular users viewing their own bots
+    if (user && tenantDetails) {
+      fetchBots();
+    }
+  }, [fetchBots, user, tenantDetails]);
 
   useEffect(() => {
     if (!token) {
@@ -224,11 +226,14 @@ function DashboardPage() {
       setAddWebsiteModalOpen(false);
       setWebsiteUrl('');
       
-      // Append new bot to existing list
+      // Append new bot to existing list AND refetch to ensure synchronization
       if (response.bot) {
         setBots(prev => [...prev, response.bot]);
         setSelectedBot(response.bot);
       }
+      
+      // Refetch bots to ensure state is fully synchronized with backend
+      await fetchBots();
     } catch (err) {
       setAddWebsiteError(err.message || 'Failed to add website');
     } finally {
@@ -402,10 +407,10 @@ function DashboardPage() {
                 marginBottom: '1.5rem',
                 fontSize: '1rem'
               }}>
-                <strong>You can create up to {user.maxBots} chatbot{user.maxBots > 1 ? 's' : ''}</strong>
+                <strong>You can create up to {tenantDetails?.maxBots || 1} chatbot{(tenantDetails?.maxBots || 1) > 1 ? 's' : ''}</strong>
                 {bots.length > 0 && (
                   <span style={{ marginLeft: '0.5rem', color: '#1e40af' }}>
-                    ({bots.length} / {user.maxBots} created)
+                    ({bots.length} / {tenantDetails?.maxBots || 1} created)
                   </span>
                 )}
               </div>
@@ -428,7 +433,7 @@ function DashboardPage() {
               {!botsLoading && !botsError && (
                 <>
                   {/* Add Website Button */}
-                  {bots.length < user.maxBots && (
+                  {bots.length < (tenantDetails?.maxBots || 1) && (
                     <div style={{ marginBottom: '1rem' }}>
                       <button
                         className="dashboard-action-btn"
