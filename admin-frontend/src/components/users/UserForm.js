@@ -7,8 +7,7 @@ const defaultValues = {
   email: '',
   username: '',
   password: '',
-  botCount: 1,
-  websites: []
+  maxBots: 1
 };
 
 function UserForm({
@@ -37,17 +36,6 @@ function UserForm({
     setValues({ ...mergedInitialValues });
     setFieldErrors({});
   }, [mergedInitialValues, resetKey]);
-
-  // Automatically resize websites array when botCount changes
-  useEffect(() => {
-    if (!isEditMode) {
-      const count = parseInt(values.botCount, 10) || 1;
-      setValues((prev) => ({
-        ...prev,
-        websites: Array.from({ length: count }, (_, i) => prev.websites[i] || '')
-      }));
-    }
-  }, [values.botCount, isEditMode]);
 
   const updateValue = (field, value) => {
     setValues((prev) => ({
@@ -89,9 +77,9 @@ function UserForm({
     }
 
     if (!isEditMode) {
-      const botCount = parseInt(values.botCount, 10);
-      if (isNaN(botCount) || botCount < 1 || botCount > 10) {
-        errors.botCount = 'Bot count must be between 1 and 10';
+      const maxBots = parseInt(values.maxBots, 10);
+      if (isNaN(maxBots) || maxBots < 1 || maxBots > 10) {
+        errors.maxBots = 'Max bots allowed must be between 1 and 10';
       }
     }
 
@@ -178,82 +166,28 @@ function UserForm({
       </div>
 
       {!isEditMode && (
-        <>
-          <div style={{ marginBottom: '1.2em' }}>
-            <label htmlFor="bot-count">
-              Number of Bots to Create (Batch Creation)
-            </label>
-            <input
-              id="bot-count"
-              name="botCount"
-              type="number"
-              min="1"
-              max="10"
-              placeholder="1"
-              value={values.botCount}
-              onChange={handleChange}
-              disabled={loading}
-              className={fieldErrors.botCount ? 'input-error' : ''}
-              style={{ width: '100%' }}
-            />
-            {fieldErrors.botCount && <span className="field-error">{fieldErrors.botCount}</span>}
-            <small style={{ display: 'block', marginTop: '0.3em', color: '#666' }}>
-              Create 1-10 bots at once. Enter 1 for a single bot.
-            </small>
-          </div>
-
-          {values.botCount > 1 && (
-            <div style={{ 
-              marginBottom: '1.5em', 
-              padding: '0.8em', 
-              background: '#f0f7ff', 
-              borderRadius: '4px',
-              border: '1px solid #b3d9ff'
-            }}>
-              <strong style={{ display: 'block', marginBottom: '0.5em', color: '#0066cc' }}>
-                Preview: Bots to be created
-              </strong>
-              <div style={{ fontSize: '0.9em', color: '#333' }}>
-                {Array.from({ length: Math.min(parseInt(values.botCount, 10) || 1, 10) }, (_, i) => {
-                  const index = i + 1;
-                  const username = `${values.username}_${index}`;
-                  return (
-                    <div key={index} style={{ marginBottom: '0.3em' }}>
-                      <strong>Bot {index}:</strong> {username}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {parseInt(values.botCount, 10) > 1 && (
-            <div style={{ marginBottom: '1.5em' }}>
-              <strong style={{ display: 'block', marginBottom: '0.8em' }}>Website URLs (One per Bot)</strong>
-              {Array.from({ length: Math.min(parseInt(values.botCount, 10) || 1, 10) }, (_, i) => (
-                <div key={i} style={{ marginBottom: '0.8em' }}>
-                  <label htmlFor={`website-${i}`}>Website for Bot {i + 1}</label>
-                  <input
-                    id={`website-${i}`}
-                    type="url"
-                    placeholder={`https://example${i + 1}.com`}
-                    value={values.websites[i] || ''}
-                    onChange={(e) => {
-                      const newWebsites = [...values.websites];
-                      newWebsites[i] = e.target.value;
-                      updateValue('websites', newWebsites);
-                    }}
-                    disabled={loading}
-                    style={{ width: '100%' }}
-                  />
-                </div>
-              ))}
-              <small style={{ display: 'block', marginTop: '0.3em', color: '#666' }}>
-                Specify the website URL for each bot to scrape and train on.
-              </small>
-            </div>
-          )}
-        </>
+        <div style={{ marginBottom: '1.2em' }}>
+          <label htmlFor="max-bots">
+            Max Bots Allowed
+          </label>
+          <input
+            id="max-bots"
+            name="maxBots"
+            type="number"
+            min="1"
+            max="10"
+            placeholder="1"
+            value={values.maxBots}
+            onChange={handleChange}
+            disabled={loading}
+            className={fieldErrors.maxBots ? 'input-error' : ''}
+            style={{ width: '100%' }}
+          />
+          {fieldErrors.maxBots && <span className="field-error">{fieldErrors.maxBots}</span>}
+          <small style={{ display: 'block', marginTop: '0.3em', color: '#666' }}>
+            Set the maximum number of bots this user can create (1-10).
+          </small>
+        </div>
       )}
 
       <div style={{ display: 'flex', gap: '0.8em', marginTop: '2em' }}>

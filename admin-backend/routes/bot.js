@@ -20,6 +20,15 @@ const { botLimiter } = require('../middleware/rateLimiter');
 router.post('/run', widgetAuth, resolveTenant, botLimiter, validateBotRun, botController.runBot);
 
 /**
+ * @route   POST /api/bot
+ * @desc    Create a new bot for the current user
+ * @access  Protected (requires JWT, user role only)
+ * @body    { scrapedWebsites: string[], name?: string }
+ * @returns { success: boolean, bot: Object } - The created bot
+ */
+router.post('/', auth, botController.createBot);
+
+/**
  * @route   GET /api/bot/:botId/api-token
  * @desc    Get API token for a specific bot
  * @access  Protected (requires JWT)

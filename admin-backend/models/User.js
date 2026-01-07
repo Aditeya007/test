@@ -92,6 +92,12 @@ const UserSchema = new mongoose.Schema(
       lowercase: true,
       trim: true
     },
+    maxBots: {
+      type: Number,
+      default: 1,
+      min: [1, 'Max bots must be at least 1'],
+      max: [10, 'Max bots cannot exceed 10']
+    },
     // Scheduler-related fields for per-tenant persistent scheduling
     schedulerPid: {
       type: Number,

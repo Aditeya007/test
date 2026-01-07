@@ -73,6 +73,20 @@ export async function getUserBots(userId, token) {
 }
 
 /**
+ * Create a new bot
+ * @param {Object} data - Bot data (e.g., { scrapedWebsites: string[], name?: string })
+ * @param {string} token - JWT token
+ * @returns {Promise<Object>} { success: boolean, bot: Object }
+ */
+export async function createBot(data, token) {
+  return apiRequest('/bot', {
+    method: 'POST',
+    token,
+    data
+  });
+}
+
+/**
  * Update a bot's configuration
  * @param {string} botId - Bot ID
  * @param {Object} data - Update data (e.g., { scrapedWebsites: string[] })
@@ -86,3 +100,4 @@ export async function updateBot(botId, data, token) {
     data
   });
 }
+
