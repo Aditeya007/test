@@ -9,7 +9,6 @@
  * <script>
  *   window.RAGWidget.init({
  *     apiBase: "https://yourdomain.com/api",
- *     userId: "USER_UNIQUE_ID",
  *     botId: "BOT_ID",
  *     authToken: "YOUR_API_TOKEN"
  *   });
@@ -28,7 +27,6 @@
   // Widget configuration
   let config = {
     apiBase: '',
-    userId: '',
     botId: '', // Bot ID for multi-bot support
     authToken: '', // API token for authentication
     position: 'bottom-right', // bottom-right, bottom-left
@@ -381,10 +379,6 @@
   // Send message to API
   async function sendMessage(message) {
     if (!message.trim() || state.loading) return;
-    if (!config.userId) {
-      addMessage('Widget not configured properly. Missing user ID.', 'bot', true);
-      return;
-    }
     if (!config.botId) {
       addMessage('Widget not configured properly. Missing bot ID.', 'bot', true);
       return;
@@ -419,10 +413,9 @@
           'Authorization': `Bearer ${config.authToken}`
         },
         body: JSON.stringify({
-          input: message,
-          sessionId: state.sessionId,
-          tenantUserId: config.userId,
-          botId: config.botId
+          botId: config.botId,
+          message: message,
+          sessionId: state.sessionId
         })
       });
 
@@ -503,8 +496,8 @@
 
   // Initialize widget
   function init(options) {
-    if (!options || !options.apiBase || !options.userId) {
-      console.error('RAG Widget: Missing required configuration (apiBase and userId)');
+    if (!options || !options.apiBase || !options.botId) {
+      console.error('RAG Widget: Missing required configuration (apiBase and botId)');
       return;
     }
 
