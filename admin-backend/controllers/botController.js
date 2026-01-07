@@ -44,6 +44,9 @@ exports.runBot = async (req, res) => {
     }
     
     // Load tenant-specific resource metadata
+    // CRITICAL: tenantContext is for resource paths and endpoints ONLY.
+    // NEVER use tenantContext for quota enforcement, limits, or authorization.
+    // All quota/limit checks MUST query MongoDB directly to get authoritative values.
     const tenantContext = await getUserTenantContext(userId);
 
     if (!tenantContext.vectorStorePath || !tenantContext.databaseUri) {
@@ -272,7 +275,10 @@ exports.createBot = async (req, res) => {
       apiToken: crypto.randomBytes(32).toString('hex'),
       vectorStorePath: '',
       scrapedWebsites: scrapedWebsites,
-      isActive: true
+      isActive: true,
+      // CRITICAL: Always initialize schedulerConfig as empty object to prevent
+      // MongoDB errors when updating nested fields (e.g., schedulerConfig.botReady)
+      schedulerConfig: {}
     });
 
     // Provision bot-specific resources
