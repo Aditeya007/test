@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { apiRequest, getUserBots, createBot } from '../api';
+import { apiRequest, getUserBots, getUserOwnBots, createBot } from '../api';
 import UserForm from '../components/users/UserForm';
 import Loader from '../components/Loader';
 import WidgetInstaller from '../components/WidgetInstaller';
@@ -80,22 +80,27 @@ function DashboardPage() {
     setBotsError('');
     
     try {
-      const tenantUserId = tenantDetails.id || tenantDetails._id;
-      const response = await getUserBots(tenantUserId, token);
+      let response;
+      
+      if (user.role === 'user') {
+        // Regular users: Use /api/bot endpoint (no userId needed)
+        response = await getUserOwnBots(token);
+      } else {
+        // Admins: Use /api/users/:id/bots endpoint
+        const tenantUserId = tenantDetails.id || tenantDetails._id;
+        response = await getUserBots(tenantUserId, token);
+      }
       
       if (response.bots) {
         setBots(response.bots);
       }
     } catch (err) {
       console.error('Failed to fetch bots:', err);
-      // Don't show error on initial load - only for explicit actions
-      if (bots.length > 0 || (err.status && err.status !== 403)) {
-        setBotsError(err.message || 'Failed to load bots');
-      }
+      setBotsError(err.message || 'Failed to load bots');
     } finally {
       setBotsLoading(false);
     }
-  }, [token, user, tenantDetails, bots.length]);
+  }, [token, user, tenantDetails]);
 
   // Fetch bots when tenant details change
   useEffect(() => {
@@ -226,14 +231,13 @@ function DashboardPage() {
       setAddWebsiteModalOpen(false);
       setWebsiteUrl('');
       
-      // Append new bot to existing list AND refetch to ensure synchronization
+      // Refetch bots from backend to get authoritative list
+      await fetchBots();
+      
+      // Select the newly created bot
       if (response.bot) {
-        setBots(prev => [...prev, response.bot]);
         setSelectedBot(response.bot);
       }
-      
-      // Refetch bots to ensure state is fully synchronized with backend
-      await fetchBots();
     } catch (err) {
       setAddWebsiteError(err.message || 'Failed to add website');
     } finally {
@@ -407,10 +411,10 @@ function DashboardPage() {
                 marginBottom: '1.5rem',
                 fontSize: '1rem'
               }}>
-                <strong>You can create up to {tenantDetails?.maxBots || 1} chatbot{(tenantDetails?.maxBots || 1) > 1 ? 's' : ''}</strong>
+                <strong>You can create up to {tenantDetails?.maxBots} chatbot{tenantDetails?.maxBots > 1 ? 's' : ''}</strong>
                 {bots.length > 0 && (
                   <span style={{ marginLeft: '0.5rem', color: '#1e40af' }}>
-                    ({bots.length} / {tenantDetails?.maxBots || 1} created)
+                    ({bots.length} / {tenantDetails?.maxBots} created)
                   </span>
                 )}
               </div>
@@ -433,7 +437,7 @@ function DashboardPage() {
               {!botsLoading && !botsError && (
                 <>
                   {/* Add Website Button */}
-                  {bots.length < (tenantDetails?.maxBots || 1) && (
+                  {bots.length < tenantDetails?.maxBots && (
                     <div style={{ marginBottom: '1rem' }}>
                       <button
                         className="dashboard-action-btn"

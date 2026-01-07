@@ -20,6 +20,14 @@ const { botLimiter } = require('../middleware/rateLimiter');
 router.post('/run', widgetAuth, resolveTenant, botLimiter, validateBotRun, botController.runBot);
 
 /**
+ * @route   GET /api/bot
+ * @desc    Get all bots for the current user
+ * @access  Protected (requires JWT, user role only)
+ * @returns { bots: Array, count: number } - List of user's bots
+ */
+router.get('/', auth, botController.getBots);
+
+/**
  * @route   POST /api/bot
  * @desc    Create a new bot for the current user
  * @access  Protected (requires JWT, user role only)

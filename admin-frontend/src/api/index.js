@@ -60,13 +60,25 @@ export async function apiRequest(endpoint, { method = 'GET', token, data, params
 }
 
 /**
- * Get all bots for a user
+ * Get all bots for a user (admin endpoint)
  * @param {string} userId - User ID
  * @param {string} token - JWT token
  * @returns {Promise<Object>} { bots: Array, count: number }
  */
 export async function getUserBots(userId, token) {
   return apiRequest(`/users/${userId}/bots`, {
+    method: 'GET',
+    token
+  });
+}
+
+/**
+ * Get all bots for the current user (user endpoint)
+ * @param {string} token - JWT token
+ * @returns {Promise<Object>} { bots: Array, count: number }
+ */
+export async function getUserOwnBots(token) {
+  return apiRequest('/bot', {
     method: 'GET',
     token
   });

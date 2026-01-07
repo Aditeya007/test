@@ -218,6 +218,53 @@ exports.updateBot = async (req, res) => {
 };
 
 /**
+ * Get all bots for the current user
+ * @route   GET /api/bot
+ * @access  Protected (requires JWT)
+ * @returns {Object} { bots: Array, count: number } - List of user's bots
+ */
+exports.getBots = async (req, res) => {
+  try {
+    const currentUserId = req.user.userId;
+    const currentUserRole = req.user.role;
+
+    // Only regular users can fetch their own bots via this endpoint
+    if (currentUserRole !== 'user') {
+      return res.status(403).json({
+        success: false,
+        error: 'This endpoint is for regular users only. Admins should use /api/users/:id/bots'
+      });
+    }
+
+    // Find all bots for the current user
+    const bots = await Bot.find({ userId: currentUserId }).sort({ createdAt: 1 });
+
+    // Transform bots to include id field
+    const botsWithId = bots.map(bot => {
+      const botObj = bot.toObject({ versionKey: false });
+      return {
+        ...botObj,
+        id: botObj._id
+      };
+    });
+
+    res.json({ 
+      bots: botsWithId, 
+      count: botsWithId.length 
+    });
+  } catch (err) {
+    console.error('❌ Error fetching bots:', {
+      message: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch bots'
+    });
+  }
+};
+
+/**
  * Create a new bot for the current user
  * @route   POST /api/bot
  * @access  Protected (requires JWT)
