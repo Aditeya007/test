@@ -5,73 +5,95 @@ import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../config';
 import '../styles/WidgetInstaller.css';
 
-const WidgetInstaller = ({ isOpen, onClose }) => {
+const WidgetInstaller = ({ isOpen, onClose, users = null }) => {
   const { user, activeTenant } = useAuth();
   const [copied, setCopied] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [apiToken, setApiToken] = useState(null);
-  const [loadingToken, setLoadingToken] = useState(false);
+  const [apiTokens, setApiTokens] = useState({});
+  const [loadingTokens, setLoadingTokens] = useState(false);
   const [tokenError, setTokenError] = useState(null);
+  const [activeTab, setActiveTab] = useState(0);
 
-  // Determine the effective user ID for the widget
-  const isUserRole = user?.role === 'user';
-  const effectiveUser = isUserRole ? user : activeTenant;
-  const userId = effectiveUser?.id || effectiveUser?._id;
+  // Determine the bots to display
+  // If users prop is provided (batch creation), use it as bots
+  // Otherwise, use the current user/tenant
+  const displayBots = useMemo(() => {
+    if (users && Array.isArray(users) && users.length > 0) {
+      return users;
+    }
+    const isUserRole = user?.role === 'user';
+    const effectiveUser = isUserRole ? user : activeTenant;
+    return effectiveUser ? [effectiveUser] : [];
+  }, [users, user, activeTenant]);
+
+  const currentBot = displayBots[activeTab] || null;
+  const botId = currentBot?.id || currentBot?._id;
 
   // Get the widget domain from config (or use current location origin for widget script)
   const widgetDomain = window.location.origin;
 
-  // Fetch API token when modal opens
+  // Fetch API tokens for all bots when modal opens
   useEffect(() => {
-    if (isOpen && userId) {
-      fetchApiToken();
+    if (isOpen && displayBots.length > 0) {
+      fetchAllApiTokens();
     }
-  }, [isOpen, userId]);
+  }, [isOpen, displayBots]);
 
-  const fetchApiToken = async () => {
-    setLoadingToken(true);
+  const fetchAllApiTokens = async () => {
+    setLoadingTokens(true);
     setTokenError(null);
+    const tokens = {};
+    
     try {
       const token = localStorage.getItem('jwt');
-      const endpoint = isUserRole 
-        ? `${API_BASE_URL}/user/api-token`
-        : `${API_BASE_URL}/users/${userId}/api-token`;
       
-      const response = await fetch(endpoint, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      for (const bot of displayBots) {
+        const botIdToFetch = bot.id || bot._id;
+        
+        try {
+          const endpoint = `${API_BASE_URL}/bot/${botIdToFetch}/api-token`;
+          
+          const response = await fetch(endpoint, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
 
-      if (response.ok) {
-        const data = await response.json();
-        setApiToken(data.apiToken);
-      } else {
-        const errorData = await response.json();
-        setTokenError(errorData.error || 'Failed to fetch API token');
+          if (response.ok) {
+            const data = await response.json();
+            tokens[botIdToFetch] = data.apiToken;
+          } else {
+            const errorData = await response.json();
+            console.error(`Failed to fetch token for bot ${bot.name}:`, errorData);
+          }
+        } catch (error) {
+          console.error(`Error fetching API token for bot ${bot.name}:`, error);
+        }
       }
+      
+      setApiTokens(tokens);
     } catch (error) {
-      console.error('Error fetching API token:', error);
-      setTokenError('Network error while fetching API token');
+      console.error('Error fetching API tokens:', error);
+      setTokenError('Network error while fetching API tokens');
     } finally {
-      setLoadingToken(false);
+      setLoadingTokens(false);
     }
   };
   
-  // Generate the installation snippet
+  // Generate the installation snippet for current bot
   const installSnippet = useMemo(() => {
-    if (!userId || !apiToken) return '';
+    if (!botId || !apiTokens[botId]) return '';
     
     return `<!-- RAG Chatbot Widget -->
 <script src="${widgetDomain}/ragChatWidget.js"></script>
 <script>
   window.RAGWidget.init({
     apiBase: "${API_BASE_URL}",
-    userId: "${userId}",
-    authToken: "${apiToken}"
+    botId: "${botId}",
+    authToken: "${apiTokens[botId]}"
   });
 </script>`;
-  }, [userId, apiToken, widgetDomain]);
+  }, [botId, apiTokens, widgetDomain]);
 
   const handleCopy = async () => {
     try {
@@ -94,6 +116,12 @@ const WidgetInstaller = ({ isOpen, onClose }) => {
     }
   };
 
+  const handleTabChange = (index) => {
+    setActiveTab(index);
+    setCopied(false);
+    setShowPreview(false);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -110,32 +138,41 @@ const WidgetInstaller = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        {!userId ? (
+        {displayBots.length === 0 ? (
           <div className="widget-installer-error">
-            <p>
-              {isUserRole 
-                ? 'Your account is not fully set up. Please contact your administrator.'
-                : 'Please create or select a user before installing the widget.'
-              }
-            </p>
+            <p>Please create or select a user before installing the widget.</p>
           </div>
-        ) : loadingToken ? (
+        ) : loadingTokens ? (
           <div className="widget-installer-loading">
-            <p>🔑 Generating secure authentication token...</p>
+            <p>🔑 Generating secure authentication tokens...</p>
           </div>
         ) : tokenError ? (
           <div className="widget-installer-error">
             <p>❌ {tokenError}</p>
-            <button onClick={fetchApiToken} className="widget-installer-retry-btn">
+            <button onClick={fetchAllApiTokens} className="widget-installer-retry-btn">
               🔄 Retry
             </button>
           </div>
-        ) : !apiToken ? (
+        ) : !apiTokens[botId] ? (
           <div className="widget-installer-loading">
             <p>⏳ Loading widget configuration...</p>
           </div>
         ) : (
           <>
+            {displayBots.length > 1 && (
+              <div className="widget-installer-tabs">
+                {displayBots.map((bot, index) => (
+                  <button
+                    key={bot.id || bot._id}
+                    className={`widget-installer-tab ${activeTab === index ? 'active' : ''}`}
+                    onClick={() => handleTabChange(index)}
+                  >
+                    Bot {index + 1}: {bot.name || bot.username}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="widget-installer-content">
               <p className="widget-installer-description">
                 Copy the code below and paste it into your website's HTML, just before the closing <code>&lt;/body&gt;</code> tag. 
@@ -143,9 +180,25 @@ const WidgetInstaller = ({ isOpen, onClose }) => {
               </p>
 
               <div className="widget-installer-user-info">
-                <p><strong>User:</strong> {effectiveUser?.name || effectiveUser?.username}</p>
-                <p><strong>User ID:</strong> <code>{userId}</code></p>
-                <p><strong>Auth Token:</strong> <code style={{fontSize: '0.75em'}}>{apiToken.substring(0, 16)}...●●●●</code></p>
+                <p><strong>Bot Name:</strong> {currentBot?.name || currentBot?.username}</p>
+                <p><strong>Bot ID:</strong> <code>{botId}</code></p>
+                {currentBot?.scrapedWebsites && currentBot.scrapedWebsites.length > 0 && (
+                  <div style={{ marginTop: '0.8em' }}>
+                    <strong>📌 Scraped Websites:</strong>
+                    <ul style={{ marginTop: '0.4em', paddingLeft: '1.5em' }}>
+                      {currentBot.scrapedWebsites.map((site, idx) => (
+                        <li key={idx}>
+                          <a href={site} target="_blank" rel="noopener noreferrer" style={{ color: '#0066cc' }}>
+                            {site}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <p style={{ marginTop: '0.5em' }}>
+                  <strong>Auth Token:</strong> <code style={{fontSize: '0.75em'}}>{apiTokens[botId].substring(0, 16)}...●●●●</code>
+                </p>
               </div>
 
               <div className="widget-installer-snippet-container">

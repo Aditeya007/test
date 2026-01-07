@@ -6,7 +6,8 @@ const defaultValues = {
   name: '',
   email: '',
   username: '',
-  password: ''
+  password: '',
+  botCount: 1
 };
 
 function UserForm({
@@ -73,6 +74,13 @@ function UserForm({
       errors.password = 'Password is required';
     } else if (values.password && values.password.length < 6) {
       errors.password = 'Password must be at least 6 characters';
+    }
+
+    if (!isEditMode) {
+      const botCount = parseInt(values.botCount, 10);
+      if (isNaN(botCount) || botCount < 1 || botCount > 10) {
+        errors.botCount = 'Bot count must be between 1 and 10';
+      }
     }
 
     return errors;
@@ -156,6 +164,58 @@ function UserForm({
         />
         {fieldErrors.password && <span className="field-error">{fieldErrors.password}</span>}
       </div>
+
+      {!isEditMode && (
+        <>
+          <div style={{ marginBottom: '1.2em' }}>
+            <label htmlFor="bot-count">
+              Number of Bots to Create (Batch Creation)
+            </label>
+            <input
+              id="bot-count"
+              name="botCount"
+              type="number"
+              min="1"
+              max="10"
+              placeholder="1"
+              value={values.botCount}
+              onChange={handleChange}
+              disabled={loading}
+              className={fieldErrors.botCount ? 'input-error' : ''}
+              style={{ width: '100%' }}
+            />
+            {fieldErrors.botCount && <span className="field-error">{fieldErrors.botCount}</span>}
+            <small style={{ display: 'block', marginTop: '0.3em', color: '#666' }}>
+              Create 1-10 bots at once. Enter 1 for a single bot.
+            </small>
+          </div>
+
+          {values.botCount > 1 && (
+            <div style={{ 
+              marginBottom: '1.5em', 
+              padding: '0.8em', 
+              background: '#f0f7ff', 
+              borderRadius: '4px',
+              border: '1px solid #b3d9ff'
+            }}>
+              <strong style={{ display: 'block', marginBottom: '0.5em', color: '#0066cc' }}>
+                Preview: Bots to be created
+              </strong>
+              <div style={{ fontSize: '0.9em', color: '#333' }}>
+                {Array.from({ length: Math.min(parseInt(values.botCount, 10) || 1, 10) }, (_, i) => {
+                  const index = i + 1;
+                  const username = `${values.username}_${index}`;
+                  return (
+                    <div key={index} style={{ marginBottom: '0.3em' }}>
+                      <strong>Bot {index}:</strong> {username}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       <div style={{ display: 'flex', gap: '0.8em', marginTop: '2em' }}>
         {isEditMode && (

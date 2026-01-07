@@ -64,4 +64,11 @@ router.delete('/:id', userController.deleteUser);
  */
 router.get('/:id/api-token', userController.getUserApiToken);
 
+/**
+ * @route   GET /api/users/:id/bots
+ * @desc    Get all bots for a user
+ * @access  Protected (admin only)
+ */
+router.get('/:id/bots', userController.getUserBots);
+
 module.exports = router;

@@ -7,6 +7,7 @@ import Loader from '../components/Loader';
 import UserForm from '../components/users/UserForm';
 import UserTable from '../components/users/UserTable';
 import UserResourcePanel from '../components/users/UserResourcePanel';
+import WidgetInstaller from '../components/WidgetInstaller';
 import '../styles/index.css';
 
 function AdminUsersPage() {
@@ -21,6 +22,8 @@ function AdminUsersPage() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [resourceState, setResourceState] = useState({ data: null, loading: false, error: '' });
   const [formResetKey, setFormResetKey] = useState(0);
+  const [showWidgetInstaller, setShowWidgetInstaller] = useState(false);
+  const [createdBots, setCreatedBots] = useState([]);
   const activeTenantId = activeTenant ? activeTenant.id || activeTenant._id : null;
 
   const fetchUsers = useCallback(async () => {
@@ -75,14 +78,32 @@ function AdminUsersPage() {
           name: values.name.trim(),
           email: values.email.trim(),
           username: values.username.trim(),
-          password: values.password
+          password: values.password,
+          botCount: values.botCount || 1
         }
       });
-      setSuccessMessage('User created successfully');
+      
+      // Handle batch creation response - bots array is returned
+      const bots = response.bots || [];
+      const count = bots.length;
+      
+      setSuccessMessage(
+        count === 1 
+          ? 'User and bot created successfully' 
+          : `User created with ${count} bots successfully`
+      );
+      
       setFormResetKey((key) => key + 1);
+      
+      // Set the user as active tenant (not the bots)
       if (response.user) {
         setActiveTenant(response.user);
       }
+      
+      // Show WidgetInstaller with created bots
+      setCreatedBots(bots);
+      setShowWidgetInstaller(true);
+      
       await handleRefresh();
     } catch (err) {
       setErrorMessage(err.message || 'Failed to create user');
@@ -252,6 +273,15 @@ function AdminUsersPage() {
           setSelectedUser(null);
           setResourceState({ data: null, loading: false, error: '' });
         }}
+      />
+
+      <WidgetInstaller
+        isOpen={showWidgetInstaller}
+        onClose={() => {
+          setShowWidgetInstaller(false);
+          setCreatedBots([]);
+        }}
+        users={createdBots}
       />
     </div>
   );

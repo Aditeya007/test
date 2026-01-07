@@ -86,6 +86,46 @@
   box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
 }
 
+/* Tabs for multiple bots */
+.widget-installer-tabs {
+  display: flex;
+  gap: 0.5em;
+  padding: 0 2.5em;
+  margin-top: -1em;
+  margin-bottom: 1em;
+  overflow-x: auto;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.widget-installer-tab {
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  padding: 0.8em 1.5em;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  border-bottom: none;
+  margin-bottom: -2px;
+}
+
+.widget-installer-tab:hover {
+  background: rgba(255, 131, 7, 0.1);
+  border-color: rgba(255, 131, 7, 0.3);
+  color: #ffb366;
+}
+
+.widget-installer-tab.active {
+  background: rgba(255, 131, 7, 0.2);
+  border-color: #FF8307;
+  color: #FF8307;
+  border-bottom: 2px solid #FF8307;
+  box-shadow: 0 -2px 8px rgba(255, 131, 7, 0.2);
+}
+
 .widget-installer-content {
   padding: 2.5em;
   overflow-y: auto;

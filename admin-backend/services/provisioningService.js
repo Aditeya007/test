@@ -96,6 +96,35 @@ const provisionResourcesForUser = ({ userId, username, resourceId: existingResou
 };
 
 /**
+ * Generate resource locations for a bot (similar to user but bot-specific)
+ */
+const provisionResourcesForBot = ({ botId, userId, username, botName, index }) => {
+  if (!botId || !userId || !username) {
+    const error = new Error('Cannot provision bot resources without botId, userId, and username');
+    error.statusCode = 500;
+    throw error;
+  }
+
+  const slug = toSlug(username);
+  const botSlug = toSlug(botName || `bot-${index}`);
+  const hash = crypto
+    .createHash('sha1')
+    .update(`${userId}:${botId}:${username}:${botSlug}`)
+    .digest('hex')
+    .slice(0, 10);
+
+  const vectorBase = process.env.DEFAULT_VECTOR_BASE_PATH
+    ? path.resolve(process.env.DEFAULT_VECTOR_BASE_PATH)
+    : path.resolve(process.cwd(), '..', 'tenant-vector-stores');
+
+  const vectorStorePath = ensureDirectory(path.join(vectorBase, `${slug}-${botSlug}-${hash}`));
+
+  return {
+    vectorStorePath
+  };
+};
+
+/**
  * Ensure a user document always carries provisioned resources.
  */
 const ensureUserResources = async (userDoc) => {
@@ -129,5 +158,6 @@ const ensureUserResources = async (userDoc) => {
 
 module.exports = {
   provisionResourcesForUser,
+  provisionResourcesForBot,
   ensureUserResources
 };
