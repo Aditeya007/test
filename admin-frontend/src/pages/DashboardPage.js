@@ -527,15 +527,51 @@ function DashboardPage() {
                   )}
 
                   {/* Actions - Only show when a website is selected */}
-                  {selectedBot ? (
+                  {selectedBot && (
                     <div style={{
                       padding: '1.5rem',
                       background: '#f0f9ff',
                       border: '2px solid #3b82f6',
                       borderRadius: '8px',
-                      marginTop: '1.5rem'
+                      marginTop: '1.5rem',
+                      position: 'relative'
                     }}>
-                      <h4 style={{ margin: '0 0 0.5rem 0', color: '#0c4a6e', fontSize: '1.125rem' }}>
+                      {/* Close Button */}
+                      <button
+                        onClick={() => setSelectedBot(null)}
+                        style={{
+                          position: 'absolute',
+                          top: '1rem',
+                          right: '1rem',
+                          background: 'transparent',
+                          border: 'none',
+                          fontSize: '1.5rem',
+                          cursor: 'pointer',
+                          color: '#64748b',
+                          lineHeight: 1,
+                          padding: '0.25rem',
+                          width: '2rem',
+                          height: '2rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: '4px',
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = '#e2e8f0';
+                          e.currentTarget.style.color = '#334155';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent';
+                          e.currentTarget.style.color = '#64748b';
+                        }}
+                        title="Close actions panel"
+                      >
+                        ✕
+                      </button>
+
+                      <h4 style={{ margin: '0 2rem 0.5rem 0', color: '#0c4a6e', fontSize: '1.125rem' }}>
                         Website Actions
                       </h4>
                       <p style={{ margin: '0 0 1rem 0', fontSize: '0.875rem', color: '#475569' }}>
@@ -611,18 +647,6 @@ function DashboardPage() {
                       }}>
                         ℹ️ <strong>Run Scrape</strong> adds website content to your chatbot's knowledge base.
                       </div>
-                    </div>
-                  ) : (
-                    <div style={{
-                      padding: '2rem',
-                      background: '#fef3c7',
-                      border: '1px solid #fbbf24',
-                      borderRadius: '8px',
-                      textAlign: 'center',
-                      color: '#92400e',
-                      marginTop: '1.5rem'
-                    }}>
-                      ⚠️ Please select a website above to see available actions
                     </div>
                   )}
                 </>
