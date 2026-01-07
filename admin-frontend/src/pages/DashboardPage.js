@@ -35,6 +35,11 @@ function DashboardPage() {
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [addWebsiteLoading, setAddWebsiteLoading] = useState(false);
   const [addWebsiteError, setAddWebsiteError] = useState('');
+  
+  // Run scrape state
+  const [scrapeLoading, setScrapeLoading] = useState(false);
+  const [scrapeError, setScrapeError] = useState('');
+  const [scrapeSuccess, setScrapeSuccess] = useState('');
 
   const activeTenantId = useMemo(() => {
     if (!activeTenant) {
@@ -254,6 +259,29 @@ function DashboardPage() {
     }
   }
 
+  async function handleRunScrape() {
+    if (!selectedBot || !token) return;
+    
+    setScrapeLoading(true);
+    setScrapeError('');
+    setScrapeSuccess('');
+    
+    try {
+      const botId = selectedBot._id || selectedBot.id;
+      await apiRequest(`/bot/${botId}/scrape`, {
+        method: 'POST',
+        token
+      });
+      setScrapeSuccess('Scrape job started successfully!');
+      setTimeout(() => setScrapeSuccess(''), 3000);
+    } catch (err) {
+      setScrapeError(err.message || 'Failed to start scrape');
+      setTimeout(() => setScrapeError(''), 5000);
+    } finally {
+      setScrapeLoading(false);
+    }
+  }
+
   const hasProvisionedTenant = Boolean(tenantDetails);
 
   const isAdmin = user?.role === 'admin';
@@ -315,159 +343,279 @@ function DashboardPage() {
         <Loader message="Loading your resources..." />
       ) : hasProvisionedTenant ? (
         <>
-          <section className="dashboard-info">
-            <h3>
-              {isAdmin ? `Bots for ${tenantDetails.name}` : 'Your Chatbots'}
-            </h3>
-            <p className="dashboard-subtitle">
-              {isAdmin 
-                ? 'Manage bots for this user.'
-                : 'Manage your chatbot websites and configurations.'
-              }
-            </p>
-            
-            {botsLoading && <Loader message="Loading bots..." size="small" />}
-            
-            {botsError && (
+          {/* Admin View - Minimal Info Only */}
+          {isAdmin && (
+            <section className="dashboard-info">
+              <h3>User: {tenantDetails.name || tenantDetails.username}</h3>
               <div style={{
-                padding: '1rem',
-                background: '#fee2e2',
-                border: '1px solid #ef4444',
-                borderRadius: '4px',
-                color: '#991b1b',
-                marginBottom: '1rem'
+                padding: '1.5rem',
+                background: '#f9fafb',
+                border: '1px solid #e5e7eb',
+                borderRadius: '8px',
+                marginTop: '1rem'
               }}>
-                {botsError}
+                <p style={{ margin: 0, fontSize: '1rem', color: '#374151' }}>
+                  <strong>Email:</strong> {tenantDetails.email}
+                </p>
+                <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#374151' }}>
+                  <strong>Capacity:</strong> {tenantDetails.maxBots || 1} chatbot{(tenantDetails.maxBots || 1) > 1 ? 's' : ''} allowed
+                </p>
               </div>
-            )}
-            
-            {!botsLoading && !botsError && (
-              <>
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '1rem',
-                  padding: '0.75rem 1rem',
-                  background: '#f9fafb',
-                  borderRadius: '4px',
-                  border: '1px solid #e5e7eb'
-                }}>
-                  <div>
-                    <strong>Bots: </strong>{bots.length} / {tenantDetails.maxBots || 1}
-                  </div>
-                  {isUser && bots.length < (tenantDetails.maxBots || 1) && (
-                    <button
-                      className="dashboard-action-btn"
-                      onClick={() => setAddWebsiteModalOpen(true)}
-                      style={{
-                        padding: '0.5rem 1rem',
-                        fontSize: '0.875rem'
-                      }}
-                    >
-                      ➕ Add Website
-                    </button>
-                  )}
-                </div>
-
-                {bots.length === 0 ? (
-                  <div style={{
-                    padding: '2rem',
-                    background: '#f9fafb',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                    textAlign: 'center',
-                    color: '#6b7280'
-                  }}>
-                    <p style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>No websites added yet</p>
-                    <p style={{ fontSize: '0.875rem', fontStyle: 'italic' }}>
-                      {isUser ? 'Click "Add Website" to create your first chatbot' : 'User has not created any bots yet'}
-                    </p>
-                  </div>
-                ) : (
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                    gap: '1rem',
-                    marginBottom: '1.5rem'
-                  }}>
-                    {bots.map(bot => (
-                      <div
-                        key={bot._id || bot.id}
-                        onClick={() => handleBotSelect(bot)}
-                        style={{
-                          padding: '1rem',
-                          background: selectedBot && (selectedBot._id || selectedBot.id) === (bot._id || bot.id) ? '#eff6ff' : 'white',
-                          border: selectedBot && (selectedBot._id || selectedBot.id) === (bot._id || bot.id) ? '2px solid #3b82f6' : '1px solid #e5e7eb',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', color: '#1f2937' }}>
-                          {bot.name || 'Untitled Bot'}
-                        </h4>
-                        {bot.scrapedWebsites && bot.scrapedWebsites.length > 0 ? (
-                          <a
-                            href={bot.scrapedWebsites[0]}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{
-                              fontSize: '0.875rem',
-                              color: '#3b82f6',
-                              textDecoration: 'none',
-                              wordBreak: 'break-all'
-                            }}
-                          >
-                            {bot.scrapedWebsites[0]}
-                          </a>
-                        ) : (
-                          <span style={{ fontSize: '0.875rem', color: '#9ca3af', fontStyle: 'italic' }}>
-                            No website configured
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+              <div style={{
+                marginTop: '1.5rem',
+                padding: '1rem',
+                background: '#fef3c7',
+                border: '1px solid #fbbf24',
+                borderRadius: '8px',
+                color: '#92400e',
+                fontSize: '0.875rem'
+              }}>
+                ℹ️ Users manage their own websites and chatbots. Select a different user from the Users page.
+              </div>
+            </section>
+          )}
+          
+          {/* User View - Full Bot Management */}
+          {isUser && (
+            <section className="dashboard-info">
+              <h3>Your Chatbots</h3>
+              <p className="dashboard-subtitle">
+                Manage your chatbot websites and configurations.
+              </p>
+              
+              {/* Capacity Display */}
+              <div style={{
+                padding: '1rem 1.5rem',
+                background: '#eff6ff',
+                border: '2px solid #3b82f6',
+                borderRadius: '8px',
+                marginBottom: '1.5rem',
+                fontSize: '1rem'
+              }}>
+                <strong>You can create up to {tenantDetails.maxBots || 1} chatbot{(tenantDetails.maxBots || 1) > 1 ? 's' : ''}</strong>
+                {bots.length > 0 && (
+                  <span style={{ marginLeft: '0.5rem', color: '#1e40af' }}>
+                    ({bots.length} / {tenantDetails.maxBots || 1} created)
+                  </span>
                 )}
-
-                {selectedBot && (
-                  <div style={{
-                    padding: '1.5rem',
-                    background: '#f0f9ff',
-                    border: '1px solid #bae6fd',
-                    borderRadius: '8px',
-                    marginTop: '1.5rem'
-                  }}>
-                    <h4 style={{ margin: '0 0 1rem 0', color: '#0c4a6e' }}>
-                      Actions for {selectedBot.name || 'Selected Bot'}
-                    </h4>
-                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              </div>
+              
+              {botsLoading && <Loader message="Loading websites..." size="small" />}
+              
+              {botsError && (
+                <div style={{
+                  padding: '1rem',
+                  background: '#fee2e2',
+                  border: '1px solid #ef4444',
+                  borderRadius: '4px',
+                  color: '#991b1b',
+                  marginBottom: '1rem'
+                }}>
+                  {botsError}
+                </div>
+              )}
+              
+              {!botsLoading && !botsError && (
+                <>
+                  {/* Add Website Button */}
+                  {bots.length < (tenantDetails.maxBots || 1) && (
+                    <div style={{ marginBottom: '1rem' }}>
                       <button
                         className="dashboard-action-btn"
-                        onClick={() => navigate('/bot')}
+                        onClick={() => setAddWebsiteModalOpen(true)}
+                        style={{
+                          padding: '0.75rem 1.5rem',
+                          fontSize: '1rem',
+                          width: '100%',
+                          maxWidth: '300px'
+                        }}
                       >
-                        💬 Open Chatbot
-                      </button>
-                      <button
-                        className="dashboard-action-btn dashboard-action-btn--widget"
-                        onClick={() => setWidgetInstallerOpen(true)}
-                      >
-                        🚀 Install Widget
+                        ➕ Add Website
                       </button>
                     </div>
-                  </div>
-                )}
-              </>
-            )}
-          </section>
+                  )}
+
+                  {/* Website List */}
+                  {bots.length === 0 ? (
+                    <div style={{
+                      padding: '2rem',
+                      background: '#f9fafb',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      textAlign: 'center',
+                      color: '#6b7280'
+                    }}>
+                      <p style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>No websites added yet</p>
+                      <p style={{ fontSize: '0.875rem', fontStyle: 'italic' }}>
+                        Click "Add Website" to create your first chatbot
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.875rem', color: '#6b7280', fontWeight: '500', textTransform: 'uppercase' }}>Your Websites</h4>
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.75rem',
+                        marginBottom: '1.5rem'
+                      }}>
+                        {bots.map(bot => (
+                          <div
+                            key={bot._id || bot.id}
+                            onClick={() => handleBotSelect(bot)}
+                            style={{
+                              padding: '1rem 1.25rem',
+                              background: selectedBot && (selectedBot._id || selectedBot.id) === (bot._id || bot.id) ? '#eff6ff' : 'white',
+                              border: selectedBot && (selectedBot._id || selectedBot.id) === (bot._id || bot.id) ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between'
+                            }}
+                          >
+                            <div style={{ flex: 1 }}>
+                              {bot.scrapedWebsites && bot.scrapedWebsites.length > 0 ? (
+                                <a
+                                  href={bot.scrapedWebsites[0]}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    fontSize: '1rem',
+                                    color: selectedBot && (selectedBot._id || selectedBot.id) === (bot._id || bot.id) ? '#1e40af' : '#3b82f6',
+                                    textDecoration: 'none',
+                                    fontWeight: '500',
+                                    wordBreak: 'break-all'
+                                  }}
+                                >
+                                  {bot.scrapedWebsites[0]}
+                                </a>
+                              ) : (
+                                <span style={{ fontSize: '1rem', color: '#9ca3af', fontStyle: 'italic' }}>
+                                  No website configured
+                                </span>
+                              )}
+                            </div>
+                            {selectedBot && (selectedBot._id || selectedBot.id) === (bot._id || bot.id) && (
+                              <span style={{ marginLeft: '1rem', color: '#3b82f6', fontSize: '1.25rem' }}>✓</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions - Only show when a website is selected */}
+                  {selectedBot ? (
+                    <div style={{
+                      padding: '1.5rem',
+                      background: '#f0f9ff',
+                      border: '2px solid #3b82f6',
+                      borderRadius: '8px',
+                      marginTop: '1.5rem'
+                    }}>
+                      <h4 style={{ margin: '0 0 0.5rem 0', color: '#0c4a6e', fontSize: '1.125rem' }}>
+                        Website Actions
+                      </h4>
+                      <p style={{ margin: '0 0 1rem 0', fontSize: '0.875rem', color: '#475569' }}>
+                        Manage chatbot for: <strong>{selectedBot.scrapedWebsites?.[0] || 'this website'}</strong>
+                      </p>
+                    
+                    {scrapeSuccess && (
+                      <div style={{
+                        padding: '0.75rem',
+                        background: '#d1fae5',
+                        border: '1px solid #10b981',
+                        borderRadius: '4px',
+                        color: '#065f46',
+                        marginBottom: '1rem',
+                        fontSize: '0.875rem'
+                      }}>
+                        {scrapeSuccess}
+                      </div>
+                    )}
+                    
+                    {scrapeError && (
+                      <div style={{
+                        padding: '0.75rem',
+                        background: '#fee2e2',
+                        border: '1px solid #ef4444',
+                        borderRadius: '4px',
+                        color: '#991b1b',
+                        marginBottom: '1rem',
+                        fontSize: '0.875rem'
+                      }}>
+                        {scrapeError}
+                      </div>
+                    )}
+                      
+                      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        <button
+                          className="dashboard-action-btn"
+                          onClick={handleRunScrape}
+                          disabled={scrapeLoading}
+                          style={{
+                            opacity: scrapeLoading ? 0.6 : 1,
+                            cursor: scrapeLoading ? 'not-allowed' : 'pointer',
+                            flex: '1 1 200px'
+                          }}
+                        >
+                          {scrapeLoading ? '⏳ Running...' : '🔄 Run Scrape'}
+                        </button>
+                        <button
+                          className="dashboard-action-btn"
+                          onClick={() => {
+                            const botId = selectedBot._id || selectedBot.id;
+                            navigate(`/bot/${botId}`);
+                          }}
+                          style={{ flex: '1 1 200px' }}
+                        >
+                          💬 Open Chatbot
+                        </button>
+                        <button
+                          className="dashboard-action-btn dashboard-action-btn--widget"
+                          onClick={() => setWidgetInstallerOpen(true)}
+                          style={{ flex: '1 1 200px' }}
+                        >
+                          🚀 Install Widget
+                        </button>
+                      </div>
+                      <div style={{
+                        marginTop: '1rem',
+                        padding: '0.75rem',
+                        background: '#e0f2fe',
+                        borderRadius: '4px',
+                        fontSize: '0.875rem',
+                        color: '#0c4a6e'
+                      }}>
+                        ℹ️ <strong>Run Scrape</strong> adds website content to your chatbot's knowledge base.
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{
+                      padding: '2rem',
+                      background: '#fef3c7',
+                      border: '1px solid #fbbf24',
+                      borderRadius: '8px',
+                      textAlign: 'center',
+                      color: '#92400e',
+                      marginTop: '1.5rem'
+                    }}>
+                      ⚠️ Please select a website above to see available actions
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          )}
         </>
       ) : (
         <section className="dashboard-empty">
           <p>
             {isAdmin 
-              ? 'Create a user to provision dedicated endpoints for the RAG system.'
+              ? 'Create a user or select one from the Users page to view their details.'
               : 'Your account is being set up. Please contact your administrator if this persists.'
             }
           </p>

@@ -1,7 +1,7 @@
 // src/pages/BotPage.js
 
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useChatWidget } from '../context/ChatWidgetContext';
 
@@ -16,6 +16,7 @@ const ChatIconLarge = () => (
 
 function BotPage() {
   const navigate = useNavigate();
+  const { botId } = useParams();
   const { user, activeTenant } = useAuth();
   const { isWidgetActive, activateWidget, openWidget } = useChatWidget();
 

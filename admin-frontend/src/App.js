@@ -46,7 +46,7 @@ function AppContent() {
           }
         />
         <Route
-          path="/bot"
+          path="/bot/:botId"
           element={
             <ProtectedRoute>
               <BotPage />
