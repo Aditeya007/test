@@ -99,8 +99,9 @@ function DashboardPage() {
 
   // Fetch bots when tenant details change
   useEffect(() => {
+    if (user?.role === 'admin') {
     fetchBots();
-  }, [fetchBots]);
+  }}, [fetchBots,user]);
 
   useEffect(() => {
     if (!token) {
@@ -223,11 +224,9 @@ function DashboardPage() {
       setAddWebsiteModalOpen(false);
       setWebsiteUrl('');
       
-      // Refresh bot list
-      await fetchBots();
-      
-      // Auto-select the new bot
+      // Append new bot to existing list
       if (response.bot) {
+        setBots(prev => [...prev, response.bot]);
         setSelectedBot(response.bot);
       }
     } catch (err) {
