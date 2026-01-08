@@ -1286,8 +1286,8 @@ ANSWER (be concise and factual):"""
             if session_id in self.name_collection_states:
                 if self.name_collection_states[session_id].get("waiting_for_name"):
                     success, response = self.process_name_collection(session_id, question)
-                    if success:
-                        return response
+                    # HARD GATE: Always return, whether validation passed or failed
+                    return response
 
             # Analyze question semantically (needed for pricing detection)
             print("🔍 DEBUG - Analyzing question semantically...")
@@ -1388,6 +1388,7 @@ ANSWER (be concise and factual):"""
                 else:
                     # If lead collection already in progress, continue it
                     if session_id in self.lead_collection_states:
+                        # HARD GATE: Always return, whether validation passed or failed
                         is_complete, response = self.process_lead_data_step_by_step(session_id, question)
                         return response
                     else:
