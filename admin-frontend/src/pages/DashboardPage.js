@@ -14,7 +14,7 @@ import '../styles/index.css';
 
 function DashboardPage() {
   const { user, token, logout, activeTenant, setActiveTenant } = useAuth();
-  const { selectedBotId, activateWidget, closeWidget } = useChatWidget();
+  const { selectedBotId, switchBot } = useChatWidget();
   const navigate = useNavigate();
 
   const [tenantDetails, setTenantDetails] = useState(activeTenant);
@@ -25,6 +25,9 @@ function DashboardPage() {
   const [createError, setCreateError] = useState('');
   const [createSuccess, setCreateSuccess] = useState('');
   const [isWidgetInstallerOpen, setWidgetInstallerOpen] = useState(false);
+  
+  // Website Actions panel state - separate from chatbot visibility
+  const [showWebsiteActionsPanel, setShowWebsiteActionsPanel] = useState(false);
 
   // Bots state
   const [bots, setBots] = useState([]);
@@ -236,7 +239,12 @@ function DashboardPage() {
   function handleBotSelect(bot) {
     const botId = bot?._id || bot?.id;
     if (botId) {
-      activateWidget(botId);
+      // Set the selected bot ID via context (for data access)
+      // This does NOT open the chatbot - only selects it for the Website Actions panel
+      switchBot(botId);
+      // Show the Website Actions panel
+      setShowWebsiteActionsPanel(true);
+      // DO NOT call activateWidget - chatbot opens only via explicit user action
     }
   }
 
@@ -270,11 +278,12 @@ function DashboardPage() {
       // Refetch bots from backend to get authoritative list
       await fetchBots();
       
-      // Select the newly created bot via context
+      // Select the newly created bot and show Website Actions panel
       if (response.bot) {
         const botId = response.bot._id || response.bot.id;
         if (botId) {
-          activateWidget(botId);
+          switchBot(botId);
+          setShowWebsiteActionsPanel(true);
         }
       }
     } catch (err) {
@@ -598,8 +607,8 @@ function DashboardPage() {
                     </div>
                   )}
 
-                  {/* Actions - Only show when a website is selected */}
-                  {selectedBot && (
+                  {/* Actions - Only show when panel is explicitly shown and a website is selected */}
+                  {showWebsiteActionsPanel && selectedBot && (
                     <div style={{
                       padding: '1.5rem',
                       background: '#f0f9ff',
@@ -608,9 +617,13 @@ function DashboardPage() {
                       marginTop: '1.5rem',
                       position: 'relative'
                     }}>
-                      {/* Close Button */}
+                      {/* Close Button - Only closes Website Actions panel, selection persists in context */}
                       <button
-                        onClick={() => closeWidget()}
+                        onClick={() => {
+                          // Close the Website Actions panel - that's all we need to do
+                          // The selected bot remains in context (no chat widget logic invoked)
+                          setShowWebsiteActionsPanel(false);
+                        }}
                         style={{
                           position: 'absolute',
                           top: '1rem',
