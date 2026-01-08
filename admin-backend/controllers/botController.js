@@ -35,7 +35,7 @@ exports.runBot = async (req, res) => {
         });
       }
       // For dashboard, verify bot belongs to authenticated user
-      if (req.user && bot.userId.toString() !== req.user.id) {
+      if (req.user && bot.userId.toString() !== req.user.userId) {
         return res.status(403).json({
           success: false,
           error: 'Access denied to this bot',
@@ -433,7 +433,7 @@ exports.createBot = async (req, res) => {
 exports.getScrapeHistory = async (req, res) => {
   try {
     const { botId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.userId; // FIXED: Use userId not id
 
     // Verify bot exists and belongs to user
     const bot = await Bot.findById(botId);
