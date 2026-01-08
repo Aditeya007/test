@@ -924,7 +924,7 @@ function DashboardPage() {
                                 fontSize: '0.75rem', 
                                 color: '#64748b'
                               }}>
-                                Automatically scrape website every 2 hours
+                                Automatically scrape website every 10 minutes
                               </div>
                             </div>
                             
@@ -1014,7 +1014,7 @@ function DashboardPage() {
                           fontSize: '0.875rem',
                           color: '#78350f'
                         }}>
-                          ℹ️ When enabled, the scheduler will automatically scrape your website every 2 hours and automatically updates chatbot knowledge.
+                          ℹ️ When enabled, the scheduler will automatically scrape your website every 10 minutes and automatically updates chatbot knowledge.
                         </div>
                       </div>
                     </div>

@@ -499,7 +499,7 @@ exports.startBotScheduler = [
       
       // Extract parameters from request body
       const startUrl = typeof req.body.startUrl === 'string' ? req.body.startUrl.trim() : '';
-      const intervalMinutes = 120; // Fixed 2-hour interval (same as scrapeController)
+      const intervalMinutes = 10; // Fixed 10-minute interval for testing
       const runImmediately = true; // Always run immediately on scheduler start
       const sitemapUrl = typeof req.body.sitemapUrl === 'string' ? req.body.sitemapUrl.trim() : undefined;
       const embeddingModelName = typeof req.body.embeddingModelName === 'string' ? req.body.embeddingModelName.trim() : undefined;
