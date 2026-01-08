@@ -20,6 +20,7 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const Bot = require('../models/Bot');
 const User = require('../models/User');
+const ScrapeHistory = require('../models/ScrapeHistory');
 
 // Path to scheduler script (reuse from scrapeController)
 const repoRoot = path.resolve(__dirname, '..', '..');
@@ -308,7 +309,7 @@ exports.startBotScrape = [
  * Internal helper: Mark scrape as completed
  * Called when Python scraper job finishes
  */
-const markScrapeCompleted = async (botId) => {
+const markScrapeCompleted = async (botId, trigger = 'manual') => {
   try {
     // CRITICAL: Initialize schedulerConfig if null to prevent MongoDB error
     const botDoc = await Bot.findById(botId);
@@ -317,23 +318,43 @@ const markScrapeCompleted = async (botId) => {
       return false;
     }
     
+    const now = new Date();
+    
     if (!botDoc.schedulerConfig) {
       await Bot.findByIdAndUpdate(botId, {
         schedulerConfig: {
-          lastScrapeCompleted: new Date(),
+          lastScrapeCompleted: now,
           botReady: true,
           scrapeStatus: 'completed'
-        }
+        },
+        botReady: true,
+        lastScrapeAt: now
       });
     } else {
       await Bot.findByIdAndUpdate(botId, {
         $set: {
-          'schedulerConfig.lastScrapeCompleted': new Date(),
+          'schedulerConfig.lastScrapeCompleted': now,
           'schedulerConfig.botReady': true,
-          'schedulerConfig.scrapeStatus': 'completed'
+          'schedulerConfig.scrapeStatus': 'completed',
+          'botReady': true,
+          'lastScrapeAt': now
         }
       });
     }
+    
+    // Log scrape history
+    try {
+      await ScrapeHistory.create({
+        botId: botId,
+        trigger: trigger,
+        success: true,
+        completedAt: now
+      });
+      console.log(`📝 Logged scrape history for bot ${botId} (trigger: ${trigger})`);
+    } catch (historyErr) {
+      console.error(`⚠️ Failed to log scrape history for bot ${botId}:`, historyErr.message);
+    }
+    
     console.log(`✅ Scrape marked as completed for bot ${botId}`);
     return true;
   } catch (err) {
@@ -351,6 +372,7 @@ const markScrapeCompleted = async (botId) => {
 exports.markBotScrapeComplete = async (req, res) => {
   try {
     const { botId } = req.params;
+    const { trigger } = req.body;
     
     // Check for service secret authentication (from Python scraper)
     const serviceSecret = req.headers['x-service-secret'];
@@ -360,7 +382,7 @@ exports.markBotScrapeComplete = async (req, res) => {
       // Service secret auth: skip ownership validation
       console.log(`📬 Bot scrape complete notification (service secret auth): ${botId}`);
       
-      const success = await markScrapeCompleted(botId);
+      const success = await markScrapeCompleted(botId, trigger || 'manual');
       
       if (success) {
         return res.json({
@@ -424,7 +446,7 @@ exports.markBotScrapeComplete = async (req, res) => {
       });
     }
     
-    const success = await markScrapeCompleted(botId);
+    const success = await markScrapeCompleted(botId, trigger || 'manual');
     
     if (success) {
       res.json({
