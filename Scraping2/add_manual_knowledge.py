@@ -129,8 +129,9 @@ def add_manual_knowledge(
         chunks = chunk_text(cleaned_content)
         
         if not chunks:
-            raise ValueError("No valid chunks created from content")
-        
+            logger.warning("⚠️ Chunking produced no chunks, falling back to single-chunk mode")
+            chunks = [cleaned_content.strip()]
+                
         logger.info(f"✅ Created {len(chunks)} chunks")
         
         # Initialize ChromaDB client
