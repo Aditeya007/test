@@ -10,7 +10,8 @@ Key design decisions:
 """
 
 from __future__ import annotations
-
+from dotenv import load_dotenv
+load_dotenv()
 import argparse
 import json
 import logging
@@ -373,6 +374,14 @@ def main(argv: list[str]) -> int:
         return 2
     except SystemExit as exc:
         return exc.code if exc.code else 0
+
+    # Ensure mongo_uri is populated from environment if not provided via CLI
+    args.mongo_uri = (
+        args.mongo_uri
+        or os.environ.get("MONGO_URI")
+        or os.environ.get("MONGODB_URI")
+        or os.environ.get("UPDATER_MONGODB_URI")
+    )
 
     _configure_logging(args.log_level, args.resource_id)
     
