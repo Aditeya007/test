@@ -1282,12 +1282,24 @@ ANSWER (be concise and factual):"""
         self.last_sources_by_session.pop(session_id, None)
 
         try:
-            # Handle contact information collection
+            # ============================================================================
+            # PRIORITY 1: Name collection (separate flow)
+            # ============================================================================
             if session_id in self.name_collection_states:
                 if self.name_collection_states[session_id].get("waiting_for_name"):
                     success, response = self.process_name_collection(session_id, question)
-                    # HARD GATE: Always return, whether validation passed or failed
                     return response
+
+            # ============================================================================
+            # PRIORITY 2: Lead collection HARD GATE - Must happen BEFORE everything else
+            # ============================================================================
+            if session_id in self.lead_collection_states:
+                is_complete, response = self.process_lead_data_step_by_step(session_id, question)
+                return response
+
+            # ============================================================================
+            # PRIORITY 3: Normal flow - contact extraction, pricing detection, RAG
+            # ============================================================================
 
             # Analyze question semantically (needed for pricing detection)
             print("🔍 DEBUG - Analyzing question semantically...")
@@ -1310,6 +1322,12 @@ ANSWER (be concise and factual):"""
                 # Check if we have a phone number
                 if contact_info['phones']:
                     phone = contact_info['phones'][0]
+                    
+                    # VALIDATE phone using LeadValidator
+                    is_valid, error_message = LeadValidator.validate_phone(phone)
+                    if not is_valid:
+                        return f"❌ {error_message} Please try again."
+                    
                     # Get original pricing question
                     original_pricing_q = self.conversation_contexts.get(session_id, {}).get('original_pricing_question', question)
 
@@ -1338,6 +1356,12 @@ ANSWER (be concise and factual):"""
                 # Check if we have an email
                 elif contact_info['emails']:
                     email = contact_info['emails'][0]
+                    
+                    # VALIDATE email using LeadValidator
+                    is_valid, error_message = LeadValidator.validate_email(email)
+                    if not is_valid:
+                        return f"❌ {error_message} Please try again."
+                    
                     # Get original pricing question
                     original_pricing_q = self.conversation_contexts.get(session_id, {}).get('original_pricing_question', question)
 
@@ -1373,28 +1397,28 @@ ANSWER (be concise and factual):"""
                     }
                     return "Before we continue, may I have your name please?"
 
-            # Analyze question semantically (needed for pricing detection)
+            # Analyze question semantically (for pricing detection and retrieval)
             print("🔍 DEBUG - Analyzing question semantically...")
             question_analysis = self.analyze_question_semantically(question)
             print(f"🔍 DEBUG - Question analysis completed")
 
             # Check for pricing inquiry and start lead collection if needed
             if self.detect_pricing_inquiry(question, question_analysis.get('intent', '')):
+                # Store the original pricing question
+                if 'original_pricing_question' not in self.conversation_contexts.get(session_id, {}):
+                    if session_id not in self.conversation_contexts:
+                        self.conversation_contexts[session_id] = {}
+                    self.conversation_contexts[session_id]['original_pricing_question'] = question
+                
                 # Check if lead is already collected for this session
                 if self.conversation_contexts.get(session_id, {}).get('lead_collected', False):
                     print("🔍 DEBUG - Lead already collected for this session, proceeding with normal RAG response")
                     # Skip lead collection, continue to multi-pass retrieval section
                     pass
                 else:
-                    # If lead collection already in progress, continue it
-                    if session_id in self.lead_collection_states:
-                        # HARD GATE: Always return, whether validation passed or failed
-                        is_complete, response = self.process_lead_data_step_by_step(session_id, question)
-                        return response
-                    else:
-                        # Start new lead collection for pricing inquiry
-                        self.start_lead_collection(session_id, question)
-                        return self.get_lead_collection_request(session_id)
+                    # Start new lead collection for pricing inquiry
+                    self.start_lead_collection(session_id, question)
+                    return self.get_lead_collection_request(session_id)
 
             # ============================================================================
             # IMPROVED RETRIEVAL: Multi-pass aggregation for consistency
