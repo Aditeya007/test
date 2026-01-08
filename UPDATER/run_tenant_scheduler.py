@@ -300,44 +300,40 @@ def _run_updater_job(args: argparse.Namespace) -> None:
     
     logging.info("Command: %s", " ".join(cmd))
     
+    success = False
+    bot_notified = False
+    
     try:
         start_time = time.time()
         result = subprocess.run(
             cmd,
             cwd=ROOT_DIR,
-            capture_output=True,
             text=True,
-            env={**os.environ, "PYTHONUNBUFFERED": "1"}
+            env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            stdout=sys.stdout,
+            stderr=sys.stderr,
         )
         elapsed = time.time() - start_time
         
         if result.returncode == 0:
             logging.info("Updater job completed successfully in %.1f seconds", elapsed)
-            # Try to parse the JSON output for summary
-            try:
-                lines = result.stdout.strip().split('\n')
-                for line in reversed(lines):
-                    line = line.strip()
-                    if line.startswith('{') and line.endswith('}'):
-                        summary = json.loads(line)
-                        if 'stats' in summary:
-                            logging.info("Job stats: %s", json.dumps(summary.get('stats', {})))
-                        break
-            except (json.JSONDecodeError, IndexError):
-                pass
+            success = True
             
             # Notify the bot to reload its vector store
-            _notify_bot_reload(args)
+            bot_notified = _notify_bot_reload(args)
             
         else:
             logging.error("Updater job failed with exit code %d", result.returncode)
-            if result.stderr:
-                # Log last 500 chars of stderr
-                stderr_tail = result.stderr[-500:] if len(result.stderr) > 500 else result.stderr
-                logging.error("stderr: %s", stderr_tail)
+            logging.error("Scraper did not complete successfully - check logs above")
+            success = False
                 
     except Exception as exc:
         logging.exception("Failed to execute updater subprocess: %s", exc)
+        success = False
+    
+    # Always notify backend of completion status
+    if not success or not bot_notified:
+        _notify_backend_scrape_complete(args, success)
 
 
 def _setup_schedule(args: argparse.Namespace) -> None:
