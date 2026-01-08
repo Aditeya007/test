@@ -403,7 +403,7 @@ function DashboardPage() {
       await apiRequest(`/bot/${botId}/manual-knowledge`, {
         method: 'POST',
         token,
-        body: { content: trimmedContent }
+        data: { content: trimmedContent }
       });
       
       setAddKnowledgeSuccess('Knowledge added successfully!');
