@@ -69,13 +69,16 @@ while True:
             # Clean exit (Ctrl+C) - don't restart
             print("\n✅ Bot exited cleanly (exit code 0). Stopping auto-restart.")
             break
+        elif exit_code == 1:
+            # Exit code 1 = requested restart (e.g., after scheduled scrape)
+            print(f"\n🔁 Bot process restarting after scheduled scrape (exit code {exit_code})")
+            print("🤖 Bot restarted successfully")
+            continue
         else:
-            # Any non-zero exit means restart (code 1 = requested, others = crash)
+            # Any other non-zero exit means crash - restart with delay
             print(f"\n🔄 Bot exited with code {exit_code}. Restarting...")
-            if exit_code != 1:
-                # If it wasn't a requested restart, wait a bit
-                print("   (Waiting 3 seconds before restart...)")
-                time.sleep(3)
+            print("   (Waiting 3 seconds before restart...)")
+            time.sleep(3)
             continue
             
     except KeyboardInterrupt:

@@ -6,6 +6,7 @@ const { spawn } = require('child_process');
 
 const { getUserTenantContext } = require('../services/userContextService');
 const User = require('../models/User');
+const Bot = require('../models/Bot');
 
 // Path to scheduler script
 const repoRoot = path.resolve(__dirname, '..', '..');
@@ -178,28 +179,6 @@ exports.startScrape = async (req, res) => {
     // Create log file for the scraper
     const logFilePath = path.join(tenantContext.vectorStorePath, 'scraper.log');
     const logFile = fs.openSync(logFilePath, 'a');
-
-    // Clear previous scrape completion status before starting new scrape
-    // First check if schedulerConfig exists, if null initialize it
-    const userDoc = await User.findById(userId);
-    if (!userDoc.schedulerConfig) {
-      // Initialize schedulerConfig if it's null
-      await User.findByIdAndUpdate(userId, {
-        schedulerConfig: {
-          lastScrapeCompleted: null,
-          botReady: false
-        }
-      });
-    } else {
-      // schedulerConfig exists, just update the fields
-      await User.findByIdAndUpdate(userId, {
-        $set: {
-          'schedulerConfig.lastScrapeCompleted': null,
-          'schedulerConfig.botReady': false
-        }
-      });
-    }
-    console.log(`🔄 Cleared previous scrape status for ${tenantContext.resourceId}`);
 
     // Spawn as detached background process
     const child = spawn(pythonExe, args, {
@@ -468,8 +447,7 @@ exports.startScheduler = async (req, res) => {
         return res.status(409).json({
           success: false,
           error: 'A scheduler is already running for this tenant. Stop it first before starting a new one.',
-          schedulerPid: userDoc.schedulerPid,
-          schedulerConfig: userDoc.schedulerConfig
+          schedulerPid: userDoc.schedulerPid
         });
       } catch (err) {
         // Process doesn't exist anymore, clean up stale data
@@ -587,16 +565,9 @@ exports.startScheduler = async (req, res) => {
     console.log(`✅ Scheduler spawned for ${tenantContext.resourceId} with PID ${schedulerPid}`);
 
     // Update user document with scheduler info
-    const schedulerConfig = {
-      intervalMinutes,
-      startUrl,
-      lastStarted: new Date()
-    };
-
     await User.findByIdAndUpdate(userId, {
       schedulerPid,
-      schedulerStatus: 'active',
-      schedulerConfig
+      schedulerStatus: 'active'
     });
 
     console.log(`✅ Scheduler started for ${tenantContext.resourceId} with PID ${schedulerPid}`);
@@ -605,7 +576,6 @@ exports.startScheduler = async (req, res) => {
       success: true,
       message: 'Scheduler started successfully',
       schedulerPid,
-      schedulerConfig,
       resourceId: tenantContext.resourceId
     });
 
@@ -713,13 +683,9 @@ exports.stopScheduler = async (req, res) => {
     }
 
     // Update user document
-    const schedulerConfig = userDoc.schedulerConfig || {};
-    schedulerConfig.lastStopped = new Date();
-
     await User.findByIdAndUpdate(userId, {
       schedulerPid: null,
-      schedulerStatus: 'inactive',
-      schedulerConfig
+      schedulerStatus: 'inactive'
     });
 
     console.log(`✅ Scheduler stopped for ${tenantContext.resourceId}`);
@@ -793,8 +759,7 @@ exports.getSchedulerStatus = async (req, res) => {
       success: true,
       resourceId: tenantContext.resourceId,
       schedulerStatus: isActive ? 'active' : 'inactive',
-      schedulerPid: isActive ? userDoc.schedulerPid : null,
-      schedulerConfig: userDoc.schedulerConfig
+      schedulerPid: isActive ? userDoc.schedulerPid : null
     });
 
   } catch (err) {
@@ -813,6 +778,12 @@ exports.getSchedulerStatus = async (req, res) => {
 /**
  * Internal endpoint for scheduler to notify when a scrape completes.
  * Uses service secret for authentication (not user JWT).
+ * 
+ * ARCHITECTURE RULES:
+ * - resourceId === botId (NOT userId)
+ * - Bot model is the ONLY source of truth
+ * - NO fallback to User model
+ * - Bot isolation is strictly enforced
  */
 exports.notifyScrapeComplete = async (req, res) => {
   try {
@@ -826,7 +797,7 @@ exports.notifyScrapeComplete = async (req, res) => {
       });
     }
 
-    const { resourceId, success, message, documentCount, botReady } = req.body;
+    const { resourceId, success, botReady, trigger, completedAt, message, documentCount } = req.body;
 
     if (!resourceId) {
       return res.status(400).json({
@@ -835,43 +806,50 @@ exports.notifyScrapeComplete = async (req, res) => {
       });
     }
 
-    console.log(`📬 Scrape complete notification for ${resourceId}`);
-    console.log(`   Success: ${success}, Bot Ready: ${botReady}, Documents: ${documentCount || 'unknown'}`);
+    console.log(`📬 Scheduled scrape completion notification for bot ${resourceId}`);
+    console.log(`   Success: ${success}, Bot Ready: ${botReady}, Trigger: ${trigger || 'unknown'}, Documents: ${documentCount || 'unknown'}`);
 
-    // Find user by resourceId
-    const userDoc = await User.findOne({ resourceId });
-    if (!userDoc) {
+    // resourceId === botId - resolve bot directly
+    const bot = await Bot.findById(resourceId);
+    
+    if (!bot) {
+      console.error(`❌ Bot not found: ${resourceId}`);
       return res.status(404).json({
         success: false,
-        error: `User with resourceId ${resourceId} not found`
+        error: `Bot ${resourceId} not found`
       });
     }
 
-    // Check if schedulerConfig is null, initialize if needed
-    if (!userDoc.schedulerConfig) {
-      await User.findByIdAndUpdate(userDoc._id, {
-        schedulerConfig: {
-          lastScrapeCompleted: new Date(),
-          botReady: botReady !== undefined ? botReady : (success === true)
-        }
-      });
-    } else {
-      // schedulerConfig exists, use $set to update only specific fields
-      await User.findByIdAndUpdate(userDoc._id, {
-        $set: {
-          'schedulerConfig.lastScrapeCompleted': new Date(),
-          'schedulerConfig.botReady': botReady !== undefined ? botReady : (success === true)
-        }
-      });
+    // Update Bot model with all required fields
+    const now = completedAt ? new Date(completedAt) : new Date();
+    const updateFields = {
+      botReady: botReady !== undefined ? botReady : (success === true),
+      lastScrapeAt: now,
+      updatedAt: now
+    };
+    
+    // Only update lastScheduledScrapeAt if this is a scheduled scrape
+    if (trigger === 'scheduler') {
+      updateFields.lastScheduledScrapeAt = now;
+      updateFields.schedulerStatus = 'active';
     }
-
-    console.log(`✅ Updated scheduler config for ${resourceId}: botReady = ${botReady !== undefined ? botReady : (success === true)}`);
+    
+    await Bot.findByIdAndUpdate(bot._id, { $set: updateFields });
+    
+    console.log(`✅ Updated Bot model for ${resourceId}:`);
+    console.log(`   - botReady: ${updateFields.botReady}`);
+    console.log(`   - lastScrapeAt: ${now.toISOString()}`);
+    if (trigger === 'scheduler') {
+      console.log(`   - lastScheduledScrapeAt: ${now.toISOString()}`);
+      console.log(`   - schedulerStatus: active`);
+    }
 
     res.json({
       success: true,
       message: 'Scrape completion recorded',
       resourceId,
-      botReady: botReady !== undefined ? botReady : (success === true)
+      botReady: updateFields.botReady,
+      trigger: trigger || 'unknown'
     });
 
   } catch (err) {
@@ -884,53 +862,47 @@ exports.notifyScrapeComplete = async (req, res) => {
 };
 
 /**
- * Get current scrape status for the authenticated user.
- * Returns whether a scrape is running or completed based on lastScrapeCompleted timestamp.
+ * Get current scrape status for a bot.
+ * 
+ * ARCHITECTURE:
+ * - resourceId === botId
+ * - Bot model is the ONLY source of truth
+ * - Returns bot.botReady, bot.lastScrapeAt, bot.lastScheduledScrapeAt
  */
 exports.getScrapeStatus = async (req, res) => {
   try {
-    // Accept optional resourceId query parameter to resolve user
-    // This fixes mismatch where notify-complete uses resourceId but status was using userId
     const resourceId = req.query.resourceId;
     
-    let userDoc;
-    if (resourceId) {
-      // Look up by resourceId (same as notify-complete)
-      userDoc = await User.findOne({ resourceId });
-    } else {
-      // Fall back to userId from resolveTenant middleware or authenticated user
-      const userId = req.tenantUserId || req.user?.userId;
-      
-      if (!userId) {
-        return res.status(400).json({
-          success: false,
-          error: 'No user identifier provided'
-        });
-      }
-      
-      userDoc = await User.findById(userId);
+    if (!resourceId) {
+      return res.status(400).json({
+        success: false,
+        error: 'resourceId (botId) is required'
+      });
     }
     
-    if (!userDoc) {
+    // resourceId === botId - resolve bot directly
+    const bot = await Bot.findById(resourceId);
+    
+    if (!bot) {
       return res.status(404).json({
         success: false,
-        error: 'User not found'
+        error: `Bot ${resourceId} not found`
       });
     }
 
-    const schedulerConfig = userDoc.schedulerConfig || {};
-    const lastCompleted = schedulerConfig.lastScrapeCompleted || null;
-    const botReady = schedulerConfig.botReady || false;
+    // Derive status from Bot model fields only
+    const botReady = bot.botReady || false;
+    const lastScrapeAt = bot.lastScrapeAt || null;
+    const lastScheduledScrapeAt = bot.lastScheduledScrapeAt || null;
+    const schedulerStatus = bot.schedulerStatus || 'inactive';
     
-    // If lastScrapeCompleted exists, consider the scrape completed
-    const status = lastCompleted ? 'completed' : 'running';
-
     res.json({
       success: true,
-      status,
-      lastCompleted,
+      resourceId,
       botReady,
-      resourceId: userDoc.resourceId
+      lastScrapeAt,
+      lastScheduledScrapeAt,
+      schedulerStatus
     });
 
   } catch (err) {

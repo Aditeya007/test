@@ -158,33 +158,28 @@ def _build_updater_command(args: argparse.Namespace) -> list[str]:
     return cmd
 
 
-def _notify_bot_reload(args: argparse.Namespace) -> bool:
-    """Notify the bot to reload its vector store after a successful scrape.
+def _trigger_bot_restart(args: argparse.Namespace) -> None:
+    """Trigger bot process restart after a successful scrape.
     
-    Returns True if the bot was successfully notified, False otherwise.
+    This is MANDATORY - if restart fails, the entire completion flow is aborted.
+    Bot must fully restart to reload all vectors from disk.
+    
+    Raises exception if restart fails.
     """
     import urllib.request
     import urllib.error
     
     bot_base_url = os.environ.get("BOT_URL", "http://localhost:8000")
-    # Try both environment variable names for the service secret
     service_secret = os.environ.get("FASTAPI_SHARED_SECRET") or os.environ.get("SERVICE_SECRET", "default_service_secret")
     
-    # Build the reload URL with query parameters
-    params = urllib.parse.urlencode({
-        "resource_id": args.resource_id,
-        "vector_store_path": args.vector_store_path,
-    })
+    restart_url = f"{bot_base_url}/system/restart"
     
-    reload_url = f"{bot_base_url}/reload_vectors?{params}"
+    logging.info("🔁 Triggering MANDATORY bot process restart...")
+    logging.info("   URL: %s", restart_url)
     
-    logging.info("🔄 Notifying bot to reload vector store...")
-    logging.info("   URL: %s", reload_url)
-    
-    bot_notified = False
     try:
         request = urllib.request.Request(
-            reload_url,
+            restart_url,
             method="POST",
             headers={
                 "Content-Type": "application/json",
@@ -194,34 +189,35 @@ def _notify_bot_reload(args: argparse.Namespace) -> bool:
         
         with urllib.request.urlopen(request, timeout=30) as response:
             response_data = response.read().decode('utf-8')
-            try:
-                result = json.loads(response_data)
-                doc_count = result.get('document_count', 'unknown')
-                logging.info("✅ Bot reloaded successfully! Document count: %s", doc_count)
-                logging.info("🤖 BOT IS NOW READY TO USE with updated knowledge base!")
-                bot_notified = True
-            except json.JSONDecodeError:
-                logging.info("✅ Bot reload response: %s", response_data[:200])
-                bot_notified = True
+            result = json.loads(response_data)
+            logging.info("✅ Bot restart triggered successfully! PID: %s", result.get('pid', 'unknown'))
+            logging.info("🔁 Bot process restarting after scheduled scrape")
+            logging.info("🤖 BOT WILL BE READY in a few seconds with updated knowledge base!")
                 
     except urllib.error.HTTPError as e:
-        logging.warning("⚠️ Bot reload HTTP error %d: %s", e.code, e.reason)
-        # Try the mark-data-updated endpoint as fallback
-        bot_notified = _mark_data_updated_fallback(args, bot_base_url, service_secret)
+        error_msg = f"Bot restart failed with HTTP {e.code}: {e.reason}"
+        logging.error("❌ CRITICAL: %s", error_msg)
+        raise RuntimeError(error_msg)
     except urllib.error.URLError as e:
-        logging.warning("⚠️ Could not reach bot at %s: %s", bot_base_url, e.reason)
-        logging.warning("   Bot may not be running. Data will be loaded on next bot startup.")
+        error_msg = f"Could not reach bot at {bot_base_url}: {e.reason}"
+        logging.error("❌ CRITICAL: %s", error_msg)
+        raise RuntimeError(error_msg)
+    except json.JSONDecodeError as e:
+        error_msg = f"Invalid response from bot restart endpoint: {e}"
+        logging.error("❌ CRITICAL: %s", error_msg)
+        raise RuntimeError(error_msg)
     except Exception as e:
-        logging.warning("⚠️ Failed to notify bot: %s", e)
-    
-    # Also notify the admin backend about scrape completion
-    _notify_backend_scrape_complete(args, bot_notified)
-    
-    return bot_notified
+        error_msg = f"Bot restart failed: {e}"
+        logging.error("❌ CRITICAL: %s", error_msg)
+        raise RuntimeError(error_msg)
 
 
 def _notify_backend_scrape_complete(args: argparse.Namespace, success: bool) -> None:
-    """Notify the admin backend that a scrape has completed."""
+    """Notify the admin backend that a scheduled scrape has completed.
+    
+    This is the SINGLE SOURCE OF TRUTH for scheduled scrape completion.
+    Sends complete payload with botReady, trigger, and timestamp.
+    """
     import urllib.request
     import urllib.error
     
@@ -230,11 +226,17 @@ def _notify_backend_scrape_complete(args: argparse.Namespace, success: bool) -> 
     
     notify_url = f"{backend_url}/api/scrape/scheduler/scrape-complete"
     
+    # Build complete payload as per requirement
     payload = json.dumps({
         "resourceId": args.resource_id,
         "success": success,
-        "message": "Scheduled scrape completed" if success else "Scheduled scrape completed but bot notification failed"
+        "botReady": success,  # Bot is ready if scrape succeeded and restart triggered
+        "trigger": "scheduler",
+        "completedAt": datetime.utcnow().isoformat(),
+        "message": "Scheduled scrape completed and bot restarted" if success else "Scheduled scrape completed but bot restart may have failed"
     }).encode('utf-8')
+    
+    logging.info("📬 Notifying admin backend of scheduled scrape completion...")
     
     try:
         request = urllib.request.Request(
@@ -248,7 +250,13 @@ def _notify_backend_scrape_complete(args: argparse.Namespace, success: bool) -> 
         )
         
         with urllib.request.urlopen(request, timeout=10) as response:
-            logging.info("✅ Admin backend notified of scrape completion")
+            response_data = response.read().decode('utf-8')
+            logging.info("✅ Admin backend notified of scheduled scrape completion")
+            logging.info("   Response: %s", response_data[:200])
+    except urllib.error.HTTPError as e:
+        logging.warning("⚠️ Backend notification HTTP error %d: %s", e.code, e.reason)
+    except urllib.error.URLError as e:
+        logging.warning("⚠️ Could not reach admin backend at %s: %s", backend_url, e.reason)
     except Exception as e:
         logging.warning("⚠️ Failed to notify admin backend: %s", e)
 
@@ -318,23 +326,26 @@ def _run_updater_job(args: argparse.Namespace) -> None:
         
         if result.returncode == 0:
             logging.info("Updater job completed successfully in %.1f seconds", elapsed)
-            success = True
             
-            # Notify the bot to reload its vector store
-            bot_notified = _notify_bot_reload(args)
+            # MANDATORY: Trigger bot process restart
+            # If this fails, DO NOT notify backend - the scrape is considered incomplete
+            try:
+                _trigger_bot_restart(args)
+                # Only notify backend AFTER successful restart trigger
+                _notify_backend_scrape_complete(args, success=True)
+            except Exception as restart_error:
+                logging.error("❌ ABORTING: Bot restart failed - %s", restart_error)
+                logging.error("❌ Backend will NOT be notified - scrape cycle incomplete")
+                # Do not notify backend - restart is mandatory
             
         else:
             logging.error("Updater job failed with exit code %d", result.returncode)
             logging.error("Scraper did not complete successfully - check logs above")
-            success = False
+            _notify_backend_scrape_complete(args, success=False)
                 
     except Exception as exc:
         logging.exception("Failed to execute updater subprocess: %s", exc)
-        success = False
-    
-    # Always notify backend of completion status
-    if not success or not bot_notified:
-        _notify_backend_scrape_complete(args, success)
+        _notify_backend_scrape_complete(args, success=False)
 
 
 def _setup_schedule(args: argparse.Namespace) -> None:

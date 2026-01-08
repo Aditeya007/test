@@ -47,6 +47,19 @@ const botSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed,
     default: null
   },
+  // Bot readiness and scrape tracking
+  botReady: {
+    type: Boolean,
+    default: false
+  },
+  lastScrapeAt: {
+    type: Date,
+    default: null
+  },
+  lastScheduledScrapeAt: {
+    type: Date,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now
