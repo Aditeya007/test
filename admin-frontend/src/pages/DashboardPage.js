@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useChatWidget } from '../context/ChatWidgetContext';
-import { apiRequest, getUserBots, getUserOwnBots, createBot } from '../api';
+import { apiRequest, getUserBots, getUserOwnBots, createBot, startBotScheduler, stopBotScheduler } from '../api';
 import UserForm from '../components/users/UserForm';
 import Loader from '../components/Loader';
 import WidgetInstaller from '../components/WidgetInstaller';
@@ -52,6 +52,14 @@ function DashboardPage() {
   
   // Polling state for scrape completion tracking
   const [pollingIntervalId, setPollingIntervalId] = useState(null);
+  
+  // Scheduler state (UI only - NO source of truth state)
+  const [schedulerLoading, setSchedulerLoading] = useState(false);
+  const [schedulerError, setSchedulerError] = useState('');
+  
+  // Derive scheduler state from selectedBot - SINGLE SOURCE OF TRUTH
+  const schedulerStatus = selectedBot?.schedulerStatus ?? 'inactive';
+  const schedulerConfig = selectedBot?.schedulerConfig ?? null;
 
   const activeTenantId = useMemo(() => {
     if (!activeTenant) {
@@ -380,6 +388,34 @@ function DashboardPage() {
     }, 5000);
     
     setPollingIntervalId(intervalId);
+  }
+  
+  // Handle scheduler toggle
+  async function handleSchedulerToggle(enable) {
+    if (!selectedBot || !token || schedulerLoading) return;
+    
+    setSchedulerLoading(true);
+    setSchedulerError('');
+    
+    const botId = selectedBot._id || selectedBot.id;
+    
+    try {
+      if (enable) {
+        // Start scheduler
+        await startBotScheduler(botId, token);
+      } else {
+        // Stop scheduler
+        await stopBotScheduler(botId, token);
+      }
+      
+      // Refetch bots to get updated state from backend
+      await fetchBots();
+    } catch (err) {
+      setSchedulerError(err.message || 'Failed to toggle scheduler');
+      setTimeout(() => setSchedulerError(''), 5000);
+    } finally {
+      setSchedulerLoading(false);
+    }
   }
 
   const hasProvisionedTenant = Boolean(tenantDetails);
@@ -830,6 +866,156 @@ function DashboardPage() {
                         color: '#0c4a6e'
                       }}>
                         ℹ️ <strong>Run Scrape</strong> adds website content to your chatbot's knowledge base.
+                      </div>
+                      
+                      {/* Scheduler Section */}
+                      <div style={{
+                        marginTop: '1.5rem',
+                        paddingTop: '1.5rem',
+                        borderTop: '2px solid #e2e8f0'
+                      }}>
+                        <h5 style={{ 
+                          margin: '0 0 1rem 0', 
+                          fontSize: '1rem', 
+                          color: '#0f172a',
+                          fontWeight: '600'
+                        }}>
+                          ⏱️ Scheduled Scraping
+                        </h5>
+                        
+                        {schedulerError && (
+                          <div style={{
+                            padding: '0.75rem',
+                            background: '#fee2e2',
+                            border: '1px solid #ef4444',
+                            borderRadius: '4px',
+                            color: '#991b1b',
+                            marginBottom: '1rem',
+                            fontSize: '0.875rem'
+                          }}>
+                            {schedulerError}
+                          </div>
+                        )}
+                        
+                        {/* Scheduler Toggle */}
+                        <div style={{
+                          padding: '1rem',
+                          background: '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '6px',
+                          marginBottom: '1rem'
+                        }}>
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'space-between',
+                            marginBottom: '0.75rem'
+                          }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ 
+                                fontSize: '0.875rem', 
+                                fontWeight: '600', 
+                                color: '#334155',
+                                marginBottom: '0.25rem'
+                              }}>
+                                Enable Scheduled Scraping
+                              </div>
+                              <div style={{ 
+                                fontSize: '0.75rem', 
+                                color: '#64748b'
+                              }}>
+                                Automatically scrape website every 2 hours
+                              </div>
+                            </div>
+                            
+                            <label style={{
+                              position: 'relative',
+                              display: 'inline-block',
+                              width: '52px',
+                              height: '28px',
+                              cursor: schedulerLoading ? 'not-allowed' : 'pointer',
+                              opacity: schedulerLoading ? 0.6 : 1
+                            }}>
+                              <input
+                                type="checkbox"
+                                checked={schedulerStatus === 'active'}
+                                onChange={(e) => handleSchedulerToggle(e.target.checked)}
+                                disabled={schedulerLoading}
+                                style={{ opacity: 0, width: 0, height: 0 }}
+                              />
+                              <span style={{
+                                position: 'absolute',
+                                cursor: schedulerLoading ? 'not-allowed' : 'pointer',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                backgroundColor: schedulerStatus === 'active' ? '#10b981' : '#cbd5e1',
+                                transition: '0.4s',
+                                borderRadius: '28px'
+                              }}>
+                                <span style={{
+                                  position: 'absolute',
+                                  content: '""',
+                                  height: '20px',
+                                  width: '20px',
+                                  left: schedulerStatus === 'active' ? '28px' : '4px',
+                                  bottom: '4px',
+                                  backgroundColor: 'white',
+                                  transition: '0.4s',
+                                  borderRadius: '50%'
+                                }}></span>
+                              </span>
+                            </label>
+                          </div>
+                          
+                          {/* Scheduler Status Display */}
+                          <div style={{
+                            paddingTop: '0.75rem',
+                            borderTop: '1px solid #e2e8f0',
+                            display: 'grid',
+                            gridTemplateColumns: '1fr 1fr',
+                            gap: '0.75rem',
+                            fontSize: '0.8125rem'
+                          }}>
+                            <div>
+                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Scheduler Status</div>
+                              <div style={{ fontWeight: '600' }}>
+                                {schedulerLoading ? (
+                                  <span style={{ color: '#6b7280' }}>⏳ Updating...</span>
+                                ) : schedulerStatus === 'active' ? (
+                                  <span style={{ color: '#059669' }}>✓ Active</span>
+                                ) : (
+                                  <span style={{ color: '#64748b' }}>○ Inactive</span>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Last Scheduled Scrape</div>
+                              <div style={{ fontWeight: '500', color: '#1e293b' }}>
+                                {schedulerConfig?.lastScrapeCompleted
+                                  ? new Date(schedulerConfig.lastScrapeCompleted).toLocaleString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })
+                                  : 'Never'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div style={{
+                          padding: '0.75rem',
+                          background: '#fef3c7',
+                          borderRadius: '4px',
+                          fontSize: '0.875rem',
+                          color: '#78350f'
+                        }}>
+                          ℹ️ When enabled, the scheduler will automatically scrape your website every 2 hours and automatically updates chatbot knowledge.
+                        </div>
                       </div>
                     </div>
                   )}

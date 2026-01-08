@@ -12,7 +12,9 @@ router.post('/update', auth, resolveTenant, scrapeLimiter, validateScrapeRequest
 // Get current scrape status
 router.get('/status', auth, resolveTenant, scrapeController.getScrapeStatus);
 
-// Scheduler routes
+// ⚠️ DEPRECATED: Legacy user-level scheduler routes (kept for backward compatibility)
+// 🔄 USE INSTEAD: /api/bot/:botId/scheduler/* endpoints for per-bot scheduling
+// The bot-level scheduler supports multiple bots per user with proper isolation
 router.post('/scheduler/start', auth, resolveTenant, validateScrapeRequest, scrapeController.startScheduler);
 router.post('/scheduler/stop', auth, resolveTenant, scrapeController.stopScheduler);
 router.get('/scheduler/status', auth, resolveTenant, scrapeController.getSchedulerStatus);

@@ -405,6 +405,20 @@ exports.runUpdater = async (req, res) => {
  * * Spawns a detached Python process that runs run_tenant_scheduler.py
  * which will execute the updater on the configured schedule.
  */
+/**
+ * @deprecated This is a LEGACY user-level scheduler endpoint.
+ * 
+ * ⚠️ DEPRECATED: Use bot-level scheduler instead: POST /api/bot/:botId/scheduler/start
+ * 
+ * This endpoint operates at the USER level (one scheduler per user).
+ * The bot-level scheduler is the CURRENT and RECOMMENDED approach:
+ * - Supports multiple bots per user
+ * - Each bot has its own independent scheduler
+ * - Better isolation and multi-tenant safety
+ * 
+ * This legacy endpoint remains for backward compatibility only.
+ * New integrations should use /api/bot/:botId/scheduler/* endpoints.
+ */
 exports.startScheduler = async (req, res) => {
   const startUrl = typeof req.body.startUrl === 'string' ? req.body.startUrl.trim() : '';
   const intervalMinutes = 120; // Fixed 2-hour interval
@@ -423,7 +437,8 @@ exports.startScheduler = async (req, res) => {
     const userId = req.tenantUserId || req.user.userId;
     const userRole = req.user.role;
 
-    console.log(`🚀 startScheduler called - userId: ${userId}, tenantUserId: ${req.tenantUserId}, user.userId: ${req.user.userId}`);
+    console.log(`⚠️ [DEPRECATED] startScheduler (user-level) called - userId: ${userId}, tenantUserId: ${req.tenantUserId}, user.userId: ${req.user.userId}`);
+    console.log(`⚠️ [DEPRECATED] Consider using bot-level scheduler: POST /api/bot/:botId/scheduler/start`);
 
     // Regular users can only start scheduler for their own data
     if (userRole === 'user' && req.tenantUserId && req.tenantUserId !== req.user.userId) {
@@ -611,11 +626,22 @@ exports.startScheduler = async (req, res) => {
 
 /**
  * Stop a running scheduler for the tenant
+ * 
+ * @deprecated This is a LEGACY user-level scheduler endpoint.
+ * 
+ * ⚠️ DEPRECATED: Use bot-level scheduler instead: POST /api/bot/:botId/scheduler/stop
+ * 
+ * This endpoint operates at the USER level (one scheduler per user).
+ * The bot-level scheduler is the CURRENT and RECOMMENDED approach.
+ * 
+ * This legacy endpoint remains for backward compatibility only.
  */
 exports.stopScheduler = async (req, res) => {
   try {
     const userId = req.tenantUserId || req.user.userId;
     const userRole = req.user.role;
+
+    console.log(`⚠️ [DEPRECATED] stopScheduler (user-level) called - use bot-level endpoint instead`);
 
     // Regular users can only stop their own scheduler
     if (userRole === 'user' && req.tenantUserId && req.tenantUserId !== req.user.userId) {
@@ -721,13 +747,23 @@ exports.stopScheduler = async (req, res) => {
 
 /**
  * Get scheduler status for the tenant
+ * 
+ * @deprecated This is a LEGACY user-level scheduler endpoint.
+ * 
+ * ⚠️ DEPRECATED: Use bot-level scheduler instead: GET /api/bot/:botId/scheduler/status
+ * 
+ * This endpoint operates at the USER level (one scheduler per user).
+ * The bot-level scheduler is the CURRENT and RECOMMENDED approach.
+ * 
+ * This legacy endpoint remains for backward compatibility only.
  */
 exports.getSchedulerStatus = async (req, res) => {
   try {
     const userId = req.tenantUserId || req.user.userId;
     const userRole = req.user.role;
 
-    console.log(`📊 getSchedulerStatus called - userId: ${userId}, tenantUserId: ${req.tenantUserId}, user.userId: ${req.user.userId}`);
+    console.log(`⚠️ [DEPRECATED] getSchedulerStatus (user-level) called - userId: ${userId}, tenantUserId: ${req.tenantUserId}, user.userId: ${req.user.userId}`);
+    console.log(`⚠️ [DEPRECATED] Consider using bot-level scheduler: GET /api/bot/:botId/scheduler/status`);
 
     // Regular users can only check their own scheduler
     if (userRole === 'user' && req.tenantUserId && req.tenantUserId !== req.user.userId) {

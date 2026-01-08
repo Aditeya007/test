@@ -113,3 +113,44 @@ export async function updateBot(botId, data, token) {
   });
 }
 
+/**
+ * Start scheduler for a specific bot
+ * @param {string} botId - Bot ID
+ * @param {string} token - JWT token
+ * @param {Object} options - Optional scheduler configuration
+ * @returns {Promise<Object>} { success: boolean, message: string, schedulerPid: number }
+ */
+export async function startBotScheduler(botId, token, options = {}) {
+  return apiRequest(`/bot/${botId}/scheduler/start`, {
+    method: 'POST',
+    token,
+    data: options
+  });
+}
+
+/**
+ * Stop scheduler for a specific bot
+ * @param {string} botId - Bot ID
+ * @param {string} token - JWT token
+ * @returns {Promise<Object>} { success: boolean, message: string }
+ */
+export async function stopBotScheduler(botId, token) {
+  return apiRequest(`/bot/${botId}/scheduler/stop`, {
+    method: 'POST',
+    token
+  });
+}
+
+/**
+ * Get scheduler status for a specific bot
+ * @param {string} botId - Bot ID
+ * @param {string} token - JWT token
+ * @returns {Promise<Object>} { success: boolean, schedulerStatus: 'active'|'inactive', schedulerConfig: Object }
+ */
+export async function getBotSchedulerStatus(botId, token) {
+  return apiRequest(`/bot/${botId}/scheduler/status`, {
+    method: 'GET',
+    token
+  });
+}
+
