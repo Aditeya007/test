@@ -45,16 +45,16 @@ function DashboardPage() {
   const [addWebsiteLoading, setAddWebsiteLoading] = useState(false);
   const [addWebsiteError, setAddWebsiteError] = useState('');
   
-  // Run scrape state
+  // Run crawl state
   const [scrapeLoading, setScrapeLoading] = useState(false);
   const [scrapeError, setScrapeError] = useState('');
   const [scrapeSuccess, setScrapeSuccess] = useState('');
   
-  // Scrape history state
+  // Crawl history state
   const [scrapeHistory, setScrapeHistory] = useState([]);
   const [scrapeHistoryLoading, setScrapeHistoryLoading] = useState(false);
   
-  // Polling state for scrape completion tracking
+  // Polling state for crawl completion tracking
   const [pollingIntervalId, setPollingIntervalId] = useState(null);
   
   // Scheduler state (UI only - NO source of truth state)
@@ -154,7 +154,7 @@ function DashboardPage() {
       // Stop polling
       clearInterval(pollingIntervalId);
       setPollingIntervalId(null);
-      console.log(`Scrape ${scrapeStatus} - polling stopped`);
+      console.log(`Crawl ${scrapeStatus} - polling stopped`);
     }
   }, [bots, selectedBot, pollingIntervalId]);
 
@@ -283,7 +283,7 @@ function DashboardPage() {
         token
       );
       
-      setCreateSuccess('Website added successfully! You can now configure scraping.');
+      setCreateSuccess('Website added successfully! You can now configure crawling.');
       setAddWebsiteModalOpen(false);
       setWebsiteUrl('');
       
@@ -352,7 +352,7 @@ function DashboardPage() {
         method: 'POST',
         token
       });
-      setScrapeSuccess('Scrape job started successfully!');
+      setScrapeSuccess('Crawl job started successfully!');
       
       // Refetch all bots from backend to get updated status
       await fetchBots();
@@ -360,10 +360,10 @@ function DashboardPage() {
       // Clear success message after a delay
       setTimeout(() => setScrapeSuccess(''), 3000);
       
-      // Start polling for scrape completion
+      // Start polling for crawl completion
       startPollingForScrapeCompletion(botId);
     } catch (err) {
-      setScrapeError(err.message || 'Failed to start scrape');
+      setScrapeError(err.message || 'Failed to start crawl');
       setTimeout(() => setScrapeError(''), 5000);
     } finally {
       setScrapeLoading(false);
@@ -383,10 +383,10 @@ function DashboardPage() {
         // Refetch all bots from backend
         await fetchBots();
         
-        // Refetch scrape history to show new entries
+        // Refetch crawl history to show new entries
         await fetchScrapeHistory();
         
-        // Check if scrape has completed by looking at the updated bots state
+        // Check if crawl has completed by looking at the updated bots state
         // This will be checked in the next useEffect that watches the bots state
       } catch (err) {
         console.error('Polling error:', err);
@@ -738,7 +738,7 @@ function DashboardPage() {
                         Manage chatbot for: <strong>{(selectedBot.scrapedWebsites && selectedBot.scrapedWebsites[0]) ? selectedBot.scrapedWebsites[0] : 'this website'}</strong>
                       </p>
 
-                      {/* Scrape Status & Metadata Display */}
+                      {/* Crawl Status & Metadata Display */}
                       <div style={{
                         padding: '1rem',
                         background: '#ffffff',
@@ -747,7 +747,7 @@ function DashboardPage() {
                         marginBottom: '1rem'
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                          <span style={{ fontSize: '0.875rem', fontWeight: '600', color: '#334155' }}>Scrape Status</span>
+                          <span style={{ fontSize: '0.875rem', fontWeight: '600', color: '#334155' }}>Crawl Status</span>
                           {selectedBot.schedulerConfig?.status === 'running' && (
                             <span style={{
                               padding: '0.25rem 0.75rem',
@@ -761,7 +761,7 @@ function DashboardPage() {
                               gap: '0.5rem'
                             }}>
                               <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#3b82f6', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}></span>
-                              Scrape in progress
+                              Crawl in progress
                             </span>
                           )}
                           {selectedBot.schedulerConfig?.status === 'completed' && (
@@ -804,7 +804,7 @@ function DashboardPage() {
                         
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', fontSize: '0.8125rem' }}>
                           <div>
-                            <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Last Scrape</div>
+                            <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Last Crawl</div>
                             <div style={{ color: '#1e293b', fontWeight: '500' }}>
                               {selectedBot.lastScrapeAt
                                 ? new Date(selectedBot.lastScrapeAt).toLocaleString('en-US', {
@@ -829,18 +829,18 @@ function DashboardPage() {
 
                         {selectedBot.schedulerConfig?.totalDocuments !== undefined && selectedBot.schedulerConfig.totalDocuments > 0 && (
                           <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
-                            <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>Documents Scraped</div>
+                            <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>Documents Crawled</div>
                             <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#0ea5e9', marginTop: '0.25rem' }}>
                               {selectedBot.schedulerConfig.totalDocuments.toLocaleString()}
                             </div>
                           </div>
                         )}
 
-                        {/* Scrape History */}
+                        {/* Crawl History */}
                         {scrapeHistory.length > 0 && (
                           <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
                             <div style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '0.5rem', fontWeight: '600' }}>
-                              Scrape History
+                              Crawl History
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto' }}>
                               {scrapeHistory.map((entry, index) => (
@@ -927,7 +927,7 @@ function DashboardPage() {
                             flex: '1 1 200px'
                           }}
                         >
-                          {scrapeLoading ? '⏳ Running...' : selectedBot.schedulerConfig?.status === 'running' ? '⏳ Scraping...' : '🔄 Run Scrape'}
+                          {scrapeLoading ? '⏳ Running...' : selectedBot.schedulerConfig?.status === 'running' ? '⏳ Crawling...' : '🔄 Run Crawl'}
                         </button>
                         <button
                           className="dashboard-action-btn"
@@ -955,7 +955,7 @@ function DashboardPage() {
                         fontSize: '0.875rem',
                         color: '#0c4a6e'
                       }}>
-                        ℹ️ <strong>Run Scrape</strong> adds website content to your chatbot's knowledge base.
+                        ℹ️ <strong>Run Crawl</strong> adds website content to your chatbot's knowledge base.
                       </div>
                       
                       {/* Scheduler Section */}
@@ -970,7 +970,7 @@ function DashboardPage() {
                           color: '#0f172a',
                           fontWeight: '600'
                         }}>
-                          ⏱️ Scheduled Scraping
+                          ⏱️ Scheduled Crawling
                         </h5>
                         
                         {schedulerError && (
@@ -1008,13 +1008,13 @@ function DashboardPage() {
                                 color: '#334155',
                                 marginBottom: '0.25rem'
                               }}>
-                                Enable Scheduled Scraping
+                                Enable Scheduled Crawling
                               </div>
                               <div style={{ 
                                 fontSize: '0.75rem', 
                                 color: '#64748b'
                               }}>
-                                Automatically scrape website every 10 minutes
+                                Automatically crawl website every 10 minutes
                               </div>
                             </div>
                             
@@ -1082,7 +1082,7 @@ function DashboardPage() {
                             </div>
                             
                             <div>
-                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Last Scheduled Scrape</div>
+                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Last Scheduled Crawl</div>
                               <div style={{ fontWeight: '500', color: '#1e293b' }}>
                                 {schedulerConfig?.lastScrapeCompleted
                                   ? new Date(schedulerConfig.lastScrapeCompleted).toLocaleString('en-US', {
@@ -1104,7 +1104,7 @@ function DashboardPage() {
                           fontSize: '0.875rem',
                           color: '#78350f'
                         }}>
-                          ℹ️ When enabled, the scheduler will automatically scrape your website every 10 minutes and automatically updates chatbot knowledge.
+                          ℹ️ When enabled, the scheduler will automatically crawl your website every 10 minutes and automatically updates chatbot knowledge.
                         </div>
                       </div>
                     </div>
