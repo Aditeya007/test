@@ -315,6 +315,11 @@ function DashboardPage() {
     setCreateSuccess('');
     setCreateLoading(true);
 
+    // Ensure maxBots is always a valid number, default to 1 if invalid
+    const safeMaxBots = Number.isInteger(Number(values.maxBots)) && Number(values.maxBots) > 0
+      ? Number(values.maxBots)
+      : 1;
+
     try {
       const response = await apiRequest('/users', {
         method: 'POST',
@@ -323,7 +328,8 @@ function DashboardPage() {
           name: values.name.trim(),
           email: values.email.trim(),
           username: values.username.trim(),
-          password: values.password
+          password: values.password,
+          maxBots: safeMaxBots
         }
       });
 
