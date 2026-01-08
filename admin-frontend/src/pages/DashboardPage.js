@@ -45,6 +45,13 @@ function DashboardPage() {
   const [addWebsiteLoading, setAddWebsiteLoading] = useState(false);
   const [addWebsiteError, setAddWebsiteError] = useState('');
   
+  // Add knowledge modal state
+  const [addKnowledgeModalOpen, setAddKnowledgeModalOpen] = useState(false);
+  const [knowledgeContent, setKnowledgeContent] = useState('');
+  const [addKnowledgeLoading, setAddKnowledgeLoading] = useState(false);
+  const [addKnowledgeError, setAddKnowledgeError] = useState('');
+  const [addKnowledgeSuccess, setAddKnowledgeSuccess] = useState('');
+  
   // Run crawl state
   const [scrapeLoading, setScrapeLoading] = useState(false);
   const [scrapeError, setScrapeError] = useState('');
@@ -373,6 +380,44 @@ function DashboardPage() {
       setTimeout(() => setScrapeError(''), 5000);
     } finally {
       setScrapeLoading(false);
+    }
+  }
+  
+  async function handleAddKnowledge() {
+    if (!selectedBot || !token) return;
+    
+    const trimmedContent = knowledgeContent.trim();
+    
+    if (!trimmedContent) {
+      setAddKnowledgeError('Please enter some content');
+      return;
+    }
+    
+    setAddKnowledgeLoading(true);
+    setAddKnowledgeError('');
+    setAddKnowledgeSuccess('');
+    
+    const botId = selectedBot._id || selectedBot.id;
+    
+    try {
+      await apiRequest(`/bot/${botId}/manual-knowledge`, {
+        method: 'POST',
+        token,
+        body: { content: trimmedContent }
+      });
+      
+      setAddKnowledgeSuccess('Knowledge added successfully!');
+      
+      // Clear form and close modal after a short delay
+      setTimeout(() => {
+        setKnowledgeContent('');
+        setAddKnowledgeModalOpen(false);
+        setAddKnowledgeSuccess('');
+      }, 1500);
+    } catch (err) {
+      setAddKnowledgeError(err.message || 'Failed to add knowledge');
+    } finally {
+      setAddKnowledgeLoading(false);
     }
   }
   
@@ -962,13 +1007,10 @@ function DashboardPage() {
                         </button>
                         <button
                           className="dashboard-action-btn"
-                          onClick={() => {
-                            const botId = selectedBot._id || selectedBot.id;
-                            navigate(`/bot/${botId}`);
-                          }}
+                          onClick={() => setAddKnowledgeModalOpen(true)}
                           style={{ flex: '1 1 200px' }}
                         >
-                          💬 Open Chatbot
+                          📝 Add Knowledge
                         </button>
                         <button
                           className="dashboard-action-btn dashboard-action-btn--widget"
@@ -1250,6 +1292,83 @@ function DashboardPage() {
                 disabled={addWebsiteLoading}
               >
                 {addWebsiteLoading ? '⏳ Adding...' : '➕ Add Website'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Knowledge Modal */}
+      {addKnowledgeModalOpen && (
+        <div className="scrape-modal-overlay" role="dialog" aria-modal="true">
+          <div className="scrape-modal">
+            <h3>Add Knowledge</h3>
+            <p className="scrape-modal-subtitle">
+              Add trusted information to your chatbot's knowledge base manually.
+            </p>
+
+            {addKnowledgeError && <p className="scrape-error">{addKnowledgeError}</p>}
+            {addKnowledgeSuccess && (
+              <div style={{
+                padding: '0.75rem',
+                background: '#d1fae5',
+                border: '1px solid #10b981',
+                borderRadius: '4px',
+                color: '#065f46',
+                marginBottom: '1rem'
+              }}>
+                ✅ {addKnowledgeSuccess}
+              </div>
+            )}
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label htmlFor="knowledge-content" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                Content
+              </label>
+              <textarea
+                id="knowledge-content"
+                placeholder="Enter the information you want to add to the chatbot's knowledge base..."
+                value={knowledgeContent}
+                onChange={(e) => setKnowledgeContent(e.target.value)}
+                disabled={addKnowledgeLoading}
+                rows={10}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '4px',
+                  fontSize: '1rem',
+                  fontFamily: 'inherit',
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+
+            <div className="scrape-modal-actions">
+              <button
+                type="button"
+                className="scrape-btn-neutral"
+                onClick={() => {
+                  setAddKnowledgeModalOpen(false);
+                  setKnowledgeContent('');
+                  setAddKnowledgeError('');
+                  setAddKnowledgeSuccess('');
+                }}
+                disabled={addKnowledgeLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="scrape-btn-primary"
+                onClick={handleAddKnowledge}
+                disabled={addKnowledgeLoading || !knowledgeContent.trim()}
+                style={{
+                  opacity: (addKnowledgeLoading || !knowledgeContent.trim()) ? 0.6 : 1,
+                  cursor: (addKnowledgeLoading || !knowledgeContent.trim()) ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {addKnowledgeLoading ? '⏳ Adding...' : '✅ Add Knowledge'}
               </button>
             </div>
           </div>

@@ -117,4 +117,13 @@ router.get('/:botId/scheduler/status', auth, botScrapeController.getBotScheduler
  */
 router.get('/:botId/scrape-history', auth, botController.getScrapeHistory);
 
+/**
+ * @route   POST /api/bot/:botId/manual-knowledge
+ * @desc    Add manual knowledge to bot without crawling
+ * @access  Protected (requires JWT, validates bot ownership)
+ * @body    { content: string }
+ * @returns { success: boolean, message: string }
+ */
+router.post('/:botId/manual-knowledge', auth, botController.addManualKnowledge);
+
 module.exports = router;

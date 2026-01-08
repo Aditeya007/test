@@ -1,12 +1,103 @@
 // admin-backend/controllers/botController.js
 
 const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs');
+const { spawn } = require('child_process');
 const botJob = require('../jobs/botJob');
 const { getUserTenantContext } = require('../services/userContextService');
 const { provisionResourcesForBot } = require('../services/provisioningService');
 const Bot = require('../models/Bot');
 const User = require('../models/User');
 const ScrapeHistory = require('../models/ScrapeHistory');
+
+// Path to repo root for script resolution
+const repoRoot = path.resolve(__dirname, '..', '..');
+
+/**
+ * Get the Python executable path
+ */
+const getPythonExecutable = () => {
+  if (!process.env.PYTHON_BIN) {
+    throw new Error(
+      'PYTHON_BIN not set. PM2 does not use your shell virtualenv.'
+    );
+  }
+  return process.env.PYTHON_BIN.trim();
+};
+
+/**
+ * Resolve bot and validate ownership
+ * Middleware for bot-specific operations
+ */
+const resolveBotContext = async (req, res, next) => {
+  try {
+    const { botId } = req.params;
+    
+    if (!botId) {
+      return res.status(400).json({
+        success: false,
+        error: 'botId is required'
+      });
+    }
+
+    // Load bot
+    const bot = await Bot.findById(botId);
+    
+    if (!bot) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bot not found'
+      });
+    }
+
+    // Validate bot is active
+    if (!bot.isActive) {
+      return res.status(403).json({
+        success: false,
+        error: 'Bot is inactive'
+      });
+    }
+
+    // Validate ownership
+    const authenticatedUserId = req.user.userId;
+    const authenticatedUserRole = req.user.role;
+    
+    // User must own the bot OR be an admin who created the bot owner
+    const isOwner = bot.userId.toString() === authenticatedUserId;
+    
+    let isAuthorized = isOwner;
+    
+    if (!isOwner && authenticatedUserRole === 'admin') {
+      // Check if admin created the user who owns this bot
+      const botOwner = await User.findById(bot.userId);
+      if (botOwner && botOwner.adminId && botOwner.adminId.toString() === authenticatedUserId) {
+        isAuthorized = true;
+      }
+    }
+    
+    if (!isAuthorized) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied: You do not have permission to access this bot'
+      });
+    }
+
+    // Attach bot for downstream use
+    req.bot = bot;
+    
+    console.log(`✅ Bot context resolved: ${bot.name} (${botId}) for user ${bot.userId}`);
+    
+    next();
+  } catch (err) {
+    console.error('❌ Failed to resolve bot context:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to resolve bot context',
+      details: err.message
+    });
+  }
+};
 
 /**
  * Run the RAG bot with user's query
@@ -470,3 +561,145 @@ exports.getScrapeHistory = async (req, res) => {
   }
 };
 
+/**
+ * Add manual knowledge to bot without crawling
+ * @route   POST /api/bot/:botId/manual-knowledge
+ * @access  Protected (requires JWT, validates bot ownership)
+ * @param   {Object} req.body - { content: string }
+ * @returns {Object} { success: boolean, message: string }
+ */
+exports.addManualKnowledge = [
+  resolveBotContext,
+  async (req, res) => {
+    try {
+      const bot = req.bot;
+      const botId = bot._id.toString();
+      const vectorStorePath = bot.vectorStorePath;
+      
+      // Extract and validate content
+      const content = typeof req.body.content === 'string' ? req.body.content.trim() : '';
+      
+      if (!content) {
+        return res.status(400).json({
+          success: false,
+          error: 'content is required and cannot be empty or whitespace-only'
+        });
+      }
+      
+      // Validate vector store exists
+      if (!vectorStorePath) {
+        return res.status(400).json({
+          success: false,
+          error: 'Bot vector store not initialized. Please scrape websites first.'
+        });
+      }
+      
+      // Ensure vector store directory exists
+      if (!fs.existsSync(vectorStorePath)) {
+        fs.mkdirSync(vectorStorePath, { recursive: true });
+        console.log(`📁 Created vector store directory: ${vectorStorePath}`);
+      }
+      
+      console.log('📝 Adding manual knowledge to bot', {
+        botId,
+        botName: bot.name,
+        contentLength: content.length,
+        vectorStorePath
+      });
+      
+      // Get Python executable
+      const pythonExe = getPythonExecutable();
+      
+      // Build arguments for the script (use -m module pattern like scraping)
+      const args = [
+        '-m',
+        'Scraping2.add_manual_knowledge',
+        '--content', content,
+        '--vector-store-path', vectorStorePath,
+        '--bot-id', botId
+      ];
+      
+      // Spawn Python process (same pattern as scraping)
+      // Note: Using synchronous execution for manual knowledge since it's user-initiated
+      // and should provide immediate feedback
+      const child = spawn(pythonExe, args, {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          PYTHONUNBUFFERED: '1',
+          PYTHONPATH: repoRoot
+        }
+      });
+      
+      let stdout = '';
+      let stderr = '';
+      
+      child.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+      
+      child.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+      
+      child.on('close', (code) => {
+        if (code === 0) {
+          console.log('✅ Manual knowledge added successfully:', {
+            botId,
+            botName: bot.name,
+            stdout: stdout.trim()
+          });
+          
+          res.json({
+            success: true,
+            message: 'Knowledge added successfully',
+            botId,
+            botName: bot.name
+          });
+        } else {
+          console.error('❌ Failed to add manual knowledge:', {
+            botId,
+            exitCode: code,
+            stderr: stderr.trim(),
+            stdout: stdout.trim()
+          });
+          
+          // Parse error message from stderr
+          const errorMessage = stderr.trim() || stdout.trim() || 'Failed to add knowledge';
+          
+          res.status(500).json({
+            success: false,
+            error: 'Failed to add knowledge to bot',
+            details: errorMessage
+          });
+        }
+      });
+      
+      child.on('error', (err) => {
+        console.error('❌ Failed to spawn Python process:', {
+          botId,
+          error: err.message
+        });
+        
+        res.status(500).json({
+          success: false,
+          error: 'Failed to execute knowledge addition script',
+          details: err.message
+        });
+      });
+      
+    } catch (err) {
+      console.error('❌ Failed to add manual knowledge:', {
+        botId: req.bot?._id,
+        error: err.message,
+        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      });
+      
+      const status = err.statusCode || 500;
+      res.status(status).json({
+        success: false,
+        error: err.message
+      });
+    }
+  }
+];
