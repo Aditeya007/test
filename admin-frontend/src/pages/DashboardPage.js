@@ -428,11 +428,13 @@ function DashboardPage() {
   // Fetch scrape history for selected bot
   const fetchScrapeHistory = useCallback(async () => {
     if (!selectedBot || !token) {
+      console.log('fetchScrapeHistory: No bot or token', { selectedBot: !!selectedBot, token: !!token });
       setScrapeHistory([]);
       return;
     }
     
     const botId = selectedBot._id || selectedBot.id;
+    console.log('fetchScrapeHistory: Fetching for bot', botId);
     setScrapeHistoryLoading(true);
     
     try {
@@ -441,8 +443,14 @@ function DashboardPage() {
         token
       });
       
+      console.log('fetchScrapeHistory: Response received', response);
+      
       if (response.success && response.history) {
+        console.log('fetchScrapeHistory: Setting history', response.history.length, 'entries');
         setScrapeHistory(response.history);
+      } else {
+        console.log('fetchScrapeHistory: No history in response or not successful');
+        setScrapeHistory([]);
       }
     } catch (err) {
       console.error('Failed to fetch scrape history:', err);
