@@ -79,6 +79,149 @@ def get_tenant_context(
     }
 
 
+class LeadValidator:
+    """Validate user-provided lead information (name, email, phone)"""
+    
+    @staticmethod
+    def validate_name(name: str) -> Tuple[bool, str]:
+        """
+        Validate name using Python built-in string methods only (NO regex).
+        Returns: (is_valid, error_message)
+        """
+        if not name:
+            return False, "Name cannot be empty."
+        
+        name = name.strip()
+        
+        # Check minimum length
+        if len(name) < 2:
+            return False, "Name must be at least 2 characters long."
+        
+        # Check maximum length
+        if len(name) > 100:
+            return False, "Name is too long (maximum 100 characters)."
+        
+        # Check if name contains at least one letter
+        has_letter = any(char.isalpha() for char in name)
+        if not has_letter:
+            return False, "Name must contain at least one letter."
+        
+        # Check for excessive numbers (more than 30% of characters)
+        digit_count = sum(1 for char in name if char.isdigit())
+        if len(name) > 0 and (digit_count / len(name)) > 0.3:
+            return False, "Name contains too many numbers. Please provide a valid name."
+        
+        # Check for valid characters (letters, spaces, hyphens, apostrophes, periods)
+        allowed_chars = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ '-.")
+        for char in name:
+            if char not in allowed_chars:
+                return False, f"Name contains invalid character: '{char}'. Only letters, spaces, hyphens, apostrophes, and periods are allowed."
+        
+        # Check for excessive special characters
+        special_count = sum(1 for char in name if char in "'-.")
+        if special_count > len(name) // 2:
+            return False, "Name contains too many special characters."
+        
+        return True, ""
+    
+    @staticmethod
+    def validate_email(email: str) -> Tuple[bool, str]:
+        """
+        Validate email using regex.
+        Returns: (is_valid, error_message)
+        """
+        if not email:
+            return False, "Email cannot be empty."
+        
+        email = email.strip().lower()
+        
+        # Check length
+        if len(email) < 5:
+            return False, "Email is too short."
+        
+        if len(email) > 254:
+            return False, "Email is too long (maximum 254 characters)."
+        
+        # Comprehensive email regex pattern
+        email_pattern = r'^[a-zA-Z0-9][a-zA-Z0-9._%+-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$'
+        
+        if not re.match(email_pattern, email):
+            return False, "Invalid email format. Please provide a valid email address (e.g., user@example.com)."
+        
+        # Additional checks
+        if email.count('@') != 1:
+            return False, "Email must contain exactly one @ symbol."
+        
+        local_part, domain_part = email.split('@')
+        
+        # Validate local part (before @)
+        if not local_part or len(local_part) > 64:
+            return False, "Invalid email format (local part issue)."
+        
+        if local_part.startswith('.') or local_part.endswith('.'):
+            return False, "Email cannot start or end with a period."
+        
+        if '..' in local_part:
+            return False, "Email cannot contain consecutive periods."
+        
+        # Validate domain part (after @)
+        if not domain_part or len(domain_part) < 3:
+            return False, "Invalid email domain."
+        
+        if domain_part.startswith('.') or domain_part.endswith('.') or domain_part.startswith('-') or domain_part.endswith('-'):
+            return False, "Invalid email domain format."
+        
+        # Check for consecutive periods in domain
+        if '..' in domain_part:
+            return False, "Email domain cannot contain consecutive periods."
+        
+        # Check if domain has at least one dot
+        if '.' not in domain_part:
+            return False, "Email domain must contain at least one period."
+        
+        return True, ""
+    
+    @staticmethod
+    def validate_phone(phone: str) -> Tuple[bool, str]:
+        """
+        Validate phone number using regex.
+        Returns: (is_valid, error_message)
+        """
+        if not phone:
+            return False, "Phone number cannot be empty."
+        
+        phone = phone.strip()
+        
+        # Check length
+        if len(phone) < 7:
+            return False, "Phone number is too short (minimum 7 characters)."
+        
+        if len(phone) > 20:
+            return False, "Phone number is too long (maximum 20 characters)."
+        
+        # Phone number patterns (various formats)
+        phone_patterns = [
+            r'^\+?1?\s*\(?[0-9]{3}\)?\s*[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}$',  # US/Canada: +1 (123) 456-7890
+            r'^\+?[0-9]{1,4}\s*\(?[0-9]{2,4}\)?\s*[-.\s]?[0-9]{3,4}[-.\s]?[0-9]{3,4}$',  # International
+            r'^[0-9]{10}$',  # Simple 10-digit: 1234567890
+            r'^[0-9]{3}[-.\s][0-9]{3}[-.\s][0-9]{4}$',  # 123-456-7890
+            r'^\([0-9]{3}\)\s*[0-9]{3}[-.\s]?[0-9]{4}$',  # (123) 456-7890
+            r'^\+[0-9]{1,3}\s*[0-9]{9,12}$',  # International: +12 123456789
+        ]
+        
+        is_valid = any(re.match(pattern, phone) for pattern in phone_patterns)
+        
+        if not is_valid:
+            return False, "Invalid phone number format. Please provide a valid phone number (e.g., +1-234-567-8900 or (123) 456-7890)."
+        
+        # Check if phone has enough digits (minimum 10)
+        digit_count = sum(1 for char in phone if char.isdigit())
+        if digit_count < 10:
+            return False, "Phone number must contain at least 10 digits."
+        
+        return True, ""
+
+
 class ContactInformationExtractor:
     """Extract contact information from text content with improved email detection"""
 
@@ -390,6 +533,11 @@ class SemanticIntelligentRAG:
             return False, "Name collection not initialized."
 
         name = user_input.strip()
+        
+        # Validate name using LeadValidator
+        is_valid, error_message = LeadValidator.validate_name(name)
+        if not is_valid:
+            return False, f"❌ {error_message} Please provide a valid name."
 
         # Store name in session context
         if session_id not in self.conversation_contexts:
@@ -642,7 +790,7 @@ class SemanticIntelligentRAG:
             return 0
 
     def process_lead_data_step_by_step(self, session_id: str, response: str) -> Tuple[bool, str]:
-        """Process lead collection step by step"""
+        """Process lead collection step by step with validation"""
         if session_id not in self.lead_collection_states:
             return False, "Lead collection not initialized for this session."
 
@@ -650,17 +798,35 @@ class SemanticIntelligentRAG:
         current_step = state['current_step']
 
         if current_step == 'name':
-            state['name'] = response.strip()
+            name = response.strip()
+            # Validate name
+            is_valid, error_message = LeadValidator.validate_name(name)
+            if not is_valid:
+                return False, f"❌ {error_message} Please try again."
+            
+            state['name'] = name
             state['current_step'] = 'phone'
             return False, "Great! Now, could you please provide your phone number?"
 
         elif current_step == 'phone':
-            state['phone'] = response.strip()
+            phone = response.strip()
+            # Validate phone
+            is_valid, error_message = LeadValidator.validate_phone(phone)
+            if not is_valid:
+                return False, f"❌ {error_message} Please try again."
+            
+            state['phone'] = phone
             state['current_step'] = 'email'
             return False, "Perfect! Finally, what's your email address?"
 
         elif current_step == "email":
-            state["email"] = response.strip()
+            email = response.strip()
+            # Validate email
+            is_valid, error_message = LeadValidator.validate_email(email)
+            if not is_valid:
+                return False, f"❌ {error_message} Please try again."
+            
+            state["email"] = email
             try:
                 # Try to update existing lead by session_id first
                 if not self.mongo_enabled or self.leads_collection is None:
