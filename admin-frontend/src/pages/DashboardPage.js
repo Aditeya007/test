@@ -46,6 +46,9 @@ function DashboardPage() {
   const [scrapeLoading, setScrapeLoading] = useState(false);
   const [scrapeError, setScrapeError] = useState('');
   const [scrapeSuccess, setScrapeSuccess] = useState('');
+  
+  // Polling state for scrape completion tracking
+  const [pollingIntervalId, setPollingIntervalId] = useState(null);
 
   const activeTenantId = useMemo(() => {
     if (!activeTenant) {
@@ -115,6 +118,30 @@ function DashboardPage() {
       fetchBots();
     }
   }, [fetchBots, user, tenantDetails]);
+  
+  // Cleanup polling interval on unmount or when selected bot changes
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalId) {
+        clearInterval(pollingIntervalId);
+      }
+    };
+  }, [pollingIntervalId]);
+  
+  // Check if scrape has completed and stop polling
+  useEffect(() => {
+    if (!pollingIntervalId || !selectedBot) return;
+    
+    // Check if scrape has completed or failed
+    const scrapeStatus = selectedBot.schedulerConfig?.status;
+    
+    if (scrapeStatus === 'completed' || scrapeStatus === 'failed') {
+      // Stop polling
+      clearInterval(pollingIntervalId);
+      setPollingIntervalId(null);
+      console.log(`Scrape ${scrapeStatus} - polling stopped`);
+    }
+  }, [bots, selectedBot, pollingIntervalId]);
 
   useEffect(() => {
     if (!token) {
@@ -311,12 +338,39 @@ function DashboardPage() {
       
       // Clear success message after a delay
       setTimeout(() => setScrapeSuccess(''), 3000);
+      
+      // Start polling for scrape completion
+      startPollingForScrapeCompletion(botId);
     } catch (err) {
       setScrapeError(err.message || 'Failed to start scrape');
       setTimeout(() => setScrapeError(''), 5000);
     } finally {
       setScrapeLoading(false);
     }
+  }
+  
+  function startPollingForScrapeCompletion(botId) {
+    // Clear any existing polling interval
+    if (pollingIntervalId) {
+      clearInterval(pollingIntervalId);
+      setPollingIntervalId(null);
+    }
+    
+    // Poll every 5 seconds
+    const intervalId = setInterval(async () => {
+      try {
+        // Refetch all bots from backend
+        await fetchBots();
+        
+        // Check if scrape has completed by looking at the updated bots state
+        // This will be checked in the next useEffect that watches the bots state
+      } catch (err) {
+        console.error('Polling error:', err);
+        // Continue polling even on error
+      }
+    }, 5000);
+    
+    setPollingIntervalId(intervalId);
   }
 
   const hasProvisionedTenant = Boolean(tenantDetails);
@@ -606,7 +660,7 @@ function DashboardPage() {
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                           <span style={{ fontSize: '0.875rem', fontWeight: '600', color: '#334155' }}>Scrape Status</span>
-                          {selectedBot.schedulerConfig?.scrapeStatus === 'running' && (
+                          {selectedBot.schedulerConfig?.status === 'running' && (
                             <span style={{
                               padding: '0.25rem 0.75rem',
                               background: '#dbeafe',
@@ -622,7 +676,7 @@ function DashboardPage() {
                               Scrape in progress
                             </span>
                           )}
-                          {selectedBot.schedulerConfig?.scrapeStatus === 'completed' && (
+                          {selectedBot.schedulerConfig?.status === 'completed' && (
                             <span style={{
                               padding: '0.25rem 0.75rem',
                               background: '#d1fae5',
@@ -634,7 +688,7 @@ function DashboardPage() {
                               ✓ Completed
                             </span>
                           )}
-                          {selectedBot.schedulerConfig?.scrapeStatus === 'failed' && (
+                          {selectedBot.schedulerConfig?.status === 'failed' && (
                             <span style={{
                               padding: '0.25rem 0.75rem',
                               background: '#fee2e2',
@@ -646,7 +700,7 @@ function DashboardPage() {
                               ✗ Failed
                             </span>
                           )}
-                          {!selectedBot.schedulerConfig?.scrapeStatus && (
+                          {!selectedBot.schedulerConfig?.status && (
                             <span style={{
                               padding: '0.25rem 0.75rem',
                               background: '#f3f4f6',
@@ -664,8 +718,8 @@ function DashboardPage() {
                           <div>
                             <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Last Scrape</div>
                             <div style={{ color: '#1e293b', fontWeight: '500' }}>
-                              {selectedBot.schedulerConfig?.lastScrapeAt
-                                ? new Date(selectedBot.schedulerConfig.lastScrapeAt).toLocaleString('en-US', {
+                              {selectedBot.lastScrapeAt
+                                ? new Date(selectedBot.lastScrapeAt).toLocaleString('en-US', {
                                     month: 'short',
                                     day: 'numeric',
                                     year: 'numeric',
@@ -678,7 +732,7 @@ function DashboardPage() {
                           <div>
                             <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Bot Status</div>
                             <div style={{ color: '#1e293b', fontWeight: '500' }}>
-                              {selectedBot.schedulerConfig?.botReady
+                              {selectedBot.botReady
                                 ? <span style={{ color: '#059669' }}>✓ Ready</span>
                                 : <span style={{ color: '#dc2626' }}>Not Ready</span>}
                             </div>
@@ -727,14 +781,14 @@ function DashboardPage() {
                         <button
                           className="dashboard-action-btn"
                           onClick={handleRunScrape}
-                          disabled={scrapeLoading}
+                          disabled={scrapeLoading || selectedBot.schedulerConfig?.status === 'running'}
                           style={{
-                            opacity: scrapeLoading ? 0.6 : 1,
-                            cursor: scrapeLoading ? 'not-allowed' : 'pointer',
+                            opacity: (scrapeLoading || selectedBot.schedulerConfig?.status === 'running') ? 0.6 : 1,
+                            cursor: (scrapeLoading || selectedBot.schedulerConfig?.status === 'running') ? 'not-allowed' : 'pointer',
                             flex: '1 1 200px'
                           }}
                         >
-                          {scrapeLoading ? '⏳ Running...' : '🔄 Run Scrape'}
+                          {scrapeLoading ? '⏳ Running...' : selectedBot.schedulerConfig?.status === 'running' ? '⏳ Scraping...' : '🔄 Run Scrape'}
                         </button>
                         <button
                           className="dashboard-action-btn"

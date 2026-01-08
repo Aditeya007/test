@@ -9,18 +9,59 @@ const User = require('../models/User');
 
 /**
  * Run the RAG bot with user's query
- * @route   POST /api/bot/run
- * @access  Protected (requires bot API token)
- * @param   {Object} req.body - { botId: string, message: string }
+ * @route   POST /api/bot/run (dashboard - JWT auth)
+ *          POST /api/widget/run (widget - bot token auth)
+ * @access  Protected (requires JWT or bot API token)
+ * @param   {Object} req.body - { botId?: string, message: string, input?: string }
  * @returns {Object} { answer: string, session_id: string } - The bot's response from FastAPI
  */
 exports.runBot = async (req, res) => {
-  // Bot is already authenticated and attached by authenticateBotToken middleware
-  const bot = req.bot;
-  const { message, sessionId: clientSessionId } = req.body;
+  // Widget case: bot is authenticated via authenticateBotToken middleware
+  // Dashboard case: need to resolve bot via botId from request body
+  let bot = req.bot;
+  const { botId, message, input, sessionId: clientSessionId } = req.body;
+  const messageText = message || input;
+  
+  // If bot not already set (dashboard case), resolve it from botId
+  if (!bot && botId) {
+    try {
+      bot = await Bot.findById(botId);
+      if (!bot) {
+        return res.status(404).json({
+          success: false,
+          error: 'Bot not found',
+          errorType: 'NOT_FOUND'
+        });
+      }
+      // For dashboard, verify bot belongs to authenticated user
+      if (req.user && bot.userId.toString() !== req.user.id) {
+        return res.status(403).json({
+          success: false,
+          error: 'Access denied to this bot',
+          errorType: 'FORBIDDEN'
+        });
+      }
+    } catch (err) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid bot ID',
+        errorType: 'BAD_REQUEST'
+      });
+    }
+  }
+  
+  // Validate bot exists
+  if (!bot) {
+    return res.status(400).json({
+      success: false,
+      error: 'Bot not specified or not found',
+      errorType: 'BAD_REQUEST',
+      widgetError: true
+    });
+  }
 
   // Validate message
-  if (!message || typeof message !== 'string') {
+  if (!messageText || typeof messageText !== 'string') {
     return res.status(400).json({
       success: false,
       error: 'message is required and must be a string',
@@ -31,7 +72,7 @@ exports.runBot = async (req, res) => {
 
   try {
     // Sanitize input
-    const sanitizedInput = message.trim();
+    const sanitizedInput = messageText.trim();
     
     // Log request
     if (process.env.NODE_ENV === 'development') {
