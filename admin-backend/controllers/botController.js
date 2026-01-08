@@ -6,6 +6,7 @@ const { getUserTenantContext } = require('../services/userContextService');
 const { provisionResourcesForBot } = require('../services/provisioningService');
 const Bot = require('../models/Bot');
 const User = require('../models/User');
+const ScrapeHistory = require('../models/ScrapeHistory');
 
 /**
  * Run the RAG bot with user's query
@@ -419,6 +420,52 @@ exports.createBot = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to create bot'
+    });
+  }
+};
+
+/**
+ * Get scrape history for a bot
+ * @route   GET /api/bot/:botId/scrape-history
+ * @access  Protected (requires JWT)
+ * @returns {Array} Last 20 scrape history records
+ */
+exports.getScrapeHistory = async (req, res) => {
+  try {
+    const { botId } = req.params;
+    const userId = req.user.id;
+
+    // Verify bot exists and belongs to user
+    const bot = await Bot.findById(botId);
+    if (!bot) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bot not found'
+      });
+    }
+
+    if (bot.userId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied to this bot'
+      });
+    }
+
+    // Fetch last 20 scrape history records
+    const history = await ScrapeHistory.find({ botId })
+      .sort({ completedAt: -1 })
+      .limit(20)
+      .lean();
+
+    res.json({
+      success: true,
+      history
+    });
+  } catch (err) {
+    console.error('❌ Error fetching scrape history:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch scrape history'
     });
   }
 };

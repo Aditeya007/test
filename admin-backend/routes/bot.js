@@ -109,4 +109,12 @@ router.post('/:botId/scheduler/stop', auth, botScrapeController.stopBotScheduler
  */
 router.get('/:botId/scheduler/status', auth, botScrapeController.getBotSchedulerStatus);
 
+/**
+ * @route   GET /api/bot/:botId/scrape-history
+ * @desc    Get scrape history for this bot
+ * @access  Protected (requires JWT, validates bot ownership)
+ * @returns { success: boolean, history: Array }
+ */
+router.get('/:botId/scrape-history', auth, botController.getScrapeHistory);
+
 module.exports = router;

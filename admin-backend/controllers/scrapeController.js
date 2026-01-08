@@ -7,6 +7,7 @@ const { spawn } = require('child_process');
 const { getUserTenantContext } = require('../services/userContextService');
 const User = require('../models/User');
 const Bot = require('../models/Bot');
+const ScrapeHistory = require('../models/ScrapeHistory');
 
 // Path to scheduler script
 const repoRoot = path.resolve(__dirname, '..', '..');
@@ -835,6 +836,20 @@ exports.notifyScrapeComplete = async (req, res) => {
     }
     
     await Bot.findByIdAndUpdate(bot._id, { $set: updateFields });
+    
+    // Log scrape completion to history
+    try {
+      await ScrapeHistory.create({
+        botId: bot._id,
+        trigger: trigger || 'manual',
+        success: success === true,
+        completedAt: now
+      });
+      console.log(`📝 Logged scrape history for bot ${resourceId}`);
+    } catch (historyErr) {
+      console.error(`⚠️ Failed to log scrape history for bot ${resourceId}:`, historyErr.message);
+      // Don't fail the entire request if history logging fails
+    }
     
     console.log(`✅ Updated Bot model for ${resourceId}:`);
     console.log(`   - botReady: ${updateFields.botReady}`);

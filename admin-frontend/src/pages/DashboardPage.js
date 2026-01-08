@@ -50,6 +50,10 @@ function DashboardPage() {
   const [scrapeError, setScrapeError] = useState('');
   const [scrapeSuccess, setScrapeSuccess] = useState('');
   
+  // Scrape history state
+  const [scrapeHistory, setScrapeHistory] = useState([]);
+  const [scrapeHistoryLoading, setScrapeHistoryLoading] = useState(false);
+  
   // Polling state for scrape completion tracking
   const [pollingIntervalId, setPollingIntervalId] = useState(null);
   
@@ -379,6 +383,9 @@ function DashboardPage() {
         // Refetch all bots from backend
         await fetchBots();
         
+        // Refetch scrape history to show new entries
+        await fetchScrapeHistory();
+        
         // Check if scrape has completed by looking at the updated bots state
         // This will be checked in the next useEffect that watches the bots state
       } catch (err) {
@@ -417,6 +424,38 @@ function DashboardPage() {
       setSchedulerLoading(false);
     }
   }
+
+  // Fetch scrape history for selected bot
+  const fetchScrapeHistory = useCallback(async () => {
+    if (!selectedBot || !token) {
+      setScrapeHistory([]);
+      return;
+    }
+    
+    const botId = selectedBot._id || selectedBot.id;
+    setScrapeHistoryLoading(true);
+    
+    try {
+      const response = await apiRequest(`/bot/${botId}/scrape-history`, {
+        method: 'GET',
+        token
+      });
+      
+      if (response.success && response.history) {
+        setScrapeHistory(response.history);
+      }
+    } catch (err) {
+      console.error('Failed to fetch scrape history:', err);
+      setScrapeHistory([]);
+    } finally {
+      setScrapeHistoryLoading(false);
+    }
+  }, [selectedBot, token]);
+
+  // Fetch scrape history when selected bot changes
+  useEffect(() => {
+    fetchScrapeHistory();
+  }, [fetchScrapeHistory]);
 
   const hasProvisionedTenant = Boolean(tenantDetails);
 
@@ -794,6 +833,57 @@ function DashboardPage() {
                             <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#0ea5e9', marginTop: '0.25rem' }}>
                               {selectedBot.schedulerConfig.totalDocuments.toLocaleString()}
                             </div>
+                          </div>
+                        )}
+
+                        {/* Scrape History */}
+                        {scrapeHistory.length > 0 && (
+                          <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
+                            <div style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '0.5rem', fontWeight: '600' }}>
+                              Scrape History
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto' }}>
+                              {scrapeHistory.map((entry, index) => (
+                                <div
+                                  key={entry._id || index}
+                                  style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    padding: '0.5rem',
+                                    background: '#f8fafc',
+                                    borderRadius: '4px',
+                                    fontSize: '0.75rem'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.125rem' }}>
+                                    <div style={{ color: '#1e293b', fontWeight: '500' }}>
+                                      {new Date(entry.completedAt).toLocaleString('en-US', {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}
+                                    </div>
+                                    <div style={{ color: '#64748b', fontSize: '0.7rem' }}>
+                                      {entry.trigger === 'scheduler' ? 'Scheduled' : 'Manual'}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    {entry.success ? (
+                                      <span style={{ color: '#059669', fontSize: '1rem' }}>✓</span>
+                                    ) : (
+                                      <span style={{ color: '#dc2626', fontSize: '1rem' }}>✗</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {scrapeHistoryLoading && (
+                          <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Loading history...</div>
                           </div>
                         )}
                       </div>
