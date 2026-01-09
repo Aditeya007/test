@@ -46,12 +46,12 @@
     return `widget_session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  // Get or create session ID from sessionStorage (scoped per bot)
+  // Get or create session ID from localStorage (scoped per bot)
   function getOrCreateSessionId(botId) {
     const storageKey = `chat_conversation_id_${botId}`;
     
-    // Try to retrieve existing session ID from sessionStorage
-    const existingSessionId = sessionStorage.getItem(storageKey);
+    // Try to retrieve existing session ID from localStorage
+    const existingSessionId = localStorage.getItem(storageKey);
     
     if (existingSessionId) {
       console.log('RAG Widget: Resuming existing conversation');
@@ -60,7 +60,7 @@
     
     // Create new session ID
     const newSessionId = generateSessionId();
-    sessionStorage.setItem(storageKey, newSessionId);
+    localStorage.setItem(storageKey, newSessionId);
     console.log('RAG Widget: Starting new conversation');
     return newSessionId;
   }
