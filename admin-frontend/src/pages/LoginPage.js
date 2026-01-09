@@ -177,16 +177,28 @@ function LoginPage({ userMode = false }) {
       )}
 
       {!userMode && (
-        <div className="auth-footer" style={{ marginTop: '0.5rem' }}>
-          <span>Are you a user?</span>
-          <button 
-            className="auth-link" 
-            onClick={() => navigate('/user/login')}
-            disabled={loading}
-          >
-            User Login
-          </button>
-        </div>
+        <>
+          <div className="auth-footer" style={{ marginTop: '0.5rem' }}>
+            <span>Are you a user?</span>
+            <button 
+              className="auth-link" 
+              onClick={() => navigate('/user/login')}
+              disabled={loading}
+            >
+              User Login
+            </button>
+          </div>
+          <div className="auth-footer" style={{ marginTop: '0.5rem' }}>
+            <span>Are you an agent?</span>
+            <button 
+              className="auth-link" 
+              onClick={() => navigate('/agent/login')}
+              disabled={loading}
+            >
+              Agent Login
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

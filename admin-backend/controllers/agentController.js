@@ -63,35 +63,48 @@ const getAgentModel = (databaseUri) => {
 /**
  * POST /api/agent/login
  * Agent login endpoint - validates credentials and returns JWT
+ * Searches across all tenants to find agent by username
  * 
- * Body: { username, password, tenantId }
+ * Body: { username, password }
  */
 const agentLogin = async (req, res) => {
   try {
-    const { username, password, tenantId } = req.body;
+    const { username, password } = req.body;
 
     // Validation
-    if (!username || !password || !tenantId) {
+    if (!username || !password) {
       return res.status(400).json({
         error: 'Missing required fields',
-        message: 'Username, password, and tenantId are required'
+        message: 'Username and password are required'
       });
     }
 
-    // Verify tenant exists in ADMIN database
-    const tenant = await User.findById(tenantId);
-    if (!tenant || tenant.role !== 'user') {
-      return res.status(404).json({
-        error: 'Tenant not found',
-        message: 'Invalid tenant identifier'
-      });
+    // Search for agent across all tenants with agents enabled
+    const tenants = await User.find({ maxAgents: { $gt: 0 }, role: 'user' });
+    
+    let foundAgent = null;
+    let foundTenant = null;
+
+    // Search each tenant's database for the agent
+    for (const tenant of tenants) {
+      if (!tenant.databaseUri) continue;
+
+      try {
+        const Agent = getAgentModel(tenant.databaseUri);
+        const agent = await Agent.findOne({ username });
+
+        if (agent) {
+          foundAgent = agent;
+          foundTenant = tenant;
+          break;
+        }
+      } catch (err) {
+        console.error(`Error checking tenant ${tenant._id}:`, err.message);
+        continue;
+      }
     }
 
-    // Get agent from TENANT database using tenant's databaseUri
-    const Agent = getAgentModel(tenant.databaseUri);
-    const agent = await Agent.findOne({ username });
-
-    if (!agent) {
+    if (!foundAgent) {
       return res.status(401).json({
         error: 'Invalid credentials',
         message: 'Username or password is incorrect'
@@ -99,7 +112,7 @@ const agentLogin = async (req, res) => {
     }
 
     // Check if agent is active
-    if (!agent.isActive) {
+    if (!foundAgent.isActive) {
       return res.status(403).json({
         error: 'Account disabled',
         message: 'Your agent account has been deactivated'
@@ -107,7 +120,7 @@ const agentLogin = async (req, res) => {
     }
 
     // Verify password
-    const isPasswordValid = await bcrypt.compare(password, agent.passwordHash);
+    const isPasswordValid = await bcrypt.compare(password, foundAgent.passwordHash);
     if (!isPasswordValid) {
       return res.status(401).json({
         error: 'Invalid credentials',
@@ -119,9 +132,9 @@ const agentLogin = async (req, res) => {
     const token = jwt.sign(
       {
         role: 'agent',
-        agentId: agent._id.toString(),
-        tenantId: tenantId,
-        username: agent.username
+        agentId: foundAgent._id.toString(),
+        tenantId: foundTenant._id.toString(),
+        username: foundAgent.username
       },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
@@ -130,7 +143,7 @@ const agentLogin = async (req, res) => {
     res.json({
       message: 'Login successful',
       token,
-      agent: agent.toPublicProfile()
+      agent: foundAgent.toPublicProfile()
     });
   } catch (error) {
     console.error('Agent login error:', error);

@@ -13,7 +13,6 @@ function AgentLoginPage() {
   
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [tenantId, setTenantId] = useState('');
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,11 +32,6 @@ function AgentLoginPage() {
     const passwordError = validateField('password', password);
     if (passwordError) {
       newErrors.password = passwordError;
-    }
-
-    // Validate tenantId
-    if (!tenantId.trim()) {
-      newErrors.tenantId = 'Tenant ID is required';
     }
     
     setErrors(newErrors);
@@ -61,8 +55,7 @@ function AgentLoginPage() {
         method: 'POST',
         data: {
           username: username.trim(),
-          password,
-          tenantId: tenantId.trim()
+          password
         }
       });
 
@@ -96,13 +89,6 @@ function AgentLoginPage() {
     setPassword(e.target.value);
     if (errors.password) {
       setErrors(prev => ({ ...prev, password: '' }));
-    }
-  }
-
-  function handleTenantIdChange(e) {
-    setTenantId(e.target.value);
-    if (errors.tenantId) {
-      setErrors(prev => ({ ...prev, tenantId: '' }));
     }
   }
 
@@ -149,25 +135,6 @@ function AgentLoginPage() {
           )}
         </label>
 
-        <label>
-          Tenant ID
-          <input
-            type="text"
-            className={`auth-input ${errors.tenantId ? 'input-error' : ''}`}
-            value={tenantId}
-            onChange={handleTenantIdChange}
-            disabled={loading}
-            required
-            placeholder="Enter your tenant ID"
-          />
-          {errors.tenantId && (
-            <span className="field-error">{errors.tenantId}</span>
-          )}
-          <small style={{ display: 'block', marginTop: '0.25rem', color: '#666', fontSize: '0.75rem' }}>
-            Provided by your organization
-          </small>
-        </label>
-
         {serverError && <div className="auth-error">{serverError}</div>}
         
         <button 
@@ -185,10 +152,10 @@ function AgentLoginPage() {
         <span>Not an agent?</span>
         <button 
           className="auth-link" 
-          onClick={() => navigate('/user/login')}
+          onClick={() => navigate('/login')}
           disabled={loading}
         >
-          User Login
+          Admin/User Login
         </button>
       </div>
     </div>
