@@ -789,7 +789,8 @@ function DashboardPage() {
                       fontSize: '0.875rem',
                       display: 'flex',
                       justifyContent: 'space-between',
-                      alignItems: 'center'
+                      alignItems: 'center',
+                      color: '#065f46'
                     }}>
                       <span>
                         <strong>Human Agents:</strong> {agents.length} / {tenantDetails.maxAgents}
