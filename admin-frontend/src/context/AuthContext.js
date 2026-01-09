@@ -50,35 +50,59 @@ export function AuthProvider({ children }) {
       }
 
       try {
-        // Decode token to check if it's an agent token
+        // Decode token to determine user identity
         const decoded = decodeToken(token);
         
-        if (decoded && decoded.role === 'agent') {
+        if (!decoded) {
+          // Invalid token
+          setUser(null);
+          setToken('');
+          localStorage.removeItem('jwt');
+          localStorage.removeItem('isAgent');
+          localStorage.removeItem('agentTenant');
+          setActiveTenantState(null);
+          localStorage.removeItem('activeTenant');
+          setLoading(false);
+          return;
+        }
+
+        // Determine effective user ID based on role
+        let effectiveUserId;
+        
+        if (decoded.role === 'agent') {
+          // For agents, use tenantId as the effective user ID
+          effectiveUserId = decoded.tenantId;
+        } else {
+          // For regular users and admins, use userId or id
+          effectiveUserId = decoded.userId || decoded.id;
+        }
+
+        // Construct user object with proper identity mapping
+        if (decoded.role === 'agent') {
           // Agent token - construct user object from token and localStorage
           const storedTenant = localStorage.getItem('agentTenant');
           
           if (storedTenant) {
             try {
               const tenantData = JSON.parse(storedTenant);
-              // Construct agent user object compatible with dashboard
-              const agentUser = {
-                id: decoded.tenantId, // Use tenantId from token as user id
-                _id: decoded.tenantId,
-                role: 'agent',
-                agentId: decoded.agentId,
-                agentUsername: decoded.username,
+              // Construct agent user object with tenantId as the effective user id
+              setUser({
+                id: effectiveUserId,
+                _id: effectiveUserId,
                 username: decoded.username,
+                role: decoded.role,
+                agentId: decoded.agentId || null,
+                tenantId: decoded.tenantId || null,
                 name: tenantData.name || decoded.username,
                 email: tenantData.email,
                 databaseUri: tenantData.databaseUri,
                 maxAgents: tenantData.maxAgents
-              };
-              setUser(agentUser);
+              });
               // Set tenant as active for dashboard
               setActiveTenantState({
                 ...tenantData,
-                id: decoded.tenantId,
-                _id: decoded.tenantId
+                id: effectiveUserId,
+                _id: effectiveUserId
               });
             } catch (parseError) {
               console.error('Failed to parse tenant data:', parseError);
@@ -100,8 +124,8 @@ export function AuthProvider({ children }) {
             setActiveTenantState(null);
             localStorage.removeItem('activeTenant');
           }
-        } else if (decoded && decoded.role === 'user') {
-          // Regular user token
+        } else {
+          // Regular user or admin - fetch from /user/me
           const res = await fetch(`${API_BASE_URL}/user/me`, {
             headers: { Authorization: `Bearer ${token}` }
           });
@@ -109,24 +133,6 @@ export function AuthProvider({ children }) {
             const data = await res.json();
             setUser(data);
             localStorage.removeItem('isAgent'); // Clean up agent flag
-          } else {
-            // Token invalid or expired
-            setUser(null);
-            setToken('');
-            localStorage.removeItem('jwt');
-            localStorage.removeItem('isAgent');
-            setActiveTenantState(null);
-            localStorage.removeItem('activeTenant');
-          }
-        } else {
-          // Admin or unknown role - fetch from /user/me
-          const res = await fetch(`${API_BASE_URL}/user/me`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setUser(data);
-            localStorage.removeItem('isAgent');
           } else {
             // Token invalid or expired
             setUser(null);
