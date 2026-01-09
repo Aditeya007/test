@@ -471,8 +471,8 @@ exports.markBotScrapeComplete = async (req, res) => {
 
 /**
  * GET /bot/:botId/scrape/status
- * Get scrape status for this bot
- * Checks bot.schedulerConfig.lastScrapeCompleted and botReady
+ * Get scrape status for this bot (lightweight endpoint for polling)
+ * Returns minimal data to reduce backend load
  */
 exports.getBotScrapeStatus = [
   resolveBotContext,
@@ -481,19 +481,22 @@ exports.getBotScrapeStatus = [
       const bot = req.bot;
       
       const schedulerConfig = bot.schedulerConfig || {};
-      const lastCompleted = schedulerConfig.lastScrapeCompleted || null;
-      const botReady = schedulerConfig.botReady || false;
       
-      // Use explicit scrapeStatus field instead of inferring from timestamps
-      const status = schedulerConfig.scrapeStatus || 'idle';
+      // Get scrape status, map 'idle' to 'completed' for backwards compatibility
+      let status = schedulerConfig.scrapeStatus || 'completed';
+      
+      // Normalize status to match frontend expectations
+      // Frontend expects: 'running', 'completed', or 'failed'
+      // Backend uses: 'running', 'completed', 'failed', or 'idle'
+      if (status === 'idle') {
+        status = 'completed'; // Treat idle as completed (no active scrape)
+      }
 
+      // Return minimal data for efficient polling
       res.json({
         success: true,
-        status,
-        lastCompleted,
-        botReady,
-        botId: bot._id,
-        botName: bot.name
+        status: status,
+        lastScrapeAt: bot.lastScrapeAt || null
       });
       
     } catch (err) {

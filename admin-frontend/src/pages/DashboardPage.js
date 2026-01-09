@@ -143,27 +143,19 @@ function DashboardPage() {
   
   // Cleanup polling interval on unmount or when selected bot changes
   useEffect(() => {
+    // Clear interval when bot changes
+    if (pollingIntervalId) {
+      clearInterval(pollingIntervalId);
+      setPollingIntervalId(null);
+    }
+    
+    // Cleanup on unmount
     return () => {
       if (pollingIntervalId) {
         clearInterval(pollingIntervalId);
       }
     };
-  }, [pollingIntervalId]);
-  
-  // Check if scrape has completed and stop polling
-  useEffect(() => {
-    if (!pollingIntervalId || !selectedBot) return;
-    
-    // Check if scrape has completed or failed
-    const scrapeStatus = selectedBot.schedulerConfig?.status;
-    
-    if (scrapeStatus === 'completed' || scrapeStatus === 'failed') {
-      // Stop polling
-      clearInterval(pollingIntervalId);
-      setPollingIntervalId(null);
-      console.log(`Crawl ${scrapeStatus} - polling stopped`);
-    }
-  }, [bots, selectedBot, pollingIntervalId]);
+  }, [selectedBot, pollingIntervalId]);
 
   useEffect(() => {
     if (!token) {
@@ -373,8 +365,14 @@ function DashboardPage() {
       // Clear success message after a delay
       setTimeout(() => setScrapeSuccess(''), 3000);
       
-      // Start polling for crawl completion
-      startPollingForScrapeCompletion(botId);
+      // Start polling only if scrape is confirmed to be running
+      // Wait a moment for bot state to update, then check status
+      setTimeout(() => {
+        const updatedBot = bots.find(b => (b._id || b.id) === botId);
+        if (updatedBot?.schedulerConfig?.status === 'running') {
+          startPollingForScrapeCompletion(botId);
+        }
+      }, 1000);
     } catch (err) {
       setScrapeError(err.message || 'Failed to start crawl');
       setTimeout(() => setScrapeError(''), 5000);
@@ -428,22 +426,35 @@ function DashboardPage() {
       setPollingIntervalId(null);
     }
     
-    // Poll every 5 seconds
+    // Poll every 15 seconds with lightweight status check
     const intervalId = setInterval(async () => {
       try {
-        // Refetch all bots from backend
-        await fetchBots();
+        // Lightweight check: only fetch scrape status for this specific bot
+        const response = await apiRequest(`/bot/${botId}/scrape/status`, {
+          method: 'GET',
+          token
+        });
         
-        // Refetch crawl history to show new entries
-        await fetchScrapeHistory();
-        
-        // Check if crawl has completed by looking at the updated bots state
-        // This will be checked in the next useEffect that watches the bots state
+        if (response.success) {
+          const status = response.status;
+          
+          // If scrape completed or failed, stop polling and refresh full data
+          if (status === 'completed' || status === 'failed') {
+            clearInterval(intervalId);
+            setPollingIntervalId(null);
+            console.log(`Crawl ${status} - polling stopped, refreshing data`);
+            
+            // Now fetch full data once
+            await fetchBots();
+            await fetchScrapeHistory();
+          }
+          // If still running, just continue polling (no data refresh needed)
+        }
       } catch (err) {
         console.error('Polling error:', err);
         // Continue polling even on error
       }
-    }, 5000);
+    }, 15000);
     
     setPollingIntervalId(intervalId);
   }

@@ -70,9 +70,9 @@ router.post('/:botId/scrape', auth, botScrapeController.startBotScrape);
 
 /**
  * @route   GET /api/bot/:botId/scrape/status
- * @desc    Get current scrape status for this bot
+ * @desc    Get current scrape status for this bot (lightweight polling endpoint)
  * @access  Protected (requires JWT, validates bot ownership)
- * @returns { success: boolean, status: 'running'|'completed', lastCompleted: Date, botReady: boolean }
+ * @returns { success: boolean, status: 'running'|'completed'|'failed', lastScrapeAt: Date|null }
  */
 router.get('/:botId/scrape/status', auth, botScrapeController.getBotScrapeStatus);
 

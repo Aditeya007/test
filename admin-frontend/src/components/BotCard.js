@@ -37,7 +37,7 @@ function BotCard({ bot, token, onUpdate }) {
         setScrapeStatus(response.status);
         if (response.status === 'running') {
           setIsScraping(true);
-        } else if (response.status === 'completed') {
+        } else if (response.status === 'completed' || response.status === 'failed') {
           setIsScraping(false);
         }
       }
@@ -65,11 +65,11 @@ function BotCard({ bot, token, onUpdate }) {
     }
   }, [token, botId]);
 
-  // Poll scrape status when scraping
+  // Poll scrape status when scraping (15 seconds interval)
   useEffect(() => {
     if (!isScraping) return;
     
-    const interval = setInterval(fetchScrapeStatus, 8000);
+    const interval = setInterval(fetchScrapeStatus, 15000);
     return () => clearInterval(interval);
   }, [isScraping, fetchScrapeStatus]);
 
@@ -77,11 +77,16 @@ function BotCard({ bot, token, onUpdate }) {
   useEffect(() => {
     fetchScrapeStatus();
     fetchSchedulerStatus();
+  }, [fetchScrapeStatus, fetchSchedulerStatus]);
+  
+  // Poll scheduler status only when scheduler is active
+  useEffect(() => {
+    if (schedulerStatus !== 'active') return;
     
-    // Poll scheduler status every 30 seconds
+    // Poll scheduler status every 30 seconds when active
     const interval = setInterval(fetchSchedulerStatus, 30000);
     return () => clearInterval(interval);
-  }, [fetchScrapeStatus, fetchSchedulerStatus]);
+  }, [schedulerStatus, fetchSchedulerStatus]);
 
   // Run scrape for this bot
   const handleRunScrape = async () => {
