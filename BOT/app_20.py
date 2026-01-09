@@ -111,10 +111,9 @@ class LeadValidator:
         if len(name) > 0 and (digit_count / len(name)) > 0.3:
             return False, "Name contains too many numbers. Please provide a valid name."
         
-        # Check for valid characters (letters, spaces, hyphens, apostrophes, periods)
-        allowed_chars = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ '-.")
+        
         for char in name:
-            if char not in allowed_chars:
+            if not (char.isalpha() or char in " '-."):
                 return False, f"Name contains invalid character: '{char}'. Only letters, spaces, hyphens, apostrophes, and periods are allowed."
         
         # Check for excessive special characters
