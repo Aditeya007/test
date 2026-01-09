@@ -65,6 +65,84 @@
     return newSessionId;
   }
 
+  // Load conversation history from backend
+  async function loadConversationHistory() {
+    try {
+      const response = await fetch(
+        `${config.apiBase}/conversation/${state.sessionId}/messages?botId=${config.botId}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        console.warn('RAG Widget: Failed to load conversation history');
+        return;
+      }
+
+      const data = await response.json();
+
+      if (data.success && Array.isArray(data.messages) && data.messages.length > 0) {
+        console.log(`RAG Widget: Loaded ${data.messages.length} messages from history`);
+        
+        // Clear any existing messages
+        state.messages = [];
+        const messagesContainer = document.getElementById('rag-widget-messages');
+        if (messagesContainer) {
+          messagesContainer.innerHTML = '';
+        }
+
+        // Render each message from history
+        data.messages.forEach(msg => {
+          addMessage(msg.text, msg.sender, false, msg.sources);
+        });
+
+        // Scroll to bottom
+        scrollToBottom();
+      } else {
+        console.log('RAG Widget: No previous conversation history');
+        // Add welcome message for new conversations
+        addMessage("Hello! I'm an AI assistant. How can I help you today?", 'bot');
+      }
+    } catch (err) {
+      console.error('RAG Widget: Error loading conversation history:', err);
+      // Add welcome message as fallback
+      addMessage("Hello! I'm an AI assistant. How can I help you today?", 'bot');
+    }
+  }
+
+  // Start or resume conversation with backend
+  async function startConversation() {
+    try {
+      const response = await fetch(`${config.apiBase}/conversation/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          botId: config.botId,
+          sessionId: state.sessionId
+        })
+      });
+
+      if (!response.ok) {
+        console.warn('RAG Widget: Failed to start conversation');
+        return;
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log(`RAG Widget: Conversation ${data.conversation.status === 'ai' ? 'started' : 'resumed'}`);
+      }
+    } catch (err) {
+      console.error('RAG Widget: Error starting conversation:', err);
+    }
+  }
+
   // Create widget HTML structure
   function createWidgetHTML() {
     const widgetContainer = document.createElement('div');
@@ -337,7 +415,7 @@
   }
 
   // Add a message to the chat
-  function addMessage(text, sender, isError = false) {
+  function addMessage(text, sender, isError = false, sources = null) {
     const messagesContainer = document.getElementById('rag-widget-messages');
     if (!messagesContainer) return;
 
@@ -360,13 +438,49 @@
     });
     
     messageDiv.appendChild(bubbleDiv);
+
+    // Add sources if provided
+    if (sources && Array.isArray(sources) && sources.length > 0) {
+      const sourcesDiv = document.createElement('div');
+      sourcesDiv.className = 'rag-widget-message-bubble';
+      sourcesDiv.style.marginTop = '0.5em';
+      sourcesDiv.style.fontSize = '0.85em';
+      sourcesDiv.style.opacity = '0.8';
+      
+      const sourcesTitle = document.createElement('p');
+      sourcesTitle.textContent = 'Sources:';
+      sourcesTitle.style.margin = '0 0 0.3em 0';
+      sourcesTitle.style.fontWeight = '600';
+      sourcesDiv.appendChild(sourcesTitle);
+      
+      sources.forEach((src, idx) => {
+        const srcP = document.createElement('p');
+        srcP.textContent = `${idx + 1}. ${src}`;
+        srcP.style.margin = '0';
+        if (idx < sources.length - 1) {
+          srcP.style.marginBottom = '0.2em';
+        }
+        sourcesDiv.appendChild(srcP);
+      });
+      
+      messageDiv.appendChild(sourcesDiv);
+    }
+    
     messagesContainer.appendChild(messageDiv);
     
     // Scroll to bottom
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    scrollToBottom();
 
     // Store in state
-    state.messages.push({ text, sender, isError, id: Date.now() });
+    state.messages.push({ text, sender, isError, sources, id: Date.now() });
+  }
+
+  // Scroll messages container to bottom
+  function scrollToBottom() {
+    const messagesContainer = document.getElementById('rag-widget-messages');
+    if (messagesContainer) {
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
   }
 
   // Show typing indicator
@@ -425,7 +539,7 @@
     showTyping();
 
     try {
-      const response = await fetch(`${config.apiBase}/bot/run`, {
+      const response = await fetch(`${config.apiBase}/chat/message`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -433,8 +547,8 @@
         },
         body: JSON.stringify({
           botId: config.botId,
-          message: message,
-          sessionId: state.sessionId
+          sessionId: state.sessionId,
+          message: message
         })
       });
 
@@ -442,20 +556,9 @@
 
       hideTyping();
 
-      if (response.ok && data.answer) {
-        // Update session ID if provided
-        if (data.session_id) {
-          state.sessionId = data.session_id;
-        }
-
-        // Add bot response
-        addMessage(data.answer, 'bot');
-
-        // Add sources if available
-        if (Array.isArray(data.sources) && data.sources.length > 0) {
-          const sourcesText = `Sources:\n${data.sources.map((src, idx) => `${idx + 1}. ${src}`).join('\n')}`;
-          addMessage(sourcesText, 'bot');
-        }
+      if (response.ok && data.success && data.reply) {
+        // Add bot/agent response
+        addMessage(data.reply.text, data.reply.sender, false, data.reply.sources);
       } else {
         // Handle specific widget errors
         if (data.widgetError) {
@@ -464,28 +567,24 @@
           } else if (data.error && data.error.includes('Invalid token')) {
             addMessage('Your authentication token is invalid or expired. Please contact the site administrator.', 'bot', true);
           } else {
-            addMessage(data.message || data.error || 'Unable to process your request.', 'bot', true);
+            addMessage(data.error || data.message || 'Unable to process your request.', 'bot', true);
           }
         } else {
           const errorMessage = data.error || data.message || 'Bot service is unavailable right now.';
           addMessage(errorMessage, 'bot', true);
         }
       }
-    } catch (error) {
+    } catch (err) {
       hideTyping();
-      console.error('Widget API Error:', error);
-      if (error.message && error.message.includes('Failed to fetch')) {
-        addMessage('Unable to connect to the chatbot service. Please check your internet connection.', 'bot', true);
-      } else {
-        addMessage('Failed to connect to the chatbot service. Please try again later.', 'bot', true);
-      }
+      console.error('RAG Widget: Network error:', err);
+      addMessage('Network error: Unable to reach the bot service. Please check your connection.', 'bot', true);
     } finally {
+      // Reset loading state
       state.loading = false;
       if (sendBtn) {
         sendBtn.disabled = false;
         sendBtn.textContent = 'Send';
       }
-      if (input) input.focus();
     }
   }
 
@@ -548,8 +647,11 @@
     const widget = createWidgetHTML();
     document.body.appendChild(widget);
 
-    // Add welcome message
-    addMessage("Hello! I'm an AI assistant. How can I help you today?", 'bot');
+    // Start conversation and load history
+    (async () => {
+      await startConversation();
+      await loadConversationHistory();
+    })();
 
     // Attach event listeners
     const toggleBtn = document.getElementById('rag-widget-toggle');

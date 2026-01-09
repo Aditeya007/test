@@ -1,0 +1,625 @@
+// admin-backend/controllers/chatController.js
+
+const mongoose = require('mongoose');
+const Bot = require('../models/Bot');
+const botJob = require('../jobs/botJob');
+const { getUserTenantContext } = require('../services/userContextService');
+
+// Cache for tenant database connections
+const tenantConnections = new Map();
+
+/**
+ * Get or create a connection to the tenant's database
+ * Each tenant has their own MongoDB database for data isolation
+ */
+function getTenantConnection(databaseUri) {
+  if (!databaseUri) {
+    throw new Error('databaseUri is required for tenant database connection');
+  }
+
+  // Return cached connection if exists
+  if (tenantConnections.has(databaseUri)) {
+    return tenantConnections.get(databaseUri);
+  }
+
+  // Create new connection
+  const connection = mongoose.createConnection(databaseUri, {
+    maxPoolSize: 10,
+    minPoolSize: 2,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+    bufferCommands: false
+  });
+
+  tenantConnections.set(databaseUri, connection);
+  return connection;
+}
+
+/**
+ * Get Conversation and Message models for a specific tenant database
+ */
+function getTenantModels(databaseUri) {
+  const connection = getTenantConnection(databaseUri);
+
+  // Load Conversation schema
+  const ConversationSchema = new mongoose.Schema(
+    {
+      botId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Bot',
+        required: true,
+        index: true
+      },
+      sessionId: {
+        type: String,
+        required: true,
+        index: true,
+        trim: true
+      },
+      status: {
+        type: String,
+        enum: ['ai', 'human'],
+        default: 'ai',
+        required: true
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now,
+        index: true
+      },
+      lastActiveAt: {
+        type: Date,
+        default: Date.now,
+        index: true
+      }
+    },
+    { timestamps: false }
+  );
+
+  ConversationSchema.index({ botId: 1, sessionId: 1 }, { unique: true });
+  ConversationSchema.index({ status: 1, lastActiveAt: -1 });
+
+  ConversationSchema.pre('save', function(next) {
+    this.lastActiveAt = new Date();
+    next();
+  });
+
+  ConversationSchema.methods.updateActivity = function() {
+    this.lastActiveAt = new Date();
+    return this.save();
+  };
+
+  ConversationSchema.statics.findOrCreate = async function(botId, sessionId) {
+    let conversation = await this.findOne({ botId, sessionId });
+    
+    if (!conversation) {
+      conversation = new this({
+        botId,
+        sessionId,
+        status: 'ai',
+        createdAt: new Date(),
+        lastActiveAt: new Date()
+      });
+      await conversation.save();
+    } else {
+      await conversation.updateActivity();
+    }
+    
+    return conversation;
+  };
+
+  // Load Message schema
+  const MessageSchema = new mongoose.Schema(
+    {
+      conversationId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Conversation',
+        required: true,
+        index: true
+      },
+      sender: {
+        type: String,
+        enum: ['user', 'bot', 'agent'],
+        required: true
+      },
+      text: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 10000
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now,
+        index: true
+      },
+      sources: {
+        type: [String],
+        default: undefined
+      },
+      metadata: {
+        type: mongoose.Schema.Types.Mixed,
+        default: undefined
+      }
+    },
+    { timestamps: false }
+  );
+
+  MessageSchema.index({ conversationId: 1, createdAt: 1 });
+
+  MessageSchema.statics.getConversationMessages = async function(conversationId, limit = 100) {
+    return this.find({ conversationId })
+      .sort({ createdAt: 1 })
+      .limit(limit)
+      .select('sender text createdAt sources metadata')
+      .lean();
+  };
+
+  MessageSchema.statics.createMessage = async function(conversationId, sender, text, options = {}) {
+    const message = new this({
+      conversationId,
+      sender,
+      text,
+      createdAt: new Date(),
+      sources: options.sources,
+      metadata: options.metadata
+    });
+    
+    await message.save();
+    return message;
+  };
+
+  // Return models from tenant connection
+  const Conversation = connection.models.Conversation || connection.model('Conversation', ConversationSchema);
+  const Message = connection.models.Message || connection.model('Message', MessageSchema);
+
+  return { Conversation, Message };
+}
+
+/**
+ * POST /api/conversation/start
+ * Find or create a conversation for a given botId and sessionId
+ * 
+ * @body { botId: string, sessionId: string }
+ * @returns { success: boolean, conversation: Object }
+ */
+exports.startConversation = async (req, res) => {
+  try {
+    const { botId, sessionId } = req.body;
+
+    // Validate input
+    if (!botId || !sessionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'botId and sessionId are required'
+      });
+    }
+
+    // Validate bot exists and is active
+    const bot = await Bot.findById(botId);
+    if (!bot) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bot not found'
+      });
+    }
+
+    if (!bot.isActive) {
+      return res.status(403).json({
+        success: false,
+        error: 'Bot is inactive'
+      });
+    }
+
+    // Get tenant context to load tenant database
+    const tenantContext = await getUserTenantContext(bot.userId);
+    if (!tenantContext.databaseUri) {
+      return res.status(503).json({
+        success: false,
+        error: 'Tenant database not provisioned'
+      });
+    }
+
+    // Load models from tenant database
+    const { Conversation } = getTenantModels(tenantContext.databaseUri);
+
+    // Find or create conversation in tenant database
+    const conversation = await Conversation.findOrCreate(botId, sessionId);
+
+    console.log(`✅ Conversation ${conversation.status === 'ai' ? 'resumed' : 'started'}: ${conversation._id} (session: ${sessionId})`);
+
+    res.json({
+      success: true,
+      conversation: {
+        id: conversation._id,
+        botId: conversation.botId,
+        sessionId: conversation.sessionId,
+        status: conversation.status,
+        createdAt: conversation.createdAt,
+        lastActiveAt: conversation.lastActiveAt
+      }
+    });
+  } catch (err) {
+    console.error('❌ Failed to start conversation:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to start conversation',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
+/**
+ * GET /api/conversation/:sessionId/messages
+ * Get all messages for a conversation by sessionId
+ * 
+ * @param sessionId - The session ID
+ * @query botId - The bot ID (required to find conversation)
+ * @returns { success: boolean, messages: Array }
+ */
+exports.getMessages = async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { botId } = req.query;
+
+    // Validate input
+    if (!sessionId || !botId) {
+      return res.status(400).json({
+        success: false,
+        error: 'sessionId and botId are required'
+      });
+    }
+
+    // Validate bot exists
+    const bot = await Bot.findById(botId);
+    if (!bot) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bot not found'
+      });
+    }
+
+    // Get tenant context to load tenant database
+    const tenantContext = await getUserTenantContext(bot.userId);
+    if (!tenantContext.databaseUri) {
+      return res.status(503).json({
+        success: false,
+        error: 'Tenant database not provisioned'
+      });
+    }
+
+    // Load models from tenant database
+    const { Conversation, Message } = getTenantModels(tenantContext.databaseUri);
+
+    // Find conversation in tenant database
+    const conversation = await Conversation.findOne({ botId, sessionId });
+
+    if (!conversation) {
+      // No conversation yet - return empty messages
+      return res.json({
+        success: true,
+        messages: [],
+        conversationId: null
+      });
+    }
+
+    // Get messages for this conversation from tenant database
+    const messages = await Message.getConversationMessages(conversation._id);
+
+    console.log(`✅ Retrieved ${messages.length} messages for conversation ${conversation._id}`);
+
+    res.json({
+      success: true,
+      messages: messages.map(msg => ({
+        id: msg._id,
+        sender: msg.sender,
+        text: msg.text,
+        createdAt: msg.createdAt,
+        sources: msg.sources,
+        metadata: msg.metadata
+      })),
+      conversationId: conversation._id,
+      conversationStatus: conversation.status
+    });
+  } catch (err) {
+    console.error('❌ Failed to get messages:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve messages',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
+/**
+ * POST /api/chat/message
+ * Send a message in a conversation
+ * Handles both AI and human agent modes
+ * 
+ * @body { botId: string, sessionId: string, message: string }
+ * @returns { success: boolean, reply: Object, conversation: Object }
+ */
+exports.sendMessage = async (req, res) => {
+  try {
+    const { botId, sessionId, message } = req.body;
+
+    // Validate input
+    if (!botId || !sessionId || !message) {
+      return res.status(400).json({
+        success: false,
+        error: 'botId, sessionId, and message are required'
+      });
+    }
+
+    // Sanitize input
+    const sanitizedMessage = message.trim();
+    if (!sanitizedMessage) {
+      return res.status(400).json({
+        success: false,
+        error: 'Message cannot be empty'
+      });
+    }
+
+    if (sanitizedMessage.length > 10000) {
+      return res.status(400).json({
+        success: false,
+        error: 'Message is too long (max 10000 characters)'
+      });
+    }
+
+    // Validate bot exists and is active
+    const bot = await Bot.findById(botId);
+    if (!bot) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bot not found'
+      });
+    }
+
+    if (!bot.isActive) {
+      return res.status(403).json({
+        success: false,
+        error: 'Bot is inactive'
+      });
+    }
+
+    // Get tenant context to load tenant database
+    const tenantContext = await getUserTenantContext(bot.userId);
+    if (!tenantContext.databaseUri) {
+      return res.status(503).json({
+        success: false,
+        error: 'Tenant database not provisioned'
+      });
+    }
+
+    // Load models from tenant database
+    const { Conversation, Message } = getTenantModels(tenantContext.databaseUri);
+
+    // Find or create conversation in tenant database
+    const conversation = await Conversation.findOrCreate(botId, sessionId);
+
+    // Save user message to tenant database
+    await Message.createMessage(conversation._id, 'user', sanitizedMessage);
+
+    // Update conversation activity after user message
+    await conversation.updateActivity();
+
+    console.log(`💬 User message saved for conversation ${conversation._id}`);
+
+    // Handle based on conversation status
+    if (conversation.status === 'human') {
+      // Human agent mode - save message but don't call bot
+      const agentMessage = 'A human agent will join shortly.';
+      
+      // Save agent placeholder message to tenant database
+      await Message.createMessage(conversation._id, 'agent', agentMessage);
+
+      // Update conversation activity after agent message
+      await conversation.updateActivity();
+
+      console.log(`👤 Conversation ${conversation._id} in human mode - agent notified`);
+
+      return res.json({
+        success: true,
+        reply: {
+          sender: 'agent',
+          text: agentMessage,
+          createdAt: new Date()
+        },
+        conversation: {
+          id: conversation._id,
+          status: conversation.status
+        }
+      });
+    }
+
+    // AI mode - forward to RAG bot service
+    try {
+      // Validate bot has vector store
+      if (!bot.vectorStorePath) {
+        return res.status(503).json({
+          success: false,
+          error: 'Bot vector store not initialized. Please scrape websites first.',
+          errorType: 'SERVICE_UNAVAILABLE',
+          widgetError: true
+        });
+      }
+
+      console.log(`🧠 Forwarding message to RAG bot for conversation ${conversation._id}`);
+
+      // Call bot service
+      const botResult = await botJob.runBotForUser(
+        {
+          userId: bot.userId,
+          username: `bot_${bot._id}`,
+          botEndpoint: tenantContext.botEndpoint,
+          resourceId: tenantContext.resourceId,
+          vectorStorePath: bot.vectorStorePath,
+          databaseUri: tenantContext.databaseUri
+        },
+        sanitizedMessage,
+        { sessionId }
+      );
+
+      // Save bot response to tenant database
+      const botMessage = await Message.createMessage(
+        conversation._id,
+        'bot',
+        botResult.answer,
+        {
+          sources: botResult.sources,
+          metadata: {
+            bot_session_id: botResult.session_id,
+            confidence: botResult.confidence,
+            resource_id: tenantContext.resourceId
+          }
+        }
+      );
+
+      // Update conversation activity after bot message
+      await conversation.updateActivity();
+
+      console.log(`🤖 Bot response saved for conversation ${conversation._id}`);
+
+      return res.json({
+        success: true,
+        reply: {
+          sender: 'bot',
+          text: botResult.answer,
+          createdAt: botMessage.createdAt,
+          sources: botResult.sources
+        },
+        conversation: {
+          id: conversation._id,
+          status: conversation.status
+        }
+      });
+    } catch (botError) {
+      console.error(`❌ Bot error for conversation ${conversation._id}:`, botError.message);
+
+      // Save error message to tenant database
+      const errorMessage = 'I apologize, but I encountered an error processing your request. Please try again.';
+      await Message.createMessage(
+        conversation._id,
+        'bot',
+        errorMessage,
+        { metadata: { error: true, errorMessage: botError.message } }
+      );
+
+      // Update conversation activity after error message
+      await conversation.updateActivity();
+
+      // Determine appropriate status and error message
+      let statusCode = botError.statusCode || 500;
+      let userMessage = errorMessage;
+
+      if (botError.message.includes('Cannot connect') || botError.code === 'ECONNREFUSED') {
+        statusCode = 503;
+        userMessage = 'Bot service is currently unavailable. Please try again later.';
+      }
+
+      return res.status(statusCode).json({
+        success: false,
+        error: userMessage,
+        errorType: 'BOT_ERROR',
+        widgetError: true,
+        conversation: {
+          id: conversation._id,
+          status: conversation.status
+        }
+      });
+    }
+  } catch (err) {
+    console.error('❌ Failed to send message:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send message',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
+/**
+ * PUT /api/conversation/:conversationId/status
+ * Update conversation status (AI <-> Human handoff)
+ * 
+ * @param conversationId - The conversation ID
+ * @body { status: 'ai' | 'human' }
+ * @returns { success: boolean, conversation: Object }
+ */
+exports.updateConversationStatus = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { status, botId } = req.body;
+
+    // Validate input
+    if (!conversationId || !botId) {
+      return res.status(400).json({
+        success: false,
+        error: 'conversationId and botId are required'
+      });
+    }
+
+    if (!status || !['ai', 'human'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: 'status must be either "ai" or "human"'
+      });
+    }
+
+    // Validate bot exists
+    const bot = await Bot.findById(botId);
+    if (!bot) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bot not found'
+      });
+    }
+
+    // Get tenant context to load tenant database
+    const tenantContext = await getUserTenantContext(bot.userId);
+    if (!tenantContext.databaseUri) {
+      return res.status(503).json({
+        success: false,
+        error: 'Tenant database not provisioned'
+      });
+    }
+
+    // Load models from tenant database
+    const { Conversation } = getTenantModels(tenantContext.databaseUri);
+
+    // Find conversation in tenant database
+    const conversation = await Conversation.findById(conversationId);
+
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        error: 'Conversation not found'
+      });
+    }
+
+    // Update status
+    conversation.status = status;
+    await conversation.save();
+
+    console.log(`✅ Conversation ${conversationId} status updated to: ${status}`);
+
+    res.json({
+      success: true,
+      conversation: {
+        id: conversation._id,
+        botId: conversation.botId,
+        sessionId: conversation.sessionId,
+        status: conversation.status,
+        lastActiveAt: conversation.lastActiveAt
+      }
+    });
+  } catch (err) {
+    console.error('❌ Failed to update conversation status:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update conversation status',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};

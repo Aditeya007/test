@@ -14,6 +14,7 @@ const userRoutes = require('./routes/user');
 const usersRoutes = require('./routes/users');
 const botRoutes = require('./routes/bot');
 const scrapeRoutes = require('./routes/scrape');
+const chatRoutes = require('./routes/chat');
 
 // =============================================================================
 // ENVIRONMENT VALIDATION - Ensure all critical variables are set
@@ -145,6 +146,7 @@ app.use('/api/user', userRoutes);          // Current user info
 app.use('/api/users', usersRoutes);        // Authenticated user management
 app.use('/api/bot', botRoutes);            // Bot interaction endpoints
 app.use('/api/scrape', scrapeRoutes);      // Scraper + updater triggers
+app.use('/api', chatRoutes);               // Chat conversation and message endpoints
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
