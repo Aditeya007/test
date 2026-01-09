@@ -125,16 +125,15 @@ const agentLogin = async (req, res) => {
       });
     }
 
-    // Generate JWT token with agent role
+    // Generate JWT token as the owning user (impersonate tenant)
     const token = jwt.sign(
       {
-        role: 'agent',
-        agentId: foundAgent._id.toString(),
-        tenantId: foundTenant._id.toString(),
-        username: foundAgent.username
+        userId: foundTenant._id.toString(),
+        username: foundTenant.username,
+        role: 'user'
       },
       process.env.JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '7d' }
     );
 
     // Include tenant data in response
