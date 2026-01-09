@@ -12,7 +12,7 @@ const tenantConnections = new Map();
  * Get or create a connection to the tenant's database
  * Each tenant has their own MongoDB database for data isolation
  */
-function getTenantConnection(databaseUri) {
+async function getTenantConnection(databaseUri) {
   if (!databaseUri) {
     throw new Error('databaseUri is required for tenant database connection');
   }
@@ -22,14 +22,14 @@ function getTenantConnection(databaseUri) {
     return tenantConnections.get(databaseUri);
   }
 
-  // Create new connection
-  const connection = mongoose.createConnection(databaseUri, {
+  // Create new connection and await it
+  const connection = await mongoose.createConnection(databaseUri, {
     maxPoolSize: 10,
     minPoolSize: 2,
     serverSelectionTimeoutMS: 5000,
     socketTimeoutMS: 45000,
     bufferCommands: false
-  });
+  }).asPromise();
 
   tenantConnections.set(databaseUri, connection);
   return connection;
@@ -38,8 +38,8 @@ function getTenantConnection(databaseUri) {
 /**
  * Get Conversation and Message models for a specific tenant database
  */
-function getTenantModels(databaseUri) {
-  const connection = getTenantConnection(databaseUri);
+async function getTenantModels(databaseUri) {
+  const connection = await getTenantConnection(databaseUri);
 
   // Load Conversation schema
   const ConversationSchema = new mongoose.Schema(
@@ -221,7 +221,7 @@ exports.startConversation = async (req, res) => {
     }
 
     // Load models from tenant database
-    const { Conversation } = getTenantModels(tenantContext.databaseUri);
+    const { Conversation } = await getTenantModels(tenantContext.databaseUri);
 
     // Find or create conversation in tenant database
     const conversation = await Conversation.findOrCreate(botId, sessionId);
@@ -289,7 +289,7 @@ exports.getMessages = async (req, res) => {
     }
 
     // Load models from tenant database
-    const { Conversation, Message } = getTenantModels(tenantContext.databaseUri);
+    const { Conversation, Message } = await getTenantModels(tenantContext.databaseUri);
 
     // Find conversation in tenant database
     const conversation = await Conversation.findOne({ botId, sessionId });
@@ -393,7 +393,7 @@ exports.sendMessage = async (req, res) => {
     }
 
     // Load models from tenant database
-    const { Conversation, Message } = getTenantModels(tenantContext.databaseUri);
+    const { Conversation, Message } = await getTenantModels(tenantContext.databaseUri);
 
     // Find or create conversation in tenant database
     const conversation = await Conversation.findOrCreate(botId, sessionId);
@@ -586,7 +586,7 @@ exports.updateConversationStatus = async (req, res) => {
     }
 
     // Load models from tenant database
-    const { Conversation } = getTenantModels(tenantContext.databaseUri);
+    const { Conversation } = await getTenantModels(tenantContext.databaseUri);
 
     // Find conversation in tenant database
     const conversation = await Conversation.findById(conversationId);

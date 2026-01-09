@@ -22,7 +22,7 @@ const tenantConnections = new Map();
  * Get or create a connection to the tenant's database
  * Uses separate connection to avoid interfering with admin DB
  */
-const getTenantConnection = (databaseUri) => {
+const getTenantConnection = async (databaseUri) => {
   if (!databaseUri) {
     throw new Error('databaseUri is required for tenant database connection');
   }
@@ -32,14 +32,14 @@ const getTenantConnection = (databaseUri) => {
     return tenantConnections.get(databaseUri);
   }
 
-  // Create new connection (separate from admin DB)
-  const connection = mongoose.createConnection(databaseUri, {
+  // Create new connection (separate from admin DB) and await it
+  const connection = await mongoose.createConnection(databaseUri, {
     maxPoolSize: 10,
     minPoolSize: 2,
     serverSelectionTimeoutMS: 5000,
     socketTimeoutMS: 45000,
     bufferCommands: false
-  });
+  }).asPromise();
 
   tenantConnections.set(databaseUri, connection);
   return connection;
@@ -48,8 +48,8 @@ const getTenantConnection = (databaseUri) => {
 /**
  * Get Agent model for a specific tenant database
  */
-const getAgentModel = (databaseUri) => {
-  const tenantDB = getTenantConnection(databaseUri);
+const getAgentModel = async (databaseUri) => {
+  const tenantDB = await getTenantConnection(databaseUri);
   
   // Check if model already exists for this connection
   if (tenantDB.models.Agent) {
@@ -90,7 +90,7 @@ const agentLogin = async (req, res) => {
       if (!tenant.databaseUri) continue;
 
       try {
-        const Agent = getAgentModel(tenant.databaseUri);
+        const Agent = await getAgentModel(tenant.databaseUri);
         const agent = await Agent.findOne({ username });
 
         if (agent) {
@@ -192,7 +192,7 @@ const createAgent = async (req, res) => {
     }
 
     // Get agent count from TENANT database
-    const Agent = getAgentModel(tenant.databaseUri);
+    const Agent = await getAgentModel(tenant.databaseUri);
     const agentCount = await Agent.countDocuments();
 
     // Check if limit reached
@@ -269,7 +269,7 @@ const listAgents = async (req, res) => {
     }
 
     // Get agents from TENANT database
-    const Agent = getAgentModel(tenant.databaseUri);
+    const Agent = await getAgentModel(tenant.databaseUri);
     const agents = await Agent.find().sort({ createdAt: -1 });
 
     res.json({
@@ -307,7 +307,7 @@ const updateAgent = async (req, res) => {
     }
 
     // Get agent from TENANT database
-    const Agent = getAgentModel(tenant.databaseUri);
+    const Agent = await getAgentModel(tenant.databaseUri);
     const agent = await Agent.findById(agentId);
 
     if (!agent) {
@@ -366,7 +366,7 @@ const deleteAgent = async (req, res) => {
     }
 
     // Get agent from TENANT database
-    const Agent = getAgentModel(tenant.databaseUri);
+    const Agent = await getAgentModel(tenant.databaseUri);
     const agent = await Agent.findByIdAndDelete(agentId);
 
     if (!agent) {
