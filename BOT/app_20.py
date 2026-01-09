@@ -1048,7 +1048,7 @@ class SemanticIntelligentRAG:
 
             print(f"🔍 Retrieved {len(unique_docs)} unique documents for: '{question_analysis['original_question']}'")
 
-            return unique_docs[:100], unique_distances[:100]  # Return more documents for better coverage
+            return unique_docs[:80], unique_distances[:80]  # Return more documents for better coverage
 
         except Exception as e:
             print(f"❌ Error in comprehensive semantic retrieval: {e}")
@@ -1062,12 +1062,12 @@ class SemanticIntelligentRAG:
         # Extract meaningful keywords from question (ignore short words)
         keywords = [word.lower() for word in question.split() if len(word) > 3]
 
+        # Batch CrossEncoder predictions for all documents at once
+        semantic_scores = self.reranker.predict([(question, doc) for doc in docs])
+
         # Score each document
         doc_scores = []
-        for doc in docs:
-            # Get semantic relevance score from CrossEncoder
-            semantic_score = self.reranker.predict([(question, doc)])[0]
-
+        for doc, semantic_score in zip(docs, semantic_scores):
             # Calculate keyword match bonus
             doc_lower = doc.lower()
             keyword_matches = sum(1 for keyword in keywords if keyword in doc_lower)
@@ -1300,18 +1300,6 @@ ANSWER (be concise and factual):"""
             # PRIORITY 3: Normal flow - contact extraction, pricing detection, RAG
             # ============================================================================
 
-            # Analyze question semantically (needed for pricing detection)
-            print("🔍 DEBUG - Analyzing question semantically...")
-            question_analysis = self.analyze_question_semantically(question)
-            print(f"🔍 DEBUG - Question analysis completed")
-
-            # Store the original pricing question if this is a pricing inquiry
-            if self.detect_pricing_inquiry(question, question_analysis.get('intent', '')):
-                if 'original_pricing_question' not in self.conversation_contexts.get(session_id, {}):
-                    if session_id not in self.conversation_contexts:
-                        self.conversation_contexts[session_id] = {}
-                    self.conversation_contexts[session_id]['original_pricing_question'] = question
-
             # Extract contact info from question
             print("🔍 DEBUG - Extracting contact info...")
             contact_info = self.contact_extractor.extract_contact_info(question)
@@ -1396,7 +1384,7 @@ ANSWER (be concise and factual):"""
                     }
                     return "Before we continue, may I have your name please?"
 
-            # Analyze question semantically (for pricing detection and retrieval)
+            # Analyze question semantically ONCE and reuse throughout
             print("🔍 DEBUG - Analyzing question semantically...")
             question_analysis = self.analyze_question_semantically(question)
             print(f"🔍 DEBUG - Question analysis completed")
@@ -1432,7 +1420,7 @@ ANSWER (be concise and factual):"""
             # Pass 1: Primary semantic search with embeddings
             print("🔍 Pass 1: Semantic embedding search...")
             docs1, dist1 = self.comprehensive_semantic_retrieval(question_analysis)
-            for doc in docs1[:60]:
+            for doc in docs1[:50]:
                 if doc not in seen_docs:
                     all_docs.append(doc)
                     seen_docs.add(doc)
@@ -1442,7 +1430,7 @@ ANSWER (be concise and factual):"""
             try:
                 results2 = self.collection.query(
                     query_texts=[normalized_query],
-                    n_results=60
+                    n_results=50
                 )
                 if results2['documents'] and results2['documents'][0]:
                     for doc in results2['documents'][0]:
@@ -1460,7 +1448,7 @@ ANSWER (be concise and factual):"""
                 try:
                     results3 = self.collection.query(
                         query_texts=[entity_query],
-                        n_results=40
+                        n_results=30
                     )
                     if results3['documents'] and results3['documents'][0]:
                         for doc in results3['documents'][0]:

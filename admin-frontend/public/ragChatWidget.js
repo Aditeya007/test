@@ -46,6 +46,25 @@
     return `widget_session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
+  // Get or create session ID from sessionStorage (scoped per bot)
+  function getOrCreateSessionId(botId) {
+    const storageKey = `chat_conversation_id_${botId}`;
+    
+    // Try to retrieve existing session ID from sessionStorage
+    const existingSessionId = sessionStorage.getItem(storageKey);
+    
+    if (existingSessionId) {
+      console.log('RAG Widget: Resuming existing conversation');
+      return existingSessionId;
+    }
+    
+    // Create new session ID
+    const newSessionId = generateSessionId();
+    sessionStorage.setItem(storageKey, newSessionId);
+    console.log('RAG Widget: Starting new conversation');
+    return newSessionId;
+  }
+
   // Create widget HTML structure
   function createWidgetHTML() {
     const widgetContainer = document.createElement('div');
@@ -510,8 +529,8 @@
     // Merge config
     config = { ...config, ...options };
 
-    // Generate session ID
-    state.sessionId = generateSessionId();
+    // Get or create session ID from sessionStorage (scoped per bot)
+    state.sessionId = getOrCreateSessionId(config.botId);
 
     // Wait for DOM to be ready
     if (document.readyState === 'loading') {
