@@ -71,9 +71,9 @@ function AgentLoginPage() {
           localStorage.setItem('agentTenant', JSON.stringify(response.tenant));
         }
 
-        // Redirect to dashboard
-        navigate('/dashboard');
-        window.location.reload(); // Force reload to reinitialize context
+        // Redirect to dashboard by replacing the URL and reloading
+        // This ensures AuthContext properly initializes with the new token
+        window.location.href = '/dashboard';
       }
     } catch (error) {
       setServerError(error.message || 'Login failed. Please check your credentials.');
