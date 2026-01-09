@@ -224,7 +224,7 @@ exports.getAllUsers = async (req, res) => {
 };
 
 exports.createUser = async (req, res) => {
-  const { name, email, username, password, maxBots } = req.body;
+  const { name, email, username, password, maxBots, maxAgents } = req.body;
   const requestedActive = req.body.isActive;
 
   try {
@@ -243,6 +243,9 @@ exports.createUser = async (req, res) => {
     
     // Parse maxBots exactly as provided by admin
     const userMaxBots = Number(maxBots);
+    
+    // Parse maxAgents (default to 0 if not provided)
+    const userMaxAgents = maxAgents !== undefined ? Number(maxAgents) : 0;
 
     // Check for duplicate email and username for the ONE user
     const [existingEmail, existingUsername] = await Promise.all([
@@ -275,7 +278,8 @@ exports.createUser = async (req, res) => {
       role: 'user',
       isActive,
       adminId: currentUserId,
-      maxBots: userMaxBots
+      maxBots: userMaxBots,
+      maxAgents: userMaxAgents
     });
 
     // Provision user-level resources
@@ -367,7 +371,7 @@ exports.getUserResources = async (req, res) => {
 
 exports.updateUser = async (req, res) => {
   const { id } = req.params;
-  const { name, email, username, password, isActive, maxBots } = req.body;
+  const { name, email, username, password, isActive, maxBots, maxAgents } = req.body;
 
   const updates = {};
 
@@ -393,6 +397,17 @@ exports.updateUser = async (req, res) => {
       });
     }
     updates.maxBots = parsedMaxBots;
+  }
+  // Allow admins to update maxAgents
+  if (typeof maxAgents !== 'undefined') {
+    const parsedMaxAgents = Number(maxAgents);
+    if (isNaN(parsedMaxAgents) || parsedMaxAgents < 0 || parsedMaxAgents > 50) {
+      return res.status(400).json({ 
+        error: 'maxAgents must be a number between 0 and 50',
+        field: 'maxAgents'
+      });
+    }
+    updates.maxAgents = parsedMaxAgents;
   }
 
   try {

@@ -9,6 +9,7 @@ import UserForm from '../components/users/UserForm';
 import Loader from '../components/Loader';
 import WidgetInstaller from '../components/WidgetInstaller';
 import BotCard from '../components/BotCard';
+import AgentForm from '../components/AgentForm';
 
 import '../styles/index.css';
 
@@ -51,6 +52,15 @@ function DashboardPage() {
   const [addKnowledgeLoading, setAddKnowledgeLoading] = useState(false);
   const [addKnowledgeError, setAddKnowledgeError] = useState('');
   const [addKnowledgeSuccess, setAddKnowledgeSuccess] = useState('');
+  
+  // Agent management state
+  const [agents, setAgents] = useState([]);
+  const [agentsLoading, setAgentsLoading] = useState(false);
+  const [agentsError, setAgentsError] = useState('');
+  const [addAgentModalOpen, setAddAgentModalOpen] = useState(false);
+  const [addAgentLoading, setAddAgentLoading] = useState(false);
+  const [addAgentError, setAddAgentError] = useState('');
+  const [addAgentSuccess, setAddAgentSuccess] = useState('');
   
   // Run crawl state
   const [scrapeLoading, setScrapeLoading] = useState(false);
@@ -133,13 +143,38 @@ function DashboardPage() {
     }
   }, [token, user, tenantDetails]);
 
+  // Fetch agents for the current tenant
+  const fetchAgents = useCallback(async () => {
+    if (!token || !user || !tenantDetails) return;
+    
+    setAgentsLoading(true);
+    setAgentsError('');
+    
+    try {
+      const response = await apiRequest('/agent/list', {
+        method: 'GET',
+        token
+      });
+      
+      if (response.agents) {
+        setAgents(response.agents);
+      }
+    } catch (err) {
+      console.error('Failed to fetch agents:', err);
+      setAgentsError(err.message || 'Failed to load agents');
+    } finally {
+      setAgentsLoading(false);
+    }
+  }, [token, user, tenantDetails]);
+
   // Fetch bots when tenant details change
   useEffect(() => {
     // Fetch bots for both admins viewing users and regular users viewing their own bots
     if (user && tenantDetails) {
       fetchBots();
+      fetchAgents();
     }
-  }, [fetchBots, user, tenantDetails]);
+  }, [fetchBots, fetchAgents, user, tenantDetails]);
   
   // Cleanup polling interval on unmount or when selected bot changes
   useEffect(() => {
@@ -301,6 +336,33 @@ function DashboardPage() {
       setAddWebsiteError(err.message || 'Failed to add website');
     } finally {
       setAddWebsiteLoading(false);
+    }
+  }
+
+  async function handleCreateAgent(formData) {
+    setAddAgentLoading(true);
+    setAddAgentError('');
+    setAddAgentSuccess('');
+
+    try {
+      await apiRequest('/agent/create', {
+        method: 'POST',
+        token,
+        data: formData
+      });
+      
+      setAddAgentSuccess('Agent created successfully!');
+      setAddAgentModalOpen(false);
+      
+      // Refetch agents
+      await fetchAgents();
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setAddAgentSuccess(''), 3000);
+    } catch (err) {
+      setAddAgentError(err.message || 'Failed to create agent');
+    } finally {
+      setAddAgentLoading(false);
     }
   }
 
@@ -679,21 +741,78 @@ function DashboardPage() {
               
               {!botsLoading && !botsError && (
                 <>
-                  {/* Add Website Button */}
-                  {bots.length < tenantDetails?.maxBots && (
-                    <div style={{ marginBottom: '1rem' }}>
+                  {/* Action Buttons */}
+                  <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                    {/* Add Website Button */}
+                    {bots.length < tenantDetails?.maxBots && (
                       <button
                         className="dashboard-action-btn"
                         onClick={() => setAddWebsiteModalOpen(true)}
                         style={{
                           padding: '0.75rem 1.5rem',
                           fontSize: '1rem',
-                          width: '100%',
-                          maxWidth: '300px'
+                          flex: '1',
+                          minWidth: '200px'
                         }}
                       >
                         ➕ Add Website
                       </button>
+                    )}
+                    
+                    {/* Add Agent Button */}
+                    {tenantDetails?.maxAgents > 0 && agents.length < tenantDetails?.maxAgents && (
+                      <button
+                        className="dashboard-action-btn"
+                        onClick={() => setAddAgentModalOpen(true)}
+                        style={{
+                          padding: '0.75rem 1.5rem',
+                          fontSize: '1rem',
+                          flex: '1',
+                          minWidth: '200px',
+                          background: '#10b981',
+                          borderColor: '#10b981'
+                        }}
+                      >
+                        👤 Add Agent
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Agent Status Display */}
+                  {tenantDetails?.maxAgents > 0 && (
+                    <div style={{
+                      padding: '0.75rem 1rem',
+                      background: '#f0fdf4',
+                      border: '1px solid #10b981',
+                      borderRadius: '6px',
+                      marginBottom: '1rem',
+                      fontSize: '0.875rem',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <span>
+                        <strong>Human Agents:</strong> {agents.length} / {tenantDetails.maxAgents}
+                      </span>
+                      {agents.length > 0 && (
+                        <span style={{ color: '#059669', fontSize: '0.75rem' }}>
+                          {agents.filter(a => a.isActive).length} active
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {addAgentSuccess && (
+                    <div style={{
+                      padding: '0.75rem 1rem',
+                      background: '#d1fae5',
+                      border: '1px solid #10b981',
+                      borderRadius: '6px',
+                      color: '#065f46',
+                      marginBottom: '1rem',
+                      fontSize: '0.875rem'
+                    }}>
+                      {addAgentSuccess}
                     </div>
                   )}
 
@@ -1235,6 +1354,23 @@ function DashboardPage() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Agent Modal */}
+      {addAgentModalOpen && (
+        <div className="scrape-modal-overlay" role="dialog" aria-modal="true">
+          <div className="scrape-modal" style={{ maxWidth: '500px' }}>
+            <AgentForm
+              onSubmit={handleCreateAgent}
+              onClose={() => {
+                setAddAgentModalOpen(false);
+                setAddAgentError('');
+              }}
+              loading={addAgentLoading}
+              error={addAgentError}
+            />
           </div>
         </div>
       )}

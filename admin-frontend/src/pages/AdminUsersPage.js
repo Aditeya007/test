@@ -76,7 +76,8 @@ function AdminUsersPage() {
           email: values.email.trim(),
           username: values.username.trim(),
           password: values.password,
-          maxBots: values.maxBots
+          maxBots: values.maxBots,
+          maxAgents: values.maxAgents || 0
         }
       });
       
@@ -123,6 +124,10 @@ function AdminUsersPage() {
     // Include maxBots if changed
     if (values.maxBots !== editingUser.maxBots) {
       payload.maxBots = values.maxBots;
+    }
+    // Include maxAgents if changed
+    if (values.maxAgents !== editingUser.maxAgents) {
+      payload.maxAgents = values.maxAgents;
     }
     if (Object.keys(payload).length === 0) {
       setErrorMessage('No changes detected to update.');

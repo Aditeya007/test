@@ -98,6 +98,12 @@ const UserSchema = new mongoose.Schema(
       min: [1, 'Max bots must be at least 1'],
       max: [10, 'Max bots cannot exceed 10']
     },
+    maxAgents: {
+      type: Number,
+      default: 0,
+      min: [0, 'Max agents cannot be negative'],
+      max: [50, 'Max agents cannot exceed 50']
+    },
     // Scheduler-related fields for per-tenant persistent scheduling
     schedulerPid: {
       type: Number,
@@ -197,6 +203,8 @@ UserSchema.methods.toPublicProfile = function() {
     ...(this.role === 'admin' && { vectorStorePath: this.vectorStorePath }),
     ...(this.role === 'user' && this.adminId && { adminId: this.adminId }),
     role: this.role,
+    maxBots: this.maxBots,
+    maxAgents: this.maxAgents,
     apiToken: this.apiToken,
     // Scheduler status fields
     schedulerPid: this.schedulerPid,
