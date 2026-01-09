@@ -7,7 +7,7 @@ const auth = require('../middleware/auth');
 const authenticateAgent = require('../middleware/authenticateAgent');
 
 /**
- * Agent Routes
+ * Agent Routes - PHASE-1
  * 
  * Public routes:
  * - POST /api/agent/login - Agent login
@@ -18,10 +18,10 @@ const authenticateAgent = require('../middleware/authenticateAgent');
  * - PATCH /api/agent/:agentId - Update agent (tenant only)
  * - DELETE /api/agent/:agentId - Delete agent (tenant only)
  * 
- * Agent-protected routes (require agent auth):
- * - GET /api/agent/conversations - Get conversations
- * - POST /api/agent/conversation/:conversationId/reply - Reply to conversation
- * - PATCH /api/agent/conversation/:conversationId/status - Update conversation status
+ * PHASE-2 (not yet implemented):
+ * - Conversation viewing
+ * - Agent replies
+ * - Status handoff
  */
 
 // Public routes
@@ -32,10 +32,5 @@ router.post('/create', auth, agentController.createAgent);
 router.get('/list', auth, agentController.listAgents);
 router.patch('/:agentId', auth, agentController.updateAgent);
 router.delete('/:agentId', auth, agentController.deleteAgent);
-
-// Agent-protected routes (agent accesses conversations)
-router.get('/conversations', authenticateAgent, agentController.getConversations);
-router.post('/conversation/:conversationId/reply', authenticateAgent, agentController.replyToConversation);
-router.patch('/conversation/:conversationId/status', authenticateAgent, agentController.updateConversationStatus);
 
 module.exports = router;

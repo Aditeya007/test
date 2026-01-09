@@ -10,24 +10,46 @@ const AgentSchema = require('../models/Agent');
  * Agent Controller
  * Handles agent authentication and management
  * 
- * IMPORTANT: Agents exist ONLY in tenant databases, NOT in admin database
+ * IMPORTANT: 
+ * - User models are in the ADMIN database (default mongoose connection)
+ * - Agent models are in TENANT databases (separate connections)
  */
 
+// Cache for tenant database connections
+const tenantConnections = new Map();
+
 /**
- * Get tenant database connection
- * Each tenant has their own database: rag_<username>_<id>
+ * Get or create a connection to the tenant's database
+ * Uses separate connection to avoid interfering with admin DB
  */
-const getTenantDB = (tenantId) => {
-  const dbName = `rag_tenant_${tenantId}`;
-  const connection = mongoose.connection.useDb(dbName);
+const getTenantConnection = (databaseUri) => {
+  if (!databaseUri) {
+    throw new Error('databaseUri is required for tenant database connection');
+  }
+
+  // Return cached connection if exists
+  if (tenantConnections.has(databaseUri)) {
+    return tenantConnections.get(databaseUri);
+  }
+
+  // Create new connection (separate from admin DB)
+  const connection = mongoose.createConnection(databaseUri, {
+    maxPoolSize: 10,
+    minPoolSize: 2,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+    bufferCommands: false
+  });
+
+  tenantConnections.set(databaseUri, connection);
   return connection;
 };
 
 /**
- * Get Agent model for a specific tenant
+ * Get Agent model for a specific tenant database
  */
-const getAgentModel = (tenantId) => {
-  const tenantDB = getTenantDB(tenantId);
+const getAgentModel = (databaseUri) => {
+  const tenantDB = getTenantConnection(databaseUri);
   
   // Check if model already exists for this connection
   if (tenantDB.models.Agent) {
@@ -56,7 +78,7 @@ const agentLogin = async (req, res) => {
       });
     }
 
-    // Verify tenant exists
+    // Verify tenant exists in ADMIN database
     const tenant = await User.findById(tenantId);
     if (!tenant || tenant.role !== 'user') {
       return res.status(404).json({
@@ -65,8 +87,8 @@ const agentLogin = async (req, res) => {
       });
     }
 
-    // Get agent from tenant database
-    const Agent = getAgentModel(tenantId);
+    // Get agent from TENANT database using tenant's databaseUri
+    const Agent = getAgentModel(tenant.databaseUri);
     const agent = await Agent.findOne({ username });
 
     if (!agent) {
@@ -139,7 +161,7 @@ const createAgent = async (req, res) => {
       });
     }
 
-    // Get tenant (user) info to check maxAgents limit
+    // Get tenant (user) info from ADMIN database to check maxAgents limit
     const tenant = await User.findById(tenantId);
     if (!tenant) {
       return res.status(404).json({
@@ -148,8 +170,8 @@ const createAgent = async (req, res) => {
       });
     }
 
-    // Get agent count from tenant database
-    const Agent = getAgentModel(tenantId);
+    // Get agent count from TENANT database
+    const Agent = getAgentModel(tenant.databaseUri);
     const agentCount = await Agent.countDocuments();
 
     // Check if limit reached
@@ -216,12 +238,18 @@ const listAgents = async (req, res) => {
   try {
     const tenantId = req.user.id; // From auth middleware
 
-    // Get agents from tenant database
-    const Agent = getAgentModel(tenantId);
-    const agents = await Agent.find().sort({ createdAt: -1 });
-
-    // Get tenant info for maxAgents
+    // Get tenant info from ADMIN database
     const tenant = await User.findById(tenantId);
+    if (!tenant) {
+      return res.status(404).json({
+        error: 'Tenant not found',
+        message: 'Invalid tenant'
+      });
+    }
+
+    // Get agents from TENANT database
+    const Agent = getAgentModel(tenant.databaseUri);
+    const agents = await Agent.find().sort({ createdAt: -1 });
 
     res.json({
       agents: agents.map(agent => agent.toPublicProfile()),
@@ -248,8 +276,17 @@ const updateAgent = async (req, res) => {
     const { name, email, phone, isActive } = req.body;
     const tenantId = req.user.id;
 
-    // Get agent from tenant database
-    const Agent = getAgentModel(tenantId);
+    // Get tenant info from ADMIN database
+    const tenant = await User.findById(tenantId);
+    if (!tenant) {
+      return res.status(404).json({
+        error: 'Tenant not found',
+        message: 'Invalid tenant'
+      });
+    }
+
+    // Get agent from TENANT database
+    const Agent = getAgentModel(tenant.databaseUri);
     const agent = await Agent.findById(agentId);
 
     if (!agent) {
@@ -298,8 +335,17 @@ const deleteAgent = async (req, res) => {
     const { agentId } = req.params;
     const tenantId = req.user.id;
 
-    // Get agent from tenant database
-    const Agent = getAgentModel(tenantId);
+    // Get tenant info from ADMIN database
+    const tenant = await User.findById(tenantId);
+    if (!tenant) {
+      return res.status(404).json({
+        error: 'Tenant not found',
+        message: 'Invalid tenant'
+      });
+    }
+
+    // Get agent from TENANT database
+    const Agent = getAgentModel(tenant.databaseUri);
     const agent = await Agent.findByIdAndDelete(agentId);
 
     if (!agent) {
@@ -322,151 +368,19 @@ const deleteAgent = async (req, res) => {
   }
 };
 
-/**
- * GET /api/agent/conversations
- * Get all conversations for the agent's tenant
- * Requires agent authentication
- */
-const getConversations = async (req, res) => {
-  try {
-    const { tenantId } = req.agent; // From authenticateAgent middleware
-
-    // Get tenant's conversation model
-    const tenantDB = getTenantDB(tenantId);
-    const Conversation = tenantDB.model('Conversation', require('../models/Conversation').schema);
-
-    const conversations = await Conversation.find()
-      .sort({ updatedAt: -1 })
-      .limit(100);
-
-    res.json({
-      conversations
-    });
-  } catch (error) {
-    console.error('Get conversations error:', error);
-    res.status(500).json({
-      error: 'Failed to retrieve conversations',
-      message: 'An error occurred while fetching conversations'
-    });
-  }
-};
-
-/**
- * POST /api/agent/conversation/:conversationId/reply
- * Agent replies to a conversation
- * Requires agent authentication
- */
-const replyToConversation = async (req, res) => {
-  try {
-    const { conversationId } = req.params;
-    const { message } = req.body;
-    const { tenantId, username } = req.agent;
-
-    if (!message) {
-      return res.status(400).json({
-        error: 'Missing message',
-        message: 'Message is required'
-      });
-    }
-
-    // Get tenant's models
-    const tenantDB = getTenantDB(tenantId);
-    const Conversation = tenantDB.model('Conversation', require('../models/Conversation').schema);
-    const Message = tenantDB.model('Message', require('../models/Message').schema);
-
-    // Find conversation
-    const conversation = await Conversation.findById(conversationId);
-    if (!conversation) {
-      return res.status(404).json({
-        error: 'Conversation not found',
-        message: 'Conversation does not exist'
-      });
-    }
-
-    // Create agent message
-    const newMessage = new Message({
-      conversationId: conversation._id,
-      role: 'agent',
-      content: message,
-      agentUsername: username,
-      timestamp: new Date()
-    });
-
-    await newMessage.save();
-
-    // Update conversation
-    conversation.updatedAt = new Date();
-    await conversation.save();
-
-    res.json({
-      message: 'Reply sent successfully',
-      messageData: newMessage
-    });
-  } catch (error) {
-    console.error('Reply to conversation error:', error);
-    res.status(500).json({
-      error: 'Failed to send reply',
-      message: 'An error occurred while sending the reply'
-    });
-  }
-};
-
-/**
- * PATCH /api/agent/conversation/:conversationId/status
- * Change conversation status (ai <-> human)
- * Requires agent authentication
- */
-const updateConversationStatus = async (req, res) => {
-  try {
-    const { conversationId } = req.params;
-    const { status } = req.body;
-    const { tenantId } = req.agent;
-
-    if (!status || !['ai', 'human'].includes(status)) {
-      return res.status(400).json({
-        error: 'Invalid status',
-        message: 'Status must be "ai" or "human"'
-      });
-    }
-
-    // Get tenant's conversation model
-    const tenantDB = getTenantDB(tenantId);
-    const Conversation = tenantDB.model('Conversation', require('../models/Conversation').schema);
-
-    // Update conversation
-    const conversation = await Conversation.findByIdAndUpdate(
-      conversationId,
-      { status, updatedAt: new Date() },
-      { new: true }
-    );
-
-    if (!conversation) {
-      return res.status(404).json({
-        error: 'Conversation not found',
-        message: 'Conversation does not exist'
-      });
-    }
-
-    res.json({
-      message: 'Conversation status updated',
-      conversation
-    });
-  } catch (error) {
-    console.error('Update conversation status error:', error);
-    res.status(500).json({
-      error: 'Failed to update status',
-      message: 'An error occurred while updating the conversation status'
-    });
-  }
-};
+// ============================================================================
+// PHASE-2: Conversation & Message Handling (NOT YET IMPLEMENTED)
+// ============================================================================
+// The following endpoints will be implemented in Phase-2:
+// - getConversations - View tenant conversations
+// - replyToConversation - Send agent replies
+// - updateConversationStatus - Toggle AI/human mode
+// ============================================================================
 
 module.exports = {
   agentLogin,
   createAgent,
   listAgents,
   updateAgent,
-  deleteAgent,
-  getConversations,
-  replyToConversation,
-  updateConversationStatus
+  deleteAgent
 };
