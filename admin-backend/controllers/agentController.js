@@ -32,17 +32,14 @@ const getTenantConnection = async (databaseUri) => {
     return tenantConnections.get(databaseUri);
   }
 
-  // Create new connection (separate from admin DB) and await it
-  const connection = await mongoose.createConnection(databaseUri, {
+  // Create new connection and await it
+  const conn = await mongoose.createConnection(databaseUri, {
     maxPoolSize: 10,
-    minPoolSize: 2,
     serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 45000,
-    bufferCommands: false
   }).asPromise();
 
-  tenantConnections.set(databaseUri, connection);
-  return connection;
+  tenantConnections.set(databaseUri, conn);
+  return conn;
 };
 
 /**

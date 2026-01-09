@@ -54,21 +54,32 @@ export function AuthProvider({ children }) {
         const decoded = decodeToken(token);
         
         if (decoded && decoded.role === 'agent') {
-          // Agent token - use tenant data from localStorage
+          // Agent token - construct user object from token and localStorage
           const storedTenant = localStorage.getItem('agentTenant');
           
           if (storedTenant) {
             try {
               const tenantData = JSON.parse(storedTenant);
-              // Set the tenant as the "user" for dashboard access
+              // Construct agent user object compatible with dashboard
               const agentUser = {
-                ...tenantData,
-                role: 'agent', // Override role to agent
+                id: decoded.tenantId, // Use tenantId from token as user id
+                _id: decoded.tenantId,
+                role: 'agent',
                 agentId: decoded.agentId,
-                agentUsername: decoded.username
+                agentUsername: decoded.username,
+                username: decoded.username,
+                name: tenantData.name || decoded.username,
+                email: tenantData.email,
+                databaseUri: tenantData.databaseUri,
+                maxAgents: tenantData.maxAgents
               };
               setUser(agentUser);
-              setActiveTenantState(tenantData); // Set tenant as active
+              // Set tenant as active for dashboard
+              setActiveTenantState({
+                ...tenantData,
+                id: decoded.tenantId,
+                _id: decoded.tenantId
+              });
             } catch (parseError) {
               console.error('Failed to parse tenant data:', parseError);
               // Clear invalid data
@@ -89,8 +100,8 @@ export function AuthProvider({ children }) {
             setActiveTenantState(null);
             localStorage.removeItem('activeTenant');
           }
-        } else {
-          // Regular user/admin token
+        } else if (decoded && decoded.role === 'user') {
+          // Regular user token
           const res = await fetch(`${API_BASE_URL}/user/me`, {
             headers: { Authorization: `Bearer ${token}` }
           });
@@ -98,6 +109,24 @@ export function AuthProvider({ children }) {
             const data = await res.json();
             setUser(data);
             localStorage.removeItem('isAgent'); // Clean up agent flag
+          } else {
+            // Token invalid or expired
+            setUser(null);
+            setToken('');
+            localStorage.removeItem('jwt');
+            localStorage.removeItem('isAgent');
+            setActiveTenantState(null);
+            localStorage.removeItem('activeTenant');
+          }
+        } else {
+          // Admin or unknown role - fetch from /user/me
+          const res = await fetch(`${API_BASE_URL}/user/me`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setUser(data);
+            localStorage.removeItem('isAgent');
           } else {
             // Token invalid or expired
             setUser(null);
