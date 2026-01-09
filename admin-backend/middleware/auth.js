@@ -51,6 +51,9 @@ const auth = (req, res, next) => {
     // Attach user info to request for use in controllers
     req.user = decoded;
     
+    // Map userId to id for consistent access in controllers
+    req.user.id = decoded.userId;
+    
     // Optional: Log authentication for security auditing (production)
     if (process.env.NODE_ENV === 'production') {
       console.log(`🔐 Authenticated request: ${decoded.username} (${req.method} ${req.path})`);
