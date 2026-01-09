@@ -140,10 +140,18 @@ const agentLogin = async (req, res) => {
       { expiresIn: '24h' }
     );
 
+    // Include tenant data in response
+    const tenantData = foundTenant.toObject();
+    delete tenantData.password;
+
     res.json({
       message: 'Login successful',
       token,
-      agent: foundAgent.toPublicProfile()
+      agent: foundAgent.toPublicProfile(),
+      tenant: {
+        ...tenantData,
+        id: tenantData._id
+      }
     });
   } catch (error) {
     console.error('Agent login error:', error);

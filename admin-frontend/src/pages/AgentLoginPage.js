@@ -65,6 +65,11 @@ function AgentLoginPage() {
         
         // Store agent flag to indicate this is an agent login
         localStorage.setItem('isAgent', 'true');
+        
+        // Store tenant data for AuthContext
+        if (response.tenant) {
+          localStorage.setItem('agentTenant', JSON.stringify(response.tenant));
+        }
 
         // Redirect to dashboard
         navigate('/dashboard');

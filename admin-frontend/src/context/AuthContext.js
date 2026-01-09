@@ -54,27 +54,34 @@ export function AuthProvider({ children }) {
         const decoded = decodeToken(token);
         
         if (decoded && decoded.role === 'agent') {
-          // Agent token - fetch tenant info using tenantId
-          const tenantId = decoded.tenantId;
+          // Agent token - use tenant data from localStorage
+          const storedTenant = localStorage.getItem('agentTenant');
           
-          // Fetch tenant (user) info from admin
-          const res = await fetch(`${API_BASE_URL}/users/${tenantId}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          
-          if (res.ok) {
-            const data = await res.json();
-            // Set the tenant as the "user" for dashboard access
-            const agentUser = {
-              ...data.user,
-              role: 'agent', // Override role to agent
-              agentId: decoded.agentId,
-              agentUsername: decoded.username
-            };
-            setUser(agentUser);
-            setActiveTenantState(data.user); // Set tenant as active
+          if (storedTenant) {
+            try {
+              const tenantData = JSON.parse(storedTenant);
+              // Set the tenant as the "user" for dashboard access
+              const agentUser = {
+                ...tenantData,
+                role: 'agent', // Override role to agent
+                agentId: decoded.agentId,
+                agentUsername: decoded.username
+              };
+              setUser(agentUser);
+              setActiveTenantState(tenantData); // Set tenant as active
+            } catch (parseError) {
+              console.error('Failed to parse tenant data:', parseError);
+              // Clear invalid data
+              setUser(null);
+              setToken('');
+              localStorage.removeItem('jwt');
+              localStorage.removeItem('isAgent');
+              localStorage.removeItem('agentTenant');
+              setActiveTenantState(null);
+              localStorage.removeItem('activeTenant');
+            }
           } else {
-            // Token invalid or expired
+            // No tenant data stored, token invalid
             setUser(null);
             setToken('');
             localStorage.removeItem('jwt');
@@ -179,6 +186,8 @@ export function AuthProvider({ children }) {
     setUser(null);
     setToken('');
     localStorage.removeItem('jwt');
+    localStorage.removeItem('isAgent');
+    localStorage.removeItem('agentTenant');
     setActiveTenantState(null);
     localStorage.removeItem('activeTenant');
   }
