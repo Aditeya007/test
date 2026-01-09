@@ -8,6 +8,7 @@ import { ChatWidgetProvider } from './context/ChatWidgetContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import AgentLoginPage from './pages/AgentLoginPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminUsersPage from './pages/AdminUsersPage';
 import BotPage from './pages/BotPage';
@@ -27,6 +28,7 @@ function AppContent() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/user/login" element={<LoginPage userMode={true} />} />
+        <Route path="/agent/login" element={<AgentLoginPage />} />
         
         {/* Protected routes - require authentication */}
         <Route

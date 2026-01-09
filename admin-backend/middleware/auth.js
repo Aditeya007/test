@@ -51,8 +51,14 @@ const auth = (req, res, next) => {
     // Attach user info to request for use in controllers
     req.user = decoded;
     
-    // Map userId to id for consistent access in controllers
-    req.user.id = decoded.userId;
+    // Map userId or tenantId to id for consistent access in controllers
+    // For agents: use tenantId as userId (agent operates on behalf of tenant)
+    if (decoded.role === 'agent') {
+      req.user.id = decoded.tenantId;
+      req.user.userId = decoded.tenantId; // Agents act as their tenant
+    } else {
+      req.user.id = decoded.userId;
+    }
     
     // Optional: Log authentication for security auditing (production)
     if (process.env.NODE_ENV === 'production') {

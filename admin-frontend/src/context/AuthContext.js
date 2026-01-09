@@ -5,6 +5,24 @@ import { API_BASE_URL } from '../config';
 
 const AuthContext = createContext();
 
+// Helper to decode JWT token
+function decodeToken(token) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (error) {
+    console.error('Failed to decode token:', error);
+    return null;
+  }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem('jwt') || '');
@@ -32,19 +50,56 @@ export function AuthProvider({ children }) {
       }
 
       try {
-        const res = await fetch(`${API_BASE_URL}/user/me`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setUser(data);
+        // Decode token to check if it's an agent token
+        const decoded = decodeToken(token);
+        
+        if (decoded && decoded.role === 'agent') {
+          // Agent token - fetch tenant info using tenantId
+          const tenantId = decoded.tenantId;
+          
+          // Fetch tenant (user) info from admin
+          const res = await fetch(`${API_BASE_URL}/users/${tenantId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          
+          if (res.ok) {
+            const data = await res.json();
+            // Set the tenant as the "user" for dashboard access
+            const agentUser = {
+              ...data.user,
+              role: 'agent', // Override role to agent
+              agentId: decoded.agentId,
+              agentUsername: decoded.username
+            };
+            setUser(agentUser);
+            setActiveTenantState(data.user); // Set tenant as active
+          } else {
+            // Token invalid or expired
+            setUser(null);
+            setToken('');
+            localStorage.removeItem('jwt');
+            localStorage.removeItem('isAgent');
+            setActiveTenantState(null);
+            localStorage.removeItem('activeTenant');
+          }
         } else {
-          // Token invalid or expired
-          setUser(null);
-          setToken('');
-          localStorage.removeItem('jwt');
-          setActiveTenantState(null);
-          localStorage.removeItem('activeTenant');
+          // Regular user/admin token
+          const res = await fetch(`${API_BASE_URL}/user/me`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setUser(data);
+            localStorage.removeItem('isAgent'); // Clean up agent flag
+          } else {
+            // Token invalid or expired
+            setUser(null);
+            setToken('');
+            localStorage.removeItem('jwt');
+            localStorage.removeItem('isAgent');
+            setActiveTenantState(null);
+            localStorage.removeItem('activeTenant');
+          }
         }
       } catch (error) {
         console.error('Failed to fetch user:', error);

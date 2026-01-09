@@ -89,10 +89,10 @@ function DashboardPage() {
     return activeTenant.id || activeTenant._id || null;
   }, [activeTenant]);
 
-  // Auto-set activeTenant for regular users on login
+  // Auto-set activeTenant for regular users and agents on login
   useEffect(() => {
-    if (user && user.role === 'user' && !activeTenant) {
-      // Regular users should have themselves as the active tenant
+    if (user && (user.role === 'user' || user.role === 'agent') && !activeTenant) {
+      // Regular users and agents should have their tenant as the active tenant
       setActiveTenant(user);
       setTenantDetails(user);
     }
@@ -110,8 +110,8 @@ function DashboardPage() {
     // Only fetch bots for authenticated users with valid tenant details
     if (!token || !user || !tenantDetails) return;
     
-    // For regular users, ensure tenantDetails matches the logged-in user
-    if (user.role === 'user') {
+    // For regular users and agents, ensure tenantDetails matches the logged-in user
+    if (user.role === 'user' || user.role === 'agent') {
       const userId = user.id || user._id;
       const tenantId = tenantDetails.id || tenantDetails._id;
       if (userId !== tenantId) return; // Not ready yet
@@ -123,8 +123,8 @@ function DashboardPage() {
     try {
       let response;
       
-      if (user.role === 'user') {
-        // Regular users: Use /api/bot endpoint (no userId needed)
+      if (user.role === 'user' || user.role === 'agent') {
+        // Regular users and agents: Use /api/bot endpoint (no userId needed)
         response = await getUserOwnBots(token);
       } else {
         // Admins: Use /api/users/:id/bots endpoint
@@ -199,8 +199,8 @@ function DashboardPage() {
       return;
     }
 
-    // For regular users, use their own data from context
-    if (user && user.role === 'user') {
+    // For regular users and agents, use their own data from context
+    if (user && (user.role === 'user' || user.role === 'agent')) {
       setTenantDetails(user);
       setTenantLoading(false);
       return;
@@ -610,22 +610,23 @@ function DashboardPage() {
 
   const isAdmin = user?.role === 'admin';
   const isUser = user?.role === 'user';
+  const isAgent = user?.role === 'agent';
 
   return (
     <div className="dashboard-container">
       <header className="dashboard-header">
-        <h2>Welcome, {user?.name || user?.username || 'User'}!</h2>
+        <h2>Welcome, {user?.name || user?.agentUsername || user?.username || 'User'}!</h2>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           {user?.role && (
             <span style={{ 
               padding: '0.25rem 0.75rem', 
-              background: isAdmin ? '#4f46e5' : '#059669',
+              background: isAdmin ? '#4f46e5' : isAgent ? '#ea580c' : '#059669',
               color: 'white',
               borderRadius: '1rem',
               fontSize: '0.875rem',
               fontWeight: '500'
             }}>
-              {isAdmin ? 'Admin' : 'User'}
+              {isAdmin ? 'Admin' : isAgent ? 'Agent' : 'User'}
             </span>
           )}
           <button className="dashboard-logout-btn" onClick={handleLogout}>
@@ -700,7 +701,7 @@ function DashboardPage() {
           )}
           
           {/* User View - Full Bot Management */}
-          {isUser && (
+          {(isUser || isAgent) && (
             <section className="dashboard-info">
               <h3>Your Chatbots</h3>
               <p className="dashboard-subtitle">
@@ -759,8 +760,8 @@ function DashboardPage() {
                       </button>
                     )}
                     
-                    {/* Add Agent Button */}
-                    {tenantDetails?.maxAgents > 0 && agents.length < tenantDetails?.maxAgents && (
+                    {/* Add Agent Button - Only for Users, not Agents */}
+                    {isUser && tenantDetails?.maxAgents > 0 && agents.length < tenantDetails?.maxAgents && (
                       <button
                         className="dashboard-action-btn"
                         onClick={() => setAddAgentModalOpen(true)}
