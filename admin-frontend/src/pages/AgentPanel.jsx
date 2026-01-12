@@ -265,19 +265,19 @@ function AgentPanel() {
           </div>
         ) : (
           <>
-            {/* Top Header */}
-            <div className="chat-header">
-              <div className="chat-header-left">
-                <div className="chat-header-avatar">
+            {/* Chat Header */}
+            <div className="chat-window-header">
+              <div className="chat-window-header-left">
+                <div className="chat-window-avatar">
                   <span>👤</span>
                 </div>
-                <div className="chat-header-info">
-                  <div className="chat-header-visitor">{getVisitorName(selectedConversation)}</div>
-                  <div className="chat-header-agent">{user?.username || 'Agent'}</div>
+                <div className="chat-window-info">
+                  <div className="chat-window-visitor">{getVisitorName(selectedConversation)}</div>
+                  <div className="chat-window-agent">{user?.username || 'Agent'}</div>
                 </div>
               </div>
               <button 
-                className="chat-close-btn"
+                className="chat-window-close"
                 onClick={() => setSelectedConversationId(null)}
                 title="Close conversation"
               >
@@ -286,20 +286,24 @@ function AgentPanel() {
             </div>
 
             {/* Messages Area */}
-            <div className="chat-messages-container">
-              {messagesLoading && <Loader message="Loading messages..." />}
+            <div className="chat-window-messages">
+              {messagesLoading && (
+                <div className="messages-loading">
+                  <Loader message="Loading messages..." />
+                </div>
+              )}
 
               {messagesError && (
-                <div className="chat-error">
+                <div className="messages-error">
                   <p>{messagesError}</p>
                   <button onClick={() => fetchMessages(selectedConversationId)}>Retry</button>
                 </div>
               )}
 
               {!messagesLoading && !messagesError && (
-                <div className="chat-messages-scroll">
+                <div className="messages-scroll-area">
                   {messages.length === 0 ? (
-                    <div className="chat-empty">
+                    <div className="messages-empty">
                       <p>No messages yet</p>
                     </div>
                   ) : (
@@ -312,17 +316,17 @@ function AgentPanel() {
                         return (
                           <div
                             key={msg._id || msg.id}
-                            className={`chat-message ${isAgent ? 'message-right' : 'message-left'}`}
+                            className={`message-row ${isAgent ? 'message-right' : 'message-left'}`}
                           >
-                            <div className="message-avatar">
+                            <div className="message-avatar-circle">
                               {isAgent ? '👨‍💼' : '👤'}
                             </div>
-                            <div className="message-bubble-wrapper">
-                              <div className="message-sender-name">{senderName}</div>
-                              <div className="message-bubble">
+                            <div className="message-content-wrapper">
+                              <div className="message-sender-label">{senderName}</div>
+                              <div className="message-text-bubble">
                                 {msg.content || msg.text || '(empty message)'}
                               </div>
-                              <div className="message-timestamp">
+                              <div className="message-time-label">
                                 {formatTime(msg.createdAt || msg.timestamp)}
                               </div>
                             </div>
@@ -332,7 +336,7 @@ function AgentPanel() {
                       
                       {/* Conversation Status */}
                       {selectedConversation && (
-                        <div className="conversation-status">
+                        <div className="conversation-end-status">
                           <p>Conversation Started</p>
                           <p>At {formatTime(selectedConversation.createdAt)}</p>
                         </div>
@@ -343,15 +347,7 @@ function AgentPanel() {
               )}
             </div>
 
-      {/* RIGHT COLUMN: Chat Window */}
-      <div className="chat-window-panel">
-        {!selectedConversationId ? (
-          <div className="chat-window-empty">
-            <p>Select a conversation to view messages</p>
-          </div>
-        ) : (
-          <>
-            {/* Chat Header */}
+            {/* Message Input Box */}
             <div className="chat-window-header">
               <div className="chat-window-header-left">
                 <div className="chat-window-avatar">
