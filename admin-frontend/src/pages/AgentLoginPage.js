@@ -52,7 +52,7 @@ function AgentLoginPage() {
 
     try {
       // Call agent login endpoint
-      const response = await apiRequest('/agent/login', {
+      const response = await apiRequest('/agents/login', {
         method: 'POST',
         data: {
           username: username.trim(),

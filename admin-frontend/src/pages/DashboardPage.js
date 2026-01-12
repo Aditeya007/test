@@ -151,7 +151,7 @@ function DashboardPage() {
     setAgentsError('');
     
     try {
-      const response = await apiRequest('/agent/list', {
+      const response = await apiRequest('/agents/list', {
         method: 'GET',
         token
       });
@@ -333,7 +333,7 @@ function DashboardPage() {
     setAddAgentSuccess('');
 
     try {
-      await apiRequest('/agent/create', {
+      await apiRequest('/agents/create', {
         method: 'POST',
         token,
         data: formData
