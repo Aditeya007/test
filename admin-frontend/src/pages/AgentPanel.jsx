@@ -3,11 +3,53 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../api';
+import { API_BASE_URL } from '../config';
 import Loader from '../components/Loader';
 import '../styles/AgentPanel.css';
 
 function AgentPanel() {
   const { user, token, logout } = useAuth();
+  // Helper to call backend mounted at exact '/agents' path.
+  const getBackendBase = () => API_BASE_URL.replace(/\/api\/?$/i, '');
+
+  const agentApiRequest = async (path, { method = 'GET', token: reqToken, data, params, ...custom } = {}) => {
+    const base = getBackendBase();
+    const urlBase = `${base}${path}`;
+
+    let url = urlBase;
+    if (params && typeof params === 'object') {
+      const qs = new URLSearchParams(params).toString();
+      if (qs) url += `?${qs}`;
+    }
+
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(reqToken && { Authorization: `Bearer ${reqToken}` }),
+    };
+
+    const options = {
+      method,
+      headers,
+      ...(data ? { body: JSON.stringify(data) } : {}),
+      ...custom,
+    };
+
+    const res = await fetch(url, options);
+    const contentType = res.headers.get('content-type');
+    let result;
+    if (contentType && contentType.includes('application/json')) {
+      result = await res.json();
+    } else {
+      result = { message: await res.text() };
+    }
+
+    if (!res.ok) {
+      const errorMessage = result.error || result.message || `API error: ${res.status}`;
+      throw new Error(errorMessage);
+    }
+
+    return result;
+  };
   
   // Conversations state
   const [conversations, setConversations] = useState([]);
@@ -37,7 +79,7 @@ function AgentPanel() {
     setConversationsError('');
     
     try {
-      const data = await apiRequest('/agents/conversations', { token });
+      const data = await agentApiRequest('/agents/conversations', { method: 'GET', token });
       setConversations(data.conversations || data || []);
       
       // Extract unique bot IDs and fetch bot details
@@ -72,7 +114,7 @@ function AgentPanel() {
     setMessagesError('');
     
     try {
-      const data = await apiRequest(`/agents/conversations/${conversationId}/messages`, { token });
+      const data = await agentApiRequest(`/agents/conversations/${conversationId}/messages`, { method: 'GET', token });
       setMessages(data.messages || data || []);
     } catch (error) {
       console.error('Failed to fetch messages:', error);
@@ -122,7 +164,7 @@ function AgentPanel() {
       setMessages(prev => [...prev, tempMessage]);
       
       // Send to API
-      await apiRequest(`/agents/conversations/${selectedConversationId}/reply`, {
+      await agentApiRequest(`/agents/conversations/${selectedConversationId}/reply`, {
         method: 'POST',
         token,
         data: { message: messageText }
