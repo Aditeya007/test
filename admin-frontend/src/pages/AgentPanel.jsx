@@ -37,7 +37,7 @@ function AgentPanel() {
     setConversationsError('');
     
     try {
-      const data = await apiRequest('/conversations', { token });
+      const data = await apiRequest('/agent/conversations', { token });
       setConversations(data.conversations || data || []);
       
       // Extract unique bot IDs and fetch bot details
@@ -72,7 +72,7 @@ function AgentPanel() {
     setMessagesError('');
     
     try {
-      const data = await apiRequest(`/conversations/${conversationId}/messages`, { token });
+      const data = await apiRequest(`/agent/conversations/${conversationId}/messages`, { token });
       setMessages(data.messages || data || []);
     } catch (error) {
       console.error('Failed to fetch messages:', error);
@@ -122,7 +122,7 @@ function AgentPanel() {
       setMessages(prev => [...prev, tempMessage]);
       
       // Send to API
-      await apiRequest(`/conversations/${selectedConversationId}/reply`, {
+      await apiRequest(`/agent/conversations/${selectedConversationId}/reply`, {
         method: 'POST',
         token,
         body: { message: messageText }
@@ -145,13 +145,6 @@ function AgentPanel() {
       e.preventDefault();
       sendMessage();
     }
-  };
-
-  const getLastMessagePreview = (conversation) => {
-    if (!conversation.lastMessage) return 'No messages';
-    
-    const text = conversation.lastMessage.content || conversation.lastMessage.text || '';
-    return text.length > 60 ? text.substring(0, 60) + '...' : text;
   };
 
   const getBotName = (botId) => {

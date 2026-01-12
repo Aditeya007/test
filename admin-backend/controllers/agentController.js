@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const AgentSchema = require('../models/Agent');
+const Bot = require('../models/Bot');
 
 /**
  * Agent Controller
@@ -453,6 +454,7 @@ const deleteAgent = async (req, res) => {
  * GET /api/agent/conversations
  * List all conversations for the tenant (agent inbox)
  * Requires agent authentication
+ * Shows ALL conversations regardless of status
  */
 const getConversations = async (req, res) => {
   try {
@@ -479,59 +481,39 @@ const getConversations = async (req, res) => {
       lastActiveAt: { type: Date, default: Date.now }
     });
 
-    // Define Message schema for tenant DB
-    const MessageSchema = new mongoose.Schema({
-      conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: true },
-      sender: { type: String, enum: ['user', 'bot', 'agent'], required: true },
-      text: { type: String, required: true },
-      createdAt: { type: Date, default: Date.now }
-    });
-
     // Get or create models
     const Conversation = tenantConnection.models.Conversation || 
                          tenantConnection.model('Conversation', ConversationSchema);
-    const Message = tenantConnection.models.Message || 
-                    tenantConnection.model('Message', MessageSchema);
 
-    // Query all conversations, sorted by lastActiveAt
+    // Query ALL conversations (no status filter), sorted by lastActiveAt
     const conversations = await Conversation.find()
       .sort({ lastActiveAt: -1 })
       .lean();
+
+    console.log(`📋 Retrieved ${conversations.length} conversations for tenant ${tenant.username}`);
 
     // Get bot IDs to fetch bot details from admin DB
     const botIds = [...new Set(conversations.map(c => c.botId))];
     const bots = await Bot.find({ _id: { $in: botIds } }).select('_id name scrapedWebsites').lean();
     const botMap = Object.fromEntries(bots.map(b => [b._id.toString(), b]));
 
-    // For each conversation, get the last message
-    const conversationsWithDetails = await Promise.all(
-      conversations.map(async (conv) => {
-        // Get last message for this conversation
-        const lastMessage = await Message.findOne({ conversationId: conv._id })
-          .sort({ createdAt: -1 })
-          .select('text sender createdAt')
-          .lean();
+    // Format conversations with details
+    const conversationsWithDetails = conversations.map(conv => {
+      const bot = botMap[conv.botId.toString()];
+      const websiteUrl = bot?.scrapedWebsites?.[0] || 'N/A';
 
-        const bot = botMap[conv.botId.toString()];
-        const websiteUrl = bot?.scrapedWebsites?.[0] || 'N/A';
-
-        return {
-          conversationId: conv._id,
-          botId: conv.botId,
-          botName: bot?.name || 'Unknown Bot',
-          websiteUrl,
-          sessionId: conv.sessionId,
-          status: conv.status,
-          lastActiveAt: conv.lastActiveAt,
-          createdAt: conv.createdAt,
-          lastMessage: lastMessage ? {
-            text: lastMessage.text,
-            sender: lastMessage.sender,
-            createdAt: lastMessage.createdAt
-          } : null
-        };
-      })
-    );
+      return {
+        _id: conv._id, // Use _id for frontend compatibility
+        conversationId: conv._id,
+        botId: conv.botId,
+        botName: bot?.name || 'Unknown Bot',
+        websiteUrl,
+        sessionId: conv.sessionId,
+        status: conv.status,
+        lastActiveAt: conv.lastActiveAt,
+        createdAt: conv.createdAt
+      };
+    });
 
     res.json({
       conversations: conversationsWithDetails,
@@ -542,6 +524,68 @@ const getConversations = async (req, res) => {
     res.status(500).json({
       error: 'Failed to retrieve conversations',
       message: 'An error occurred while fetching conversations'
+    });
+  }
+};
+
+/**
+ * GET /api/agent/conversations/:conversationId/messages
+ * Get all messages for a specific conversation
+ * Requires agent authentication
+ */
+const getMessages = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const tenantId = req.user.userId; // userId contains tenant ID
+
+    // Get tenant info from ADMIN database
+    const tenant = await User.findById(tenantId);
+    if (!tenant) {
+      return res.status(404).json({
+        error: 'Tenant not found',
+        message: 'Invalid tenant'
+      });
+    }
+
+    // Connect to tenant database
+    const tenantConnection = await getTenantConnection(tenant.databaseUri);
+
+    // Define Message schema for tenant DB
+    const MessageSchema = new mongoose.Schema({
+      conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: true },
+      sender: { type: String, enum: ['user', 'bot', 'agent'], required: true },
+      text: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now }
+    });
+
+    // Get or create models
+    const Message = tenantConnection.models.Message || 
+                    tenantConnection.model('Message', MessageSchema);
+
+    // Validate conversationId
+    if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+      return res.status(400).json({
+        error: 'Invalid conversation ID',
+        message: 'The provided conversation ID is not valid'
+      });
+    }
+
+    // Get all messages for this conversation, sorted by createdAt
+    const messages = await Message.find({ conversationId })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    console.log(`💬 Retrieved ${messages.length} messages for conversation ${conversationId}`);
+
+    res.json({
+      messages: messages,
+      count: messages.length
+    });
+  } catch (error) {
+    console.error('Get messages error:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve messages',
+      message: 'An error occurred while fetching messages'
     });
   }
 };
@@ -558,5 +602,6 @@ module.exports = {
   listAgents,
   updateAgent,
   deleteAgent,
-  getConversations
+  getConversations,
+  getMessages
 };
