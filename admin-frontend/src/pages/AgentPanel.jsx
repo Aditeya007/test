@@ -167,43 +167,88 @@ function AgentPanel() {
   };
 
   return (
-    <div className="agent-panel-container">
-      {/* Left Sidebar - Conversations List */}
-      <div className="agent-sidebar">
-        <div className="sidebar-header">
+    <div className="agent-panel-3col">
+      {/* LEFT COLUMN: Dark Sidebar with Navigation */}
+      <div className="dark-sidebar">
+        <div className="sidebar-brand">
+          <span className="brand-icon">📋</span>
+          <span className="brand-text">Admin Panel</span>
+        </div>
+
+        <nav className="sidebar-nav">
+          <div className="nav-item">
+            <span className="nav-icon">📊</span>
+            <span className="nav-text">Dashboard</span>
+          </div>
+          <div className="nav-item active">
+            <span className="nav-icon">💬</span>
+            <span className="nav-text">Chat</span>
+          </div>
+          <div className="nav-subitem">My Open Chats</div>
+          <div className="nav-subitem">Completed Chats</div>
+          <div className="nav-item">
+            <span className="nav-icon">👥</span>
+            <span className="nav-text">Users</span>
+          </div>
+          <div className="nav-item">
+            <span className="nav-icon">⚙️</span>
+            <span className="nav-text">Site Settings</span>
+          </div>
+          <div className="nav-item">
+            <span className="nav-icon">📜</span>
+            <span className="nav-text">View Logs</span>
+          </div>
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="user-info">
+            <span className="user-name">{user?.username || 'Agent'}</span>
+          </div>
+          <button onClick={logout} className="sidebar-logout-btn">Logout</button>
+        </div>
+      </div>
+
+      {/* CENTER COLUMN: Chat List Panel */}
+      <div className="chat-list-panel">
+        <div className="chat-list-header">
           <h2>Ongoing Chats</h2>
           <button onClick={fetchConversations} className="refresh-icon-btn" disabled={conversationsLoading} title="Refresh">
             ↻
           </button>
         </div>
 
-        {conversationsLoading && <Loader message="Loading..." />}
+        {conversationsLoading && (
+          <div className="chat-list-loading">
+            <Loader message="Loading..." />
+          </div>
+        )}
         
         {conversationsError && (
-          <div className="sidebar-error">
+          <div className="chat-list-error">
             <p>{conversationsError}</p>
             <button onClick={fetchConversations}>Retry</button>
           </div>
         )}
 
         {!conversationsLoading && !conversationsError && (
-          <div className="conversations-scrollable">
+          <div className="chat-list-scroll">
             {conversations.length === 0 ? (
-              <div className="sidebar-empty">
+              <div className="chat-list-empty">
                 <p>No active conversations</p>
               </div>
             ) : (
               conversations.map((conv) => (
                 <div
                   key={conv._id}
-                  className={`conversation-row ${selectedConversationId === conv._id ? 'active' : ''}`}
+                  className={`chat-list-item ${selectedConversationId === conv._id ? 'active' : ''}`}
                   onClick={() => handleConversationClick(conv._id)}
                 >
-                  <div className="conversation-visitor-name">
-                    {getVisitorName(conv)}
-                  </div>
-                  <div className="conversation-bot-name">
-                    {getBotName(conv.botId)}
+                  <div className="chat-list-item-main">
+                    <span className="chat-visitor-icon">👤</span>
+                    <div className="chat-list-item-content">
+                      <div className="chat-list-visitor">{getVisitorName(conv)}</div>
+                      <div className="chat-list-bot">{getBotName(conv.botId)}</div>
+                    </div>
                   </div>
                 </div>
               ))
@@ -212,8 +257,8 @@ function AgentPanel() {
         )}
       </div>
 
-      {/* Right Side - Chat Window */}
-      <div className="agent-chat-area">
+      {/* RIGHT COLUMN: Chat Window */}
+      <div className="chat-window-panel">
         {!selectedConversationId ? (
           <div className="chat-empty-state">
             <p>Select a conversation to view messages</p>
@@ -298,11 +343,101 @@ function AgentPanel() {
               )}
             </div>
 
-            {/* Bottom Message Input */}
-            <div className="chat-input-container">
+      {/* RIGHT COLUMN: Chat Window */}
+      <div className="chat-window-panel">
+        {!selectedConversationId ? (
+          <div className="chat-window-empty">
+            <p>Select a conversation to view messages</p>
+          </div>
+        ) : (
+          <>
+            {/* Chat Header */}
+            <div className="chat-window-header">
+              <div className="chat-window-header-left">
+                <div className="chat-window-avatar">
+                  <span>👤</span>
+                </div>
+                <div className="chat-window-info">
+                  <div className="chat-window-visitor">{getVisitorName(selectedConversation)}</div>
+                  <div className="chat-window-agent">{user?.username || 'Agent'}</div>
+                </div>
+              </div>
+              <button 
+                className="chat-window-close"
+                onClick={() => setSelectedConversationId(null)}
+                title="Close conversation"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Messages Area */}
+            <div className="chat-window-messages">
+              {messagesLoading && (
+                <div className="messages-loading">
+                  <Loader message="Loading messages..." />
+                </div>
+              )}
+
+              {messagesError && (
+                <div className="messages-error">
+                  <p>{messagesError}</p>
+                  <button onClick={() => fetchMessages(selectedConversationId)}>Retry</button>
+                </div>
+              )}
+
+              {!messagesLoading && !messagesError && (
+                <div className="messages-scroll-area">
+                  {messages.length === 0 ? (
+                    <div className="messages-empty">
+                      <p>No messages yet</p>
+                    </div>
+                  ) : (
+                    <>
+                      {messages.map((msg) => {
+                        const isAgent = msg.sender === 'agent';
+                        const isUser = msg.sender === 'user';
+                        const senderName = isAgent ? (user?.username || 'Agent') : (isUser ? getVisitorName(selectedConversation) : 'Bot');
+                        
+                        return (
+                          <div
+                            key={msg._id || msg.id}
+                            className={`message-row ${isAgent ? 'message-right' : 'message-left'}`}
+                          >
+                            <div className="message-avatar-circle">
+                              {isAgent ? '👨‍💼' : '👤'}
+                            </div>
+                            <div className="message-content-wrapper">
+                              <div className="message-sender-label">{senderName}</div>
+                              <div className="message-text-bubble">
+                                {msg.content || msg.text || '(empty message)'}
+                              </div>
+                              <div className="message-time-label">
+                                {formatTime(msg.createdAt || msg.timestamp)}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      
+                      {/* Conversation Status */}
+                      {selectedConversation && (
+                        <div className="conversation-end-status">
+                          <p>Conversation Started</p>
+                          <p>At {formatTime(selectedConversation.createdAt)}</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Message Input Box */}
+            <div className="chat-window-input">
               <input
                 type="text"
-                className="chat-input"
+                className="message-input-field"
                 placeholder="Type here..."
                 value={messageInput}
                 onChange={(e) => setMessageInput(e.target.value)}
@@ -310,7 +445,7 @@ function AgentPanel() {
                 disabled={sendingMessage}
               />
               <button 
-                className="chat-send-btn"
+                className="message-send-button"
                 onClick={sendMessage}
                 disabled={!messageInput.trim() || sendingMessage}
                 title="Send message"
@@ -321,11 +456,6 @@ function AgentPanel() {
           </>
         )}
       </div>
-
-      {/* Logout Button - Top Right */}
-      <button onClick={logout} className="agent-logout-btn" title="Logout">
-        Logout
-      </button>
     </div>
   );
 }
