@@ -38,6 +38,14 @@ const getTenantConnection = async (databaseUri) => {
     serverSelectionTimeoutMS: 5000,
   }).asPromise();
 
+  console.log(`🔌 New tenant database connection established:`, {
+    database: databaseUri,
+    readyState: conn.readyState, // 0=disconnected, 1=connected, 2=connecting, 3=disconnecting
+    host: conn.host,
+    port: conn.port,
+    name: conn.name
+  });
+
   tenantConnections.set(databaseUri, conn);
   return conn;
 };
@@ -47,6 +55,12 @@ const getTenantConnection = async (databaseUri) => {
  */
 const getAgentModel = async (databaseUri) => {
   const tenantDB = await getTenantConnection(databaseUri);
+  
+  console.log(`📦 Getting Agent model for database:`, {
+    database: databaseUri,
+    connectionState: tenantDB.readyState,
+    existingModel: !!tenantDB.models.Agent
+  });
   
   // Check if model already exists for this connection
   if (tenantDB.models.Agent) {
@@ -191,7 +205,17 @@ const createAgent = async (req, res) => {
     const Agent = await getAgentModel(tenant.databaseUri);
     const agentCount = await Agent.countDocuments();
 
-    // Check if limit reached
+    // Check if agents are disabled (maxAgents = 0)
+    if (tenant.maxAgents === 0) {
+      return res.status(403).json({
+        error: 'Agents disabled',
+        message: 'Agent creation is disabled for this account. Please contact your administrator to enable agents.',
+        currentCount: agentCount,
+        maxAgents: tenant.maxAgents
+      });
+    }
+
+    // Check if limit reached (only if maxAgents > 0)
     if (agentCount >= tenant.maxAgents) {
       return res.status(403).json({
         error: 'Agent limit reached',
@@ -223,22 +247,41 @@ const createAgent = async (req, res) => {
       isActive: true
     });
 
-    await agent.save();
+    // Save to database with explicit error handling
+    try {
+      const savedAgent = await agent.save();
+      
+      // Verify it was actually saved by re-querying
+      const verifyAgent = await Agent.findById(savedAgent._id);
+      
+      if (!verifyAgent) {
+        throw new Error('Agent save verification failed - agent not found in database after save');
+      }
 
-    console.log(`✅ Agent created successfully:`, {
-      agentId: agent._id,
-      username: agent.username,
-      name: agent.name,
-      tenantId: tenantId,
-      tenantUsername: tenant.username,
-      database: tenant.databaseUri,
-      collection: 'agents'
-    });
+      console.log(`✅ Agent created and verified in MongoDB:`, {
+        agentId: savedAgent._id,
+        username: savedAgent.username,
+        name: savedAgent.name,
+        tenantId: tenantId,
+        tenantUsername: tenant.username,
+        database: tenant.databaseUri,
+        collection: 'agents',
+        verified: true
+      });
 
-    res.status(201).json({
-      message: 'Agent created successfully',
-      agent: agent.toPublicProfile()
-    });
+      res.status(201).json({
+        message: 'Agent created successfully',
+        agent: savedAgent.toPublicProfile()
+      });
+    } catch (saveError) {
+      console.error('❌ Failed to save agent to database:', {
+        error: saveError.message,
+        stack: saveError.stack,
+        database: tenant.databaseUri,
+        agentData: { username, name, email }
+      });
+      throw saveError; // Re-throw to be caught by outer catch
+    }
   } catch (error) {
     console.error('Create agent error:', error);
     
