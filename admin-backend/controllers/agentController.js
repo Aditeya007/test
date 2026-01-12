@@ -458,7 +458,7 @@ const deleteAgent = async (req, res) => {
  */
 const getConversations = async (req, res) => {
   try {
-    const tenantId = req.user.userId; // userId contains tenant ID
+    const tenantId = req.agent.tenantId; // Agent's tenant ID
 
     // Get tenant info from ADMIN database
     const tenant = await User.findById(tenantId);
@@ -536,7 +536,7 @@ const getConversations = async (req, res) => {
 const getMessages = async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const tenantId = req.user.userId; // userId contains tenant ID
+    const tenantId = req.agent.tenantId; // Agent's tenant ID
 
     // Get tenant info from ADMIN database
     const tenant = await User.findById(tenantId);
