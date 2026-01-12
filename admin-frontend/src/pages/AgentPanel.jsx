@@ -37,7 +37,7 @@ function AgentPanel() {
     setConversationsError('');
     
     try {
-      const data = await apiRequest('/api/conversation', { token });
+      const data = await apiRequest('/conversations', { token });
       setConversations(data.conversations || data || []);
       
       // Extract unique bot IDs and fetch bot details
@@ -56,7 +56,7 @@ function AgentPanel() {
     
     for (const botId of botIds) {
       try {
-        const botData = await apiRequest(`/api/bots/${botId}`, { token });
+        const botData = await apiRequest(`/bots/${botId}`, { token });
         botMap[botId] = botData.bot || botData;
       } catch (error) {
         console.error(`Failed to fetch bot ${botId}:`, error);
@@ -72,7 +72,7 @@ function AgentPanel() {
     setMessagesError('');
     
     try {
-      const data = await apiRequest(`/api/conversations/${conversationId}/messages`, { token });
+      const data = await apiRequest(`/conversations/${conversationId}/messages`, { token });
       setMessages(data.messages || data || []);
     } catch (error) {
       console.error('Failed to fetch messages:', error);
@@ -122,7 +122,7 @@ function AgentPanel() {
       setMessages(prev => [...prev, tempMessage]);
       
       // Send to API
-      await apiRequest(`/api/conversations/${selectedConversationId}/reply`, {
+      await apiRequest(`/conversations/${selectedConversationId}/reply`, {
         method: 'POST',
         token,
         body: { message: messageText }
@@ -176,7 +176,7 @@ function AgentPanel() {
         </div>
 
         <nav className="sidebar-nav">
-          <div className="nav-item">
+          <div className="nav-item" onClick={() => alert('Dashboard navigation not implemented yet')}>
             <span className="nav-icon">📊</span>
             <span className="nav-text">Dashboard</span>
           </div>
@@ -184,17 +184,17 @@ function AgentPanel() {
             <span className="nav-icon">💬</span>
             <span className="nav-text">Chat</span>
           </div>
-          <div className="nav-subitem">My Open Chats</div>
-          <div className="nav-subitem">Completed Chats</div>
-          <div className="nav-item">
+          <div className="nav-subitem" onClick={() => fetchConversations()}>My Open Chats</div>
+          <div className="nav-subitem" onClick={() => alert('Completed Chats not implemented yet')}>Completed Chats</div>
+          <div className="nav-item" onClick={() => alert('Users navigation not implemented yet')}>
             <span className="nav-icon">👥</span>
             <span className="nav-text">Users</span>
           </div>
-          <div className="nav-item">
+          <div className="nav-item" onClick={() => alert('Site Settings navigation not implemented yet')}>
             <span className="nav-icon">⚙️</span>
             <span className="nav-text">Site Settings</span>
           </div>
-          <div className="nav-item">
+          <div className="nav-item" onClick={() => alert('View Logs navigation not implemented yet')}>
             <span className="nav-icon">📜</span>
             <span className="nav-text">View Logs</span>
           </div>
