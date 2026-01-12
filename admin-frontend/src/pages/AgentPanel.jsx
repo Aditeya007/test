@@ -37,7 +37,7 @@ function AgentPanel() {
     setConversationsError('');
     
     try {
-      const data = await apiRequest('/api/agent/conversations', { token });
+      const data = await apiRequest('/agents/conversations', { token });
       setConversations(data.conversations || data || []);
       
       // Extract unique bot IDs and fetch bot details
@@ -72,7 +72,7 @@ function AgentPanel() {
     setMessagesError('');
     
     try {
-      const data = await apiRequest(`/api/agent/conversations/${conversationId}/messages`, { token });
+      const data = await apiRequest(`/agents/conversations/${conversationId}/messages`, { token });
       setMessages(data.messages || data || []);
     } catch (error) {
       console.error('Failed to fetch messages:', error);
@@ -122,7 +122,7 @@ function AgentPanel() {
       setMessages(prev => [...prev, tempMessage]);
       
       // Send to API
-      await apiRequest(`/api/agent/conversations/${selectedConversationId}/reply`, {
+      await apiRequest(`/agents/conversations/${selectedConversationId}/reply`, {
         method: 'POST',
         token,
         data: { message: messageText }
