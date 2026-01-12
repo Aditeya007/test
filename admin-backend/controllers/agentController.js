@@ -240,13 +240,15 @@ const createAgent = async (req, res) => {
 
     // Create agent
     const agent = new Agent({
-  tenantId: req.user._id,
-  username,
-  passwordHash,
-  name,
-  email,
-  phone
-});
+      tenantId: tenantId,
+      username,
+      passwordHash,
+      name,
+      email,
+      phone: phone || null,
+      isActive: true
+    });
+
     // Save to database with explicit error handling
     try {
       const savedAgent = await agent.save();
