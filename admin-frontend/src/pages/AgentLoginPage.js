@@ -1,21 +1,22 @@
 // src/pages/AgentLoginPage.js
 
-import React, { useState } from 'react';
+import React, { useState, useTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../api';
 import { validateField } from '../utils';
 import Loader from '../components/Loader';
-
-import '../styles/index.css';
+import '../styles/auth.css';
 
 function AgentLoginPage() {
   const navigate = useNavigate();
+  const [isPending, startTransition] = useTransition();
   
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Validate form before submission
   function validateForm() {
@@ -71,9 +72,10 @@ function AgentLoginPage() {
           localStorage.setItem('agentTenant', JSON.stringify(response.tenant));
         }
 
-        // Redirect to dashboard by replacing the URL and reloading
-        // This ensures AuthContext properly initializes with the new token
-        window.location.href = '/dashboard';
+        // Redirect to dashboard
+        startTransition(() => {
+          window.location.href = '/dashboard';
+        });
       }
     } catch (error) {
       setServerError(error.message || 'Login failed. Please check your credentials.');
@@ -88,6 +90,7 @@ function AgentLoginPage() {
     if (errors.username) {
       setErrors(prev => ({ ...prev, username: '' }));
     }
+    if (serverError) setServerError('');
   }
 
   function handlePasswordChange(e) {
@@ -95,73 +98,121 @@ function AgentLoginPage() {
     if (errors.password) {
       setErrors(prev => ({ ...prev, password: '' }));
     }
+    if (serverError) setServerError('');
   }
 
   return (
-    <div className="auth-container">
-      <h2 className="auth-heading">Agent Login</h2>
-      <p style={{ textAlign: 'center', marginBottom: '1rem', color: '#666' }}>
-        Login with your agent credentials
-      </p>
-      
-      <form className="auth-form" onSubmit={handleSubmit}>
-        <label>
-          Username
-          <input
-            type="text"
-            className={`auth-input ${errors.username ? 'input-error' : ''}`}
-            value={username}
-            onChange={handleUsernameChange}
-            disabled={loading}
-            required
-            autoFocus
-            autoComplete="username"
-            placeholder="Enter your agent username"
-          />
-          {errors.username && (
-            <span className="field-error">{errors.username}</span>
-          )}
-        </label>
+    <div className="auth-page">
+      <div className="auth-page-background">
+        <div className="auth-background-shapes">
+          <div className="shape shape-1"></div>
+          <div className="shape shape-2"></div>
+          <div className="shape shape-3"></div>
+        </div>
+      </div>
 
-        <label>
-          Password
-          <input
-            type="password"
-            className={`auth-input ${errors.password ? 'input-error' : ''}`}
-            value={password}
-            onChange={handlePasswordChange}
-            disabled={loading}
-            required
-            autoComplete="current-password"
-            placeholder="Enter your password"
-          />
-          {errors.password && (
-            <span className="field-error">{errors.password}</span>
-          )}
-        </label>
-
-        {serverError && <div className="auth-error">{serverError}</div>}
+      <div className="auth-container-modern">
+        <div className="auth-header-modern">
+          <div className="auth-logo">
+            <div className="logo-icon">🤖</div>
+            <h1 className="auth-title-modern">Agent Login</h1>
+          </div>
+          <p className="auth-subtitle-modern">Login with your agent credentials</p>
+        </div>
         
-        <button 
-          className="auth-btn" 
-          type="submit" 
-          disabled={loading}
-        >
-          {loading ? 'Logging in...' : 'Login as Agent'}
-        </button>
-      </form>
+        <form className="auth-form-modern" onSubmit={handleSubmit}>
+          <div className="form-group-modern">
+            <label className="form-label-modern">
+              <span className="label-icon">👤</span>
+              Username
+            </label>
+            <div className="input-wrapper-modern">
+              <input
+                type="text"
+                className={`form-input-modern ${errors.username ? 'input-error' : ''}`}
+                value={username}
+                onChange={handleUsernameChange}
+                disabled={loading || isPending}
+                required
+                autoFocus
+                autoComplete="username"
+                placeholder="Enter your agent username"
+              />
+            </div>
+            {errors.username && (
+              <span className="field-error-modern">{errors.username}</span>
+            )}
+          </div>
 
-      {loading && <Loader size="small" message="Authenticating..." />}
+          <div className="form-group-modern">
+            <label className="form-label-modern">
+              <span className="label-icon">🔒</span>
+              Password
+            </label>
+            <div className="input-wrapper-modern password-wrapper">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className={`form-input-modern ${errors.password ? 'input-error' : ''}`}
+                value={password}
+                onChange={handlePasswordChange}
+                disabled={loading || isPending}
+                required
+                autoComplete="current-password"
+                placeholder="Enter your password"
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword(!showPassword)}
+                tabIndex={-1}
+              >
+                {showPassword ? '👁️' : '👁️‍🗨️'}
+              </button>
+            </div>
+            {errors.password && (
+              <span className="field-error-modern">{errors.password}</span>
+            )}
+          </div>
 
-      <div className="auth-footer">
-        <span>Not an agent?</span>
-        <button 
-          className="auth-link" 
-          onClick={() => navigate('/login')}
-          disabled={loading}
-        >
-          Admin/User Login
-        </button>
+          {serverError && (
+            <div className="auth-error-modern">
+              <span className="error-icon">⚠️</span>
+              {serverError}
+            </div>
+          )}
+          
+          <button 
+            className="auth-btn-modern" 
+            type="submit" 
+            disabled={loading || isPending}
+          >
+            {loading || isPending ? (
+              <>
+                <span className="btn-loader"></span>
+                <span>Logging in...</span>
+              </>
+            ) : (
+              <>
+                <span>Login as Agent</span>
+                <span className="btn-arrow">→</span>
+              </>
+            )}
+          </button>
+        </form>
+
+        <div className="auth-footer-modern">
+          <div className="auth-link-group">
+            <span className="auth-link-text">Not an agent?</span>
+            <button 
+              className="auth-link-modern" 
+              onClick={() => navigate('/login')}
+              disabled={loading || isPending}
+              type="button"
+            >
+              Admin/User Login
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

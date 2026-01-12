@@ -2,15 +2,19 @@
 
 import React from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
+import { Provider } from 'react-redux';
+import { store } from './store';
 
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ChatWidgetProvider } from './context/ChatWidgetContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import AdminLayout from './components/layout/AdminLayout';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import AgentLoginPage from './pages/AgentLoginPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminUsersPage from './pages/AdminUsersPage';
+import UserProfilePage from './pages/UserProfilePage';
 import BotPage from './pages/BotPage';
 import HealthPage from './pages/HealthPage';
 import AgentPanel from './pages/AgentPanel';
@@ -44,7 +48,9 @@ function AppContent() {
           path="/dashboard"
           element={
             <ProtectedRoute>
-              {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <DashboardPage />}
+              <AdminLayout>
+                {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <DashboardPage />}
+              </AdminLayout>
             </ProtectedRoute>
           }
         />
@@ -52,7 +58,19 @@ function AppContent() {
           path="/admin/users"
           element={
             <ProtectedRoute>
-              {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <AdminUsersPage />}
+              <AdminLayout>
+                {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <AdminUsersPage />}
+              </AdminLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <AdminLayout>
+                <UserProfilePage />
+              </AdminLayout>
             </ProtectedRoute>
           }
         />
@@ -60,7 +78,9 @@ function AppContent() {
           path="/bot/:botId"
           element={
             <ProtectedRoute>
-              {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <BotPage />}
+              <AdminLayout>
+                {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <BotPage />}
+              </AdminLayout>
             </ProtectedRoute>
           }
         />
@@ -68,7 +88,9 @@ function AppContent() {
           path="/health"
           element={
             <ProtectedRoute>
-              {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <HealthPage />}
+              <AdminLayout>
+                {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <HealthPage />}
+              </AdminLayout>
             </ProtectedRoute>
           }
         />
@@ -94,13 +116,15 @@ function AppContent() {
 
 function App() {
   return (
-    <AuthProvider>
-      <ChatWidgetProvider>
-        <Router>
-          <AppContent />
-        </Router>
-      </ChatWidgetProvider>
-    </AuthProvider>
+    <Provider store={store}>
+      <AuthProvider>
+        <ChatWidgetProvider>
+          <Router>
+            <AppContent />
+          </Router>
+        </ChatWidgetProvider>
+      </AuthProvider>
+    </Provider>
   );
 }
 

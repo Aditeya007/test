@@ -1,11 +1,10 @@
 // src/pages/DashboardPage.js
 
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useTransition, useDeferredValue, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useChatWidget } from '../context/ChatWidgetContext';
 import { apiRequest, getUserBots, getUserOwnBots, createBot, startBotScheduler, stopBotScheduler } from '../api';
-import UserForm from '../components/users/UserForm';
 import Loader from '../components/Loader';
 import WidgetInstaller from '../components/WidgetInstaller';
 import BotCard from '../components/BotCard';
@@ -21,9 +20,6 @@ function DashboardPage() {
   const [tenantDetails, setTenantDetails] = useState(activeTenant);
   const [tenantLoading, setTenantLoading] = useState(false);
   const [tenantError, setTenantError] = useState('');
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [createLoading, setCreateLoading] = useState(false);
-  const [createError, setCreateError] = useState('');
   const [createSuccess, setCreateSuccess] = useState('');
   const [isWidgetInstallerOpen, setWidgetInstallerOpen] = useState(false);
   
@@ -35,10 +31,14 @@ function DashboardPage() {
   const [botsLoading, setBotsLoading] = useState(false);
   const [botsError, setBotsError] = useState('');
   
+  // React 19: useDeferredValue for performance optimization
+  const deferredBots = useDeferredValue(bots);
+  
   // Derive selectedBot from context - SINGLE SOURCE OF TRUTH
+  // Using deferred value for better performance
   const selectedBot = useMemo(() => {
-    return bots.find(b => (b._id || b.id) === selectedBotId) || null;
-  }, [bots, selectedBotId]);
+    return deferredBots.find(b => (b._id || b.id) === selectedBotId) || null;
+  }, [deferredBots, selectedBotId]);
   
   // Add website modal state
   const [addWebsiteModalOpen, setAddWebsiteModalOpen] = useState(false);
@@ -260,18 +260,6 @@ function DashboardPage() {
     navigate('/login');
   }
 
-  function openCreateModal() {
-    setCreateError('');
-    setCreateSuccess('');
-    setCreateModalOpen(true);
-  }
-
-  function closeCreateModal() {
-    if (createLoading) {
-      return;
-    }
-    setCreateModalOpen(false);
-  }
 
   function handleBotUpdate(updatedBot) {
     // Update the bot in the local state
@@ -366,44 +354,6 @@ function DashboardPage() {
     }
   }
 
-  async function handleCreateUser(values) {
-    if (!token) {
-      setCreateError('Session expired. Please log in again.');
-      return;
-    }
-
-    setCreateError('');
-    setCreateSuccess('');
-    setCreateLoading(true);
-
-    // Ensure maxBots is always a valid number, default to 1 if invalid
-    const safeMaxBots = Number.isInteger(Number(values.maxBots)) && Number(values.maxBots) > 0
-      ? Number(values.maxBots)
-      : 1;
-
-    try {
-      const response = await apiRequest('/users', {
-        method: 'POST',
-        token,
-        data: {
-          name: values.name.trim(),
-          email: values.email.trim(),
-          username: values.username.trim(),
-          password: values.password,
-          maxBots: safeMaxBots
-        }
-      });
-
-      setActiveTenant(response.user);
-      setTenantDetails(response.user);
-      setCreateSuccess('User created and provisioned successfully.');
-      setCreateModalOpen(false);
-    } catch (err) {
-      setCreateError(err.message || 'Failed to create user.');
-    } finally {
-      setCreateLoading(false);
-    }
-  }
 
   async function handleRunScrape() {
     if (!selectedBot || !token) return;
@@ -614,40 +564,19 @@ function DashboardPage() {
 
   return (
     <div className="dashboard-container">
-      <header className="dashboard-header">
-        <h2>Welcome, {user?.name || user?.agentUsername || user?.username || 'User'}!</h2>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          {user?.role && (
-            <span style={{ 
-              padding: '0.25rem 0.75rem', 
-              background: isAdmin ? '#4f46e5' : isAgent ? '#ea580c' : '#059669',
-              color: 'white',
-              borderRadius: '1rem',
-              fontSize: '0.875rem',
-              fontWeight: '500'
-            }}>
-              {isAdmin ? 'Admin' : isAgent ? 'Agent' : 'User'}
-            </span>
-          )}
-          <button className="dashboard-logout-btn" onClick={handleLogout}>
-            Logout
-          </button>
-        </div>
-      </header>
-
-      {isAdmin && (
-        <section className="dashboard-actions">
-          <button className="dashboard-action-btn" onClick={openCreateModal}>
-            ➕ Create User
-          </button>
-          <button
-            className="dashboard-action-btn"
-            onClick={() => navigate('/admin/users')}
-          >
-            📋 Manage Users
-          </button>
-        </section>
-      )}
+      {/* Welcome Section */}
+      <section className="dashboard-welcome">
+        <h2 className="dashboard-welcome-title">
+          Welcome back, {user?.name || user?.agentUsername || user?.username || 'User'}! 👋
+        </h2>
+        <p className="dashboard-welcome-subtitle">
+          {isAdmin 
+            ? 'Manage your users and monitor system activity from here.'
+            : isAgent
+            ? 'Access your assigned chatbot resources and tools.'
+            : 'Manage your chatbots and websites from this dashboard.'}
+        </p>
+      </section>
 
       {isUser && !hasProvisionedTenant && (
         <div className="dashboard-alert dashboard-alert--info" style={{ marginTop: '1rem' }}>
@@ -668,35 +597,79 @@ function DashboardPage() {
         <Loader message="Loading your resources..." />
       ) : hasProvisionedTenant ? (
         <>
-          {/* Admin View - Minimal Info Only */}
+          {/* Admin View - Dashboard Overview */}
           {isAdmin && (
             <section className="dashboard-info">
-              <h3>User: {tenantDetails.name || tenantDetails.username}</h3>
-              <div style={{
-                padding: '1.5rem',
-                background: '#f9fafb',
-                border: '1px solid #e5e7eb',
-                borderRadius: '8px',
-                marginTop: '1rem'
-              }}>
-                <p style={{ margin: 0, fontSize: '1rem', color: '#374151' }}>
-                  <strong>Email:</strong> {tenantDetails.email}
-                </p>
-                <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#374151' }}>
-                  <strong>Capacity:</strong> {tenantDetails.maxBots} chatbot{tenantDetails.maxBots > 1 ? 's' : ''} allowed
-                </p>
+              <div className="dashboard-stats-grid">
+                <div className="stat-card">
+                  <div className="stat-icon">👥</div>
+                  <div className="stat-content">
+                    <h4 className="stat-label">Total Users</h4>
+                    <p className="stat-value">-</p>
+                    <p className="stat-hint">View in Manage Users</p>
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-icon">🤖</div>
+                  <div className="stat-content">
+                    <h4 className="stat-label">Active Chatbots</h4>
+                    <p className="stat-value">{deferredBots.length}</p>
+                    <p className="stat-hint">For selected user</p>
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-icon">📊</div>
+                  <div className="stat-content">
+                    <h4 className="stat-label">System Status</h4>
+                    <p className="stat-value">Active</p>
+                    <p className="stat-hint">All systems operational</p>
+                  </div>
+                </div>
               </div>
-              <div style={{
-                marginTop: '1.5rem',
-                padding: '1rem',
-                background: '#fef3c7',
-                border: '1px solid #fbbf24',
-                borderRadius: '8px',
-                color: '#92400e',
-                fontSize: '0.875rem'
-              }}>
-                ℹ️ Users manage their own websites and chatbots. Select a different user from the Users page.
-              </div>
+
+              {tenantDetails && (
+                <div className="dashboard-current-user">
+                  <h3>Currently Viewing: {tenantDetails.name || tenantDetails.username}</h3>
+                  <div className="user-info-card">
+                    <div className="info-row">
+                      <span className="info-label">Email:</span>
+                      <span className="info-value">{tenantDetails.email}</span>
+                    </div>
+                    <div className="info-row">
+                      <span className="info-label">Chatbot Capacity:</span>
+                      <span className="info-value">
+                        {tenantDetails.maxBots} chatbot{tenantDetails.maxBots > 1 ? 's' : ''} allowed
+                      </span>
+                    </div>
+                    {tenantDetails.maxAgents > 0 && (
+                      <div className="info-row">
+                        <span className="info-label">Agent Capacity:</span>
+                        <span className="info-value">
+                          {tenantDetails.maxAgents} agent{tenantDetails.maxAgents > 1 ? 's' : ''} allowed
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="dashboard-hint">
+                    <span className="hint-icon">💡</span>
+                    <span>Navigate to "Manage Users" from the sidebar to view all users and create new ones.</span>
+                  </div>
+                </div>
+              )}
+
+              {!tenantDetails && (
+                <div className="dashboard-empty-state">
+                  <div className="empty-icon">📋</div>
+                  <h3>No User Selected</h3>
+                  <p>Navigate to "Manage Users" from the sidebar to view and manage all users.</p>
+                  <button 
+                    className="dashboard-action-btn"
+                    onClick={() => navigate('/admin/users')}
+                  >
+                    Go to Manage Users →
+                  </button>
+                </div>
+              )}
             </section>
           )}
           
@@ -718,9 +691,9 @@ function DashboardPage() {
                 fontSize: '1rem'
               }}>
                 <strong>You can create up to {tenantDetails?.maxBots} chatbot{tenantDetails?.maxBots > 1 ? 's' : ''}</strong>
-                {bots.length > 0 && (
+                {deferredBots.length > 0 && (
                   <span style={{ marginLeft: '0.5rem', color: '#1e40af' }}>
-                    ({bots.length} / {tenantDetails?.maxBots} created)
+                    ({deferredBots.length} / {tenantDetails?.maxBots} created)
                   </span>
                 )}
               </div>
@@ -745,7 +718,7 @@ function DashboardPage() {
                   {/* Action Buttons */}
                   <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
                     {/* Add Website Button */}
-                    {bots.length < tenantDetails?.maxBots && (
+                    {deferredBots.length < tenantDetails?.maxBots && (
                       <button
                         className="dashboard-action-btn"
                         onClick={() => setAddWebsiteModalOpen(true)}
@@ -819,7 +792,7 @@ function DashboardPage() {
                   )}
 
                   {/* Website List */}
-                  {bots.length === 0 ? (
+                  {deferredBots.length === 0 ? (
                     <div style={{
                       padding: '2rem',
                       background: '#f9fafb',
@@ -842,7 +815,7 @@ function DashboardPage() {
                         gap: '0.75rem',
                         marginBottom: '1.5rem'
                       }}>
-                        {bots.map(bot => (
+                        {deferredBots.map(bot => (
                           <div
                             key={bot._id || bot.id}
                             onClick={() => handleBotSelect(bot)}
@@ -1330,35 +1303,6 @@ function DashboardPage() {
         </section>
       )}
 
-      {createModalOpen && (
-        <div className="scrape-modal-overlay" role="dialog" aria-modal="true">
-          <div className="scrape-modal">
-            <h3>Create User</h3>
-            <p className="scrape-modal-subtitle">
-              Enter the user details. Provisioning runs immediately after submission.
-            </p>
-
-            {createError && <p className="scrape-error">{createError}</p>}
-
-            <UserForm
-              mode="create"
-              loading={createLoading}
-              onSubmit={handleCreateUser}
-            />
-
-            <div className="scrape-modal-actions">
-              <button
-                type="button"
-                className="scrape-btn-neutral"
-                onClick={closeCreateModal}
-                disabled={createLoading}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Add Agent Modal */}
       {addAgentModalOpen && (
