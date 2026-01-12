@@ -37,7 +37,7 @@ function AgentPanel() {
     setConversationsError('');
     
     try {
-      const data = await apiRequest('/agent/conversations', { token });
+      const data = await apiRequest('/api/agent/conversations', { token });
       setConversations(data.conversations || data || []);
       
       // Extract unique bot IDs and fetch bot details
@@ -72,7 +72,7 @@ function AgentPanel() {
     setMessagesError('');
     
     try {
-      const data = await apiRequest(`/agent/conversations/${conversationId}/messages`, { token });
+      const data = await apiRequest(`/api/agent/conversations/${conversationId}/messages`, { token });
       setMessages(data.messages || data || []);
     } catch (error) {
       console.error('Failed to fetch messages:', error);
@@ -122,10 +122,10 @@ function AgentPanel() {
       setMessages(prev => [...prev, tempMessage]);
       
       // Send to API
-      await apiRequest(`/agent/conversations/${selectedConversationId}/reply`, {
+      await apiRequest(`/api/agent/conversations/${selectedConversationId}/reply`, {
         method: 'POST',
         token,
-        body: { message: messageText }
+        data: { message: messageText }
       });
       
       // Refresh messages to get the actual message from server
@@ -259,88 +259,6 @@ function AgentPanel() {
         ) : (
           <>
             {/* Chat Header */}
-            <div className="chat-window-header">
-              <div className="chat-window-header-left">
-                <div className="chat-window-avatar">
-                  <span>👤</span>
-                </div>
-                <div className="chat-window-info">
-                  <div className="chat-window-visitor">{getVisitorName(selectedConversation)}</div>
-                  <div className="chat-window-agent">{user?.username || 'Agent'}</div>
-                </div>
-              </div>
-              <button 
-                className="chat-window-close"
-                onClick={() => setSelectedConversationId(null)}
-                title="Close conversation"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Messages Area */}
-            <div className="chat-window-messages">
-              {messagesLoading && (
-                <div className="messages-loading">
-                  <Loader message="Loading messages..." />
-                </div>
-              )}
-
-              {messagesError && (
-                <div className="messages-error">
-                  <p>{messagesError}</p>
-                  <button onClick={() => fetchMessages(selectedConversationId)}>Retry</button>
-                </div>
-              )}
-
-              {!messagesLoading && !messagesError && (
-                <div className="messages-scroll-area">
-                  {messages.length === 0 ? (
-                    <div className="messages-empty">
-                      <p>No messages yet</p>
-                    </div>
-                  ) : (
-                    <>
-                      {messages.map((msg) => {
-                        const isAgent = msg.sender === 'agent';
-                        const isUser = msg.sender === 'user';
-                        const senderName = isAgent ? (user?.username || 'Agent') : (isUser ? getVisitorName(selectedConversation) : 'Bot');
-                        
-                        return (
-                          <div
-                            key={msg._id || msg.id}
-                            className={`message-row ${isAgent ? 'message-right' : 'message-left'}`}
-                          >
-                            <div className="message-avatar-circle">
-                              {isAgent ? '👨‍💼' : '👤'}
-                            </div>
-                            <div className="message-content-wrapper">
-                              <div className="message-sender-label">{senderName}</div>
-                              <div className="message-text-bubble">
-                                {msg.content || msg.text || '(empty message)'}
-                              </div>
-                              <div className="message-time-label">
-                                {formatTime(msg.createdAt || msg.timestamp)}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      
-                      {/* Conversation Status */}
-                      {selectedConversation && (
-                        <div className="conversation-end-status">
-                          <p>Conversation Started</p>
-                          <p>At {formatTime(selectedConversation.createdAt)}</p>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Message Input Box */}
             <div className="chat-window-header">
               <div className="chat-window-header-left">
                 <div className="chat-window-avatar">
