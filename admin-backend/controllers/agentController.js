@@ -144,8 +144,8 @@ const agentLogin = async (req, res) => {
     const token = jwt.sign(
       {
         role: 'agent',
-        userId: foundTenant._id.toString(),
-        agentId: foundAgent._id.toString()
+        agentId: foundAgent._id.toString(),
+        tenantId: foundTenant._id.toString()
       },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
@@ -240,6 +240,7 @@ const createAgent = async (req, res) => {
 
     // Create agent
     const agent = new Agent({
+      tenantId: req.user._id,
       username,
       passwordHash,
       name,
@@ -493,7 +494,9 @@ const getConversations = async (req, res) => {
     console.log(`📋 Retrieved ${conversations.length} conversations for tenant ${tenant.username}`);
 
     // Get bot IDs to fetch bot details from admin DB
-    const botIds = [...new Set(conversations.map(c => c.botId))];
+    const botIds = [...new Set(conversations.map(c => c.botId?.toString()))]
+      .filter(Boolean)
+      .map(id => new mongoose.Types.ObjectId(id));
     const bots = await Bot.find({ _id: { $in: botIds } }).select('_id name scrapedWebsites').lean();
     const botMap = Object.fromEntries(bots.map(b => [b._id.toString(), b]));
 

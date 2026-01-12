@@ -14,6 +14,11 @@ const mongoose = require('mongoose');
  */
 const AgentSchema = new mongoose.Schema(
   {
+    tenantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      index: true
+    },
     username: {
       type: String,
       required: [true, 'Username is required'],

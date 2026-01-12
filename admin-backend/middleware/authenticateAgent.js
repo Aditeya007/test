@@ -1,6 +1,46 @@
 // admin-backend/middleware/authenticateAgent.js
 
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+const mongoose = require('mongoose');
+const AgentSchema = require('../models/Agent');
+
+// Cache for tenant database connections
+const tenantConnections = new Map();
+
+/**
+ * Get or create a connection to the tenant's database
+ */
+const getTenantConnection = async (databaseUri) => {
+  if (!databaseUri) {
+    throw new Error('databaseUri is required for tenant database connection');
+  }
+
+  if (tenantConnections.has(databaseUri)) {
+    return tenantConnections.get(databaseUri);
+  }
+
+  const conn = await mongoose.createConnection(databaseUri, {
+    maxPoolSize: 10,
+    serverSelectionTimeoutMS: 5000,
+  }).asPromise();
+
+  tenantConnections.set(databaseUri, conn);
+  return conn;
+};
+
+/**
+ * Get Agent model for a specific tenant database
+ */
+const getAgentModel = async (databaseUri) => {
+  const tenantDB = await getTenantConnection(databaseUri);
+  
+  if (tenantDB.models.Agent) {
+    return tenantDB.models.Agent;
+  }
+  
+  return tenantDB.model('Agent', AgentSchema);
+};
 
 /**
  * Agent authentication middleware
@@ -21,7 +61,7 @@ const jwt = require('jsonwebtoken');
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
  */
-const authenticateAgent = (req, res, next) => {
+const authenticateAgent = async (req, res, next) => {
   try {
     // Extract token from 'Authorization: Bearer <token>' header
     const authHeader = req.headers['authorization'];
@@ -64,12 +104,32 @@ const authenticateAgent = (req, res, next) => {
       });
     }
     
+    // Resolve tenant directly from JWT tenantId
+    const tenant = await User.findById(decoded.tenantId);
+    if (!tenant) {
+      return res.status(404).json({
+        error: 'Tenant not found',
+        message: 'Unable to resolve tenant for this agent'
+      });
+    }
+    
+    // Get agent from tenant database
+    const Agent = await getAgentModel(tenant.databaseUri);
+    const agent = await Agent.findById(decoded.agentId);
+    
+    if (!agent) {
+      return res.status(401).json({
+        error: 'Agent not found',
+        message: 'Invalid agent credentials'
+      });
+    }
+    
     // Attach agent info to request object for use in controllers
     req.agent = {
-      id: decoded.agentId,
-      username: decoded.username,
-      tenantId: decoded.tenantId,
-      role: decoded.role
+      id: agent._id.toString(),
+      tenantId: tenant._id.toString(),
+      username: agent.username,
+      role: 'agent'
     };
     
     next();
