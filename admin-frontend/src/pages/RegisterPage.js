@@ -1,16 +1,16 @@
 // src/pages/RegisterPage.js
 
-import React, { useState } from 'react';
+import React, { useState, useTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { validateField, getPasswordStrength } from '../utils';
 import Loader from '../components/Loader';
-
-import '../styles/index.css';
+import '../styles/auth.css';
 
 function RegisterPage() {
   const { register, loading } = useAuth();
   const navigate = useNavigate();
+  const [isPending, startTransition] = useTransition();
 
   const [formData, setFormData] = useState({
     name: '',
@@ -21,6 +21,7 @@ function RegisterPage() {
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
   const [showPasswordStrength, setShowPasswordStrength] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Validate entire form
   function validateForm() {
@@ -54,7 +55,9 @@ function RegisterPage() {
     });
 
     if (res.success) {
-      navigate('/dashboard');
+      startTransition(() => {
+        navigate('/dashboard');
+      });
     } else {
       setServerError(res.message);
     }
@@ -68,114 +71,187 @@ function RegisterPage() {
       if (errors[field]) {
         setErrors(prev => ({ ...prev, [field]: '' }));
       }
+      if (serverError) setServerError('');
     };
   }
 
   const passwordStrength = getPasswordStrength(formData.password);
+  const strengthColor = passwordStrength === 'Strong' ? '#4ade80' : passwordStrength === 'Medium' ? '#fbbf24' : '#fb923c';
 
   return (
-    <div className="auth-container">
-      <h2 className="auth-heading">Admin Portal Register</h2>
-      
-      <form className="auth-form" onSubmit={handleSubmit}>
-        <label>
-          Full Name
-          <input
-            type="text"
-            className={`auth-input ${errors.name ? 'input-error' : ''}`}
-            value={formData.name}
-            onChange={handleChange('name')}
-            disabled={loading}
-            required
-            autoFocus
-            autoComplete="name"
-            placeholder="Enter your full name"
-          />
-          {errors.name && (
-            <span className="field-error">{errors.name}</span>
-          )}
-        </label>
+    <div className="auth-page">
+      <div className="auth-page-background">
+        <div className="auth-background-shapes">
+          <div className="shape shape-1"></div>
+          <div className="shape shape-2"></div>
+          <div className="shape shape-3"></div>
+        </div>
+      </div>
 
-        <label>
-          Email
-          <input
-            type="email"
-            className={`auth-input ${errors.email ? 'input-error' : ''}`}
-            value={formData.email}
-            onChange={handleChange('email')}
-            disabled={loading}
-            required
-            autoComplete="email"
-            placeholder="your.email@example.com"
-          />
-          {errors.email && (
-            <span className="field-error">{errors.email}</span>
-          )}
-        </label>
-
-        <label>
-          Username
-          <input
-            type="text"
-            className={`auth-input ${errors.username ? 'input-error' : ''}`}
-            value={formData.username}
-            onChange={handleChange('username')}
-            disabled={loading}
-            required
-            autoComplete="username"
-            placeholder="Choose a username (3-20 chars)"
-          />
-          {errors.username && (
-            <span className="field-error">{errors.username}</span>
-          )}
-        </label>
-
-        <label>
-          Password
-          <input
-            type="password"
-            className={`auth-input ${errors.password ? 'input-error' : ''}`}
-            value={formData.password}
-            onChange={handleChange('password')}
-            onFocus={() => setShowPasswordStrength(true)}
-            onBlur={() => setShowPasswordStrength(false)}
-            disabled={loading}
-            required
-            autoComplete="new-password"
-            placeholder="Create a strong password"
-          />
-          {errors.password && (
-            <span className="field-error">{errors.password}</span>
-          )}
-          {showPasswordStrength && formData.password && !errors.password && (
-            <span className={`password-strength ${passwordStrength === 'Strong' ? 'strong' : 'weak'}`}>
-              {passwordStrength}
-            </span>
-          )}
-        </label>
-
-        {serverError && <div className="auth-error">{serverError}</div>}
+      <div className="auth-container-modern">
+        <div className="auth-header-modern">
+          <div className="auth-logo">
+            <div className="logo-icon">✨</div>
+            <h1 className="auth-title-modern">Create Account</h1>
+          </div>
+          <p className="auth-subtitle-modern">Join us and start managing your chatbots</p>
+        </div>
         
-        <button 
-          className="auth-btn" 
-          type="submit" 
-          disabled={loading}
-        >
-          {loading ? 'Creating Account...' : 'Register'}
-        </button>
-      </form>
+        <form className="auth-form-modern" onSubmit={handleSubmit}>
+          <div className="form-group-modern">
+            <label className="form-label-modern">
+              <span className="label-icon">👤</span>
+              Full Name
+            </label>
+            <div className="input-wrapper-modern">
+              <input
+                type="text"
+                className={`form-input-modern ${errors.name ? 'input-error' : ''}`}
+                value={formData.name}
+                onChange={handleChange('name')}
+                disabled={loading || isPending}
+                required
+                autoFocus
+                autoComplete="name"
+                placeholder="Enter your full name"
+              />
+            </div>
+            {errors.name && (
+              <span className="field-error-modern">{errors.name}</span>
+            )}
+          </div>
 
-      {loading && <Loader size="small" message="Creating your account..." />}
+          <div className="form-group-modern">
+            <label className="form-label-modern">
+              <span className="label-icon">📧</span>
+              Email
+            </label>
+            <div className="input-wrapper-modern">
+              <input
+                type="email"
+                className={`form-input-modern ${errors.email ? 'input-error' : ''}`}
+                value={formData.email}
+                onChange={handleChange('email')}
+                disabled={loading || isPending}
+                required
+                autoComplete="email"
+                placeholder="your.email@example.com"
+              />
+            </div>
+            {errors.email && (
+              <span className="field-error-modern">{errors.email}</span>
+            )}
+          </div>
 
-      <div className="auth-footer">
-        <span>Already have an account?</span>
-        <button 
-          className="auth-link" 
-          onClick={() => navigate('/login')}
-          disabled={loading}
-        >
-          Login
-        </button>
+          <div className="form-group-modern">
+            <label className="form-label-modern">
+              <span className="label-icon">🏷️</span>
+              Username
+            </label>
+            <div className="input-wrapper-modern">
+              <input
+                type="text"
+                className={`form-input-modern ${errors.username ? 'input-error' : ''}`}
+                value={formData.username}
+                onChange={handleChange('username')}
+                disabled={loading || isPending}
+                required
+                autoComplete="username"
+                placeholder="Choose a username (3-20 chars)"
+              />
+            </div>
+            {errors.username && (
+              <span className="field-error-modern">{errors.username}</span>
+            )}
+          </div>
+
+          <div className="form-group-modern">
+            <label className="form-label-modern">
+              <span className="label-icon">🔒</span>
+              Password
+            </label>
+            <div className="input-wrapper-modern password-wrapper">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className={`form-input-modern ${errors.password ? 'input-error' : ''}`}
+                value={formData.password}
+                onChange={handleChange('password')}
+                onFocus={() => setShowPasswordStrength(true)}
+                onBlur={() => setShowPasswordStrength(false)}
+                disabled={loading || isPending}
+                required
+                autoComplete="new-password"
+                placeholder="Create a strong password"
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword(!showPassword)}
+                tabIndex={-1}
+              >
+                {showPassword ? '👁️' : '👁️‍🗨️'}
+              </button>
+            </div>
+            {errors.password && (
+              <span className="field-error-modern">{errors.password}</span>
+            )}
+            {showPasswordStrength && formData.password && !errors.password && (
+              <div className="password-strength-modern">
+                <div className="strength-bar">
+                  <div 
+                    className="strength-fill" 
+                    style={{ 
+                      width: passwordStrength === 'Strong' ? '100%' : passwordStrength === 'Medium' ? '66%' : '33%',
+                      backgroundColor: strengthColor
+                    }}
+                  ></div>
+                </div>
+                <span className={`strength-text ${passwordStrength === 'Strong' ? 'strong' : passwordStrength === 'Medium' ? 'medium' : 'weak'}`}>
+                  {passwordStrength}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {serverError && (
+            <div className="auth-error-modern">
+              <span className="error-icon">⚠️</span>
+              {serverError}
+            </div>
+          )}
+          
+          <button 
+            className="auth-btn-modern" 
+            type="submit" 
+            disabled={loading || isPending}
+          >
+            {loading || isPending ? (
+              <>
+                <span className="btn-loader"></span>
+                <span>Creating Account...</span>
+              </>
+            ) : (
+              <>
+                <span>Create Account</span>
+                <span className="btn-arrow">→</span>
+              </>
+            )}
+          </button>
+        </form>
+
+        <div className="auth-footer-modern">
+          <div className="auth-link-group">
+            <span className="auth-link-text">Already have an account?</span>
+            <button 
+              className="auth-link-modern" 
+              onClick={() => navigate('/login')}
+              disabled={loading || isPending}
+              type="button"
+            >
+              Login
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
