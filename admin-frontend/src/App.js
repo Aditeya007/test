@@ -13,6 +13,7 @@ import DashboardPage from './pages/DashboardPage';
 import AdminUsersPage from './pages/AdminUsersPage';
 import BotPage from './pages/BotPage';
 import HealthPage from './pages/HealthPage';
+import AgentPanel from './pages/AgentPanel';
 import ChatWidgetWrapper from './components/ChatWidget/ChatWidgetWrapper';
 
 import './styles/index.css';
@@ -32,10 +33,18 @@ function AppContent() {
         
         {/* Protected routes - require authentication */}
         <Route
+          path="/agent"
+          element={
+            <ProtectedRoute>
+              <AgentPanel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
-              <DashboardPage />
+              {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <DashboardPage />}
             </ProtectedRoute>
           }
         />
@@ -43,7 +52,7 @@ function AppContent() {
           path="/admin/users"
           element={
             <ProtectedRoute>
-              <AdminUsersPage />
+              {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <AdminUsersPage />}
             </ProtectedRoute>
           }
         />
@@ -51,7 +60,7 @@ function AppContent() {
           path="/bot/:botId"
           element={
             <ProtectedRoute>
-              <BotPage />
+              {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <BotPage />}
             </ProtectedRoute>
           }
         />
@@ -59,20 +68,26 @@ function AppContent() {
           path="/health"
           element={
             <ProtectedRoute>
-              <HealthPage />
+              {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <HealthPage />}
             </ProtectedRoute>
           }
         />
         
         {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route 
+          path="/" 
+          element={<Navigate to={user?.role === 'agent' ? '/agent' : '/dashboard'} replace />} 
+        />
         
         {/* 404 fallback */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route 
+          path="*" 
+          element={<Navigate to={user?.role === 'agent' ? '/agent' : '/dashboard'} replace />} 
+        />
       </Routes>
       
-      {/* Chat Widget - only show when user is logged in and widget is activated */}
-      {user && <ChatWidgetWrapper />}
+      {/* Chat Widget - only show when user is logged in and widget is activated (not for agents) */}
+      {user && user.role !== 'agent' && <ChatWidgetWrapper />}
     </>
   );
 }
