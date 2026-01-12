@@ -77,16 +77,15 @@ function UserForm({
       errors.password = 'Password must be at least 6 characters';
     }
 
-    if (!isEditMode) {
-      const maxBots = parseInt(values.maxBots, 10);
-      if (isNaN(maxBots) || maxBots < 1) {
-        errors.maxBots = 'Max bots must be a positive integer';
-      }
-      
-      const maxAgents = parseInt(values.maxAgents, 10);
-      if (isNaN(maxAgents) || maxAgents < 0) {
-        errors.maxAgents = 'Max agents must be 0 or greater';
-      }
+    // Validate maxBots and maxAgents for both create and edit modes
+    const maxBots = parseInt(values.maxBots, 10);
+    if (isNaN(maxBots) || maxBots < 1 || maxBots > 10) {
+      errors.maxBots = 'Max bots must be between 1 and 10';
+    }
+    
+    const maxAgents = parseInt(values.maxAgents, 10);
+    if (isNaN(maxAgents) || maxAgents < 0 || maxAgents > 50) {
+      errors.maxAgents = 'Max agents must be between 0 and 50';
     }
 
     return errors;
@@ -171,55 +170,51 @@ function UserForm({
         {fieldErrors.password && <span className="field-error">{fieldErrors.password}</span>}
       </div>
 
-      {!isEditMode && (
-        <>
-          <div style={{ marginBottom: '1.2em' }}>
-            <label htmlFor="max-bots">
-              Max Bots Allowed
-            </label>
-            <input
-              id="max-bots"
-              name="maxBots"
-              type="number"
-              min="1"
-              max="10"
-              placeholder="1"
-              value={values.maxBots}
-              onChange={handleChange}
-              disabled={loading}
-              className={fieldErrors.maxBots ? 'input-error' : ''}
-              style={{ width: '100%' }}
-            />
-            {fieldErrors.maxBots && <span className="field-error">{fieldErrors.maxBots}</span>}
-            <small style={{ display: 'block', marginTop: '0.3em', color: '#666' }}>
-              Set the maximum number of bots this user can create (1-10).
-            </small>
-          </div>
+      <div style={{ marginBottom: '1.2em' }}>
+        <label htmlFor="max-bots">
+          Max Bots Allowed
+        </label>
+        <input
+          id="max-bots"
+          name="maxBots"
+          type="number"
+          min="1"
+          max="10"
+          placeholder="1"
+          value={values.maxBots}
+          onChange={handleChange}
+          disabled={loading}
+          className={fieldErrors.maxBots ? 'input-error' : ''}
+          style={{ width: '100%' }}
+        />
+        {fieldErrors.maxBots && <span className="field-error">{fieldErrors.maxBots}</span>}
+        <small style={{ display: 'block', marginTop: '0.3em', color: '#666' }}>
+          Set the maximum number of bots this user can create (1-10).
+        </small>
+      </div>
 
-          <div style={{ marginBottom: '1.2em' }}>
-            <label htmlFor="max-agents">
-              Max Agents Allowed
-            </label>
-            <input
-              id="max-agents"
-              name="maxAgents"
-              type="number"
-              min="0"
-              max="50"
-              placeholder="0"
-              value={values.maxAgents}
-              onChange={handleChange}
-              disabled={loading}
-              className={fieldErrors.maxAgents ? 'input-error' : ''}
-              style={{ width: '100%' }}
-            />
-            {fieldErrors.maxAgents && <span className="field-error">{fieldErrors.maxAgents}</span>}
-            <small style={{ display: 'block', marginTop: '0.3em', color: '#666' }}>
-              Set the maximum number of human agents this tenant can create (0-50).
-            </small>
-          </div>
-        </>
-      )}
+      <div style={{ marginBottom: '1.2em' }}>
+        <label htmlFor="max-agents">
+          Max Agents Allowed
+        </label>
+        <input
+          id="max-agents"
+          name="maxAgents"
+          type="number"
+          min="0"
+          max="50"
+          placeholder="0"
+          value={values.maxAgents}
+          onChange={handleChange}
+          disabled={loading}
+          className={fieldErrors.maxAgents ? 'input-error' : ''}
+          style={{ width: '100%' }}
+        />
+        {fieldErrors.maxAgents && <span className="field-error">{fieldErrors.maxAgents}</span>}
+        <small style={{ display: 'block', marginTop: '0.3em', color: '#666' }}>
+          Set the maximum number of human agents this tenant can create (0-50).
+        </small>
+      </div>
 
       <div style={{ display: 'flex', gap: '0.8em', marginTop: '2em' }}>
         {isEditMode && (

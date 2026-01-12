@@ -40,6 +40,8 @@ function UserTable({ users, onEdit, onDelete, onViewResources, onSelect, activeT
             <th>Username</th>
             <th>Email</th>
             <th>Status</th>
+            <th>Bots</th>
+            <th>Agents</th>
             <th>Created</th>
             <th>Actions</th>
           </tr>
@@ -61,6 +63,16 @@ function UserTable({ users, onEdit, onDelete, onViewResources, onSelect, activeT
                 <td>
                   <span className={`status-badge ${user.isActive ? 'active' : 'inactive'}`}>
                     {user.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
+                <td style={{ textAlign: 'center', fontSize: '0.9rem' }}>
+                  <span title={`Maximum bots allowed: ${user.maxBots || 1}`}>
+                    {user.maxBots || 1}
+                  </span>
+                </td>
+                <td style={{ textAlign: 'center', fontSize: '0.9rem' }}>
+                  <span title={`Maximum agents allowed: ${user.maxAgents || 0}`}>
+                    {user.maxAgents || 0}
                   </span>
                 </td>
                 <td style={{ fontSize: '0.85rem' }}>{formatDate(user.createdAt)}</td>

@@ -225,6 +225,16 @@ const createAgent = async (req, res) => {
 
     await agent.save();
 
+    console.log(`✅ Agent created successfully:`, {
+      agentId: agent._id,
+      username: agent.username,
+      name: agent.name,
+      tenantId: tenantId,
+      tenantUsername: tenant.username,
+      database: tenant.databaseUri,
+      collection: 'agents'
+    });
+
     res.status(201).json({
       message: 'Agent created successfully',
       agent: agent.toPublicProfile()
@@ -267,6 +277,13 @@ const listAgents = async (req, res) => {
     // Get agents from TENANT database
     const Agent = await getAgentModel(tenant.databaseUri);
     const agents = await Agent.find().sort({ createdAt: -1 });
+
+    console.log(`📋 Retrieved agents for tenant ${tenant.username}:`, {
+      tenantId: tenantId,
+      database: tenant.databaseUri,
+      agentCount: agents.length,
+      maxAgents: tenant.maxAgents
+    });
 
     res.json({
       agents: agents.map(agent => agent.toPublicProfile()),
