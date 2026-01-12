@@ -18,10 +18,10 @@ const authenticateAgent = require('../middleware/authenticateAgent');
  * - PATCH /api/agent/:agentId - Update agent (tenant only)
  * - DELETE /api/agent/:agentId - Delete agent (tenant only)
  * 
- * PHASE-2 (not yet implemented):
- * - Conversation viewing
- * - Agent replies
- * - Status handoff
+ * PHASE-2:
+ * - GET /api/agent/conversations - List conversations (agent inbox)
+ * - Agent replies (coming soon)
+ * - Status handoff (coming soon)
  */
 
 // Public routes
@@ -32,5 +32,8 @@ router.post('/create', auth, agentController.createAgent);
 router.get('/list', auth, agentController.listAgents);
 router.patch('/:agentId', auth, agentController.updateAgent);
 router.delete('/:agentId', auth, agentController.deleteAgent);
+
+// Agent-protected routes (agent views conversations)
+router.get('/conversations', auth, agentController.getConversations);
 
 module.exports = router;

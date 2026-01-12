@@ -446,10 +446,108 @@ const deleteAgent = async (req, res) => {
 };
 
 // ============================================================================
-// PHASE-2: Conversation & Message Handling (NOT YET IMPLEMENTED)
+// PHASE-2: Conversation & Message Handling
 // ============================================================================
-// The following endpoints will be implemented in Phase-2:
-// - getConversations - View tenant conversations
+
+/**
+ * GET /api/agent/conversations
+ * List all conversations for the tenant (agent inbox)
+ * Requires agent authentication
+ */
+const getConversations = async (req, res) => {
+  try {
+    const tenantId = req.user.userId; // userId contains tenant ID
+
+    // Get tenant info from ADMIN database
+    const tenant = await User.findById(tenantId);
+    if (!tenant) {
+      return res.status(404).json({
+        error: 'Tenant not found',
+        message: 'Invalid tenant'
+      });
+    }
+
+    // Connect to tenant database
+    const tenantConnection = await getTenantConnection(tenant.databaseUri);
+
+    // Define Conversation schema for tenant DB
+    const ConversationSchema = new mongoose.Schema({
+      botId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bot', required: true },
+      sessionId: { type: String, required: true },
+      status: { type: String, enum: ['ai', 'human'], default: 'ai' },
+      createdAt: { type: Date, default: Date.now },
+      lastActiveAt: { type: Date, default: Date.now }
+    });
+
+    // Define Message schema for tenant DB
+    const MessageSchema = new mongoose.Schema({
+      conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: true },
+      sender: { type: String, enum: ['user', 'bot', 'agent'], required: true },
+      text: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now }
+    });
+
+    // Get or create models
+    const Conversation = tenantConnection.models.Conversation || 
+                         tenantConnection.model('Conversation', ConversationSchema);
+    const Message = tenantConnection.models.Message || 
+                    tenantConnection.model('Message', MessageSchema);
+
+    // Query all conversations, sorted by lastActiveAt
+    const conversations = await Conversation.find()
+      .sort({ lastActiveAt: -1 })
+      .lean();
+
+    // Get bot IDs to fetch bot details from admin DB
+    const botIds = [...new Set(conversations.map(c => c.botId))];
+    const bots = await Bot.find({ _id: { $in: botIds } }).select('_id name scrapedWebsites').lean();
+    const botMap = Object.fromEntries(bots.map(b => [b._id.toString(), b]));
+
+    // For each conversation, get the last message
+    const conversationsWithDetails = await Promise.all(
+      conversations.map(async (conv) => {
+        // Get last message for this conversation
+        const lastMessage = await Message.findOne({ conversationId: conv._id })
+          .sort({ createdAt: -1 })
+          .select('text sender createdAt')
+          .lean();
+
+        const bot = botMap[conv.botId.toString()];
+        const websiteUrl = bot?.scrapedWebsites?.[0] || 'N/A';
+
+        return {
+          conversationId: conv._id,
+          botId: conv.botId,
+          botName: bot?.name || 'Unknown Bot',
+          websiteUrl,
+          sessionId: conv.sessionId,
+          status: conv.status,
+          lastActiveAt: conv.lastActiveAt,
+          createdAt: conv.createdAt,
+          lastMessage: lastMessage ? {
+            text: lastMessage.text,
+            sender: lastMessage.sender,
+            createdAt: lastMessage.createdAt
+          } : null
+        };
+      })
+    );
+
+    res.json({
+      conversations: conversationsWithDetails,
+      count: conversationsWithDetails.length
+    });
+  } catch (error) {
+    console.error('Get conversations error:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve conversations',
+      message: 'An error occurred while fetching conversations'
+    });
+  }
+};
+
+// ============================================================================
+// TODO: Additional Phase-2 endpoints
 // - replyToConversation - Send agent replies
 // - updateConversationStatus - Toggle AI/human mode
 // ============================================================================
@@ -459,5 +557,6 @@ module.exports = {
   createAgent,
   listAgents,
   updateAgent,
-  deleteAgent
+  deleteAgent,
+  getConversations
 };
