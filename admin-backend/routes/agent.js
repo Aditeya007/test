@@ -34,7 +34,7 @@ router.patch('/:agentId', auth, agentController.updateAgent);
 router.delete('/:agentId', auth, agentController.deleteAgent);
 
 // Agent-protected routes (agent views conversations)
-router.get('/conversations', auth, agentController.getConversations);
-router.get('/conversations/:conversationId/messages', auth, agentController.getMessages);
+router.get('/conversations', authenticateAgent, agentController.getConversations);
+router.get('/conversations/:conversationId/messages', authenticateAgent, agentController.getMessages);
 
 module.exports = router;
