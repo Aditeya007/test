@@ -22,6 +22,10 @@ function AgentPanel() {
   
   // Bots mapping (for website names)
   const [bots, setBots] = useState({});
+  
+  // Message input state
+  const [messageInput, setMessageInput] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   // Fetch conversations on mount
   useEffect(() => {
@@ -33,7 +37,7 @@ function AgentPanel() {
     setConversationsError('');
     
     try {
-      const data = await apiRequest('/api/conversations', { token });
+      const data = await apiRequest('/api/conversation', { token });
       setConversations(data.conversations || data || []);
       
       // Extract unique bot IDs and fetch bot details
@@ -88,20 +92,58 @@ function AgentPanel() {
     
     try {
       const date = new Date(timestamp);
-      const now = new Date();
-      const diffMs = now - date;
-      const diffMins = Math.floor(diffMs / 60000);
-      const diffHours = Math.floor(diffMs / 3600000);
-      const diffDays = Math.floor(diffMs / 86400000);
-      
-      if (diffMins < 1) return 'Just now';
-      if (diffMins < 60) return `${diffMins}m ago`;
-      if (diffHours < 24) return `${diffHours}h ago`;
-      if (diffDays < 7) return `${diffDays}d ago`;
-      
-      return date.toLocaleDateString();
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
     } catch (error) {
       return 'N/A';
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!messageInput.trim() || !selectedConversationId || sendingMessage) return;
+    
+    setSendingMessage(true);
+    const messageText = messageInput.trim();
+    setMessageInput('');
+    
+    try {
+      // Optimistically add message to UI
+      const tempMessage = {
+        _id: `temp-${Date.now()}`,
+        content: messageText,
+        sender: 'agent',
+        createdAt: new Date().toISOString()
+      };
+      setMessages(prev => [...prev, tempMessage]);
+      
+      // Send to API
+      await apiRequest(`/api/conversations/${selectedConversationId}/reply`, {
+        method: 'POST',
+        token,
+        body: { message: messageText }
+      });
+      
+      // Refresh messages to get the actual message from server
+      await fetchMessages(selectedConversationId);
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      alert('Failed to send message: ' + (error.message || 'Unknown error'));
+      // Restore input on error
+      setMessageInput(messageText);
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
     }
   };
 
@@ -120,133 +162,170 @@ function AgentPanel() {
 
   const selectedConversation = conversations.find(c => c._id === selectedConversationId);
 
+  const getVisitorName = (conversation) => {
+    return conversation?.sessionId || conversation?.userId || `Visitor ${conversation?._id?.slice(-4)}`;
+  };
+
   return (
-    <div className="agent-panel">
-      {/* Header */}
-      <div className="agent-panel-header">
-        <div className="agent-panel-title">
-          <h1>Agent Inbox</h1>
-          <p className="agent-info">
-            Logged in as: <strong>{user?.username || 'Agent'}</strong>
-          </p>
+    <div className="agent-panel-container">
+      {/* Left Sidebar - Conversations List */}
+      <div className="agent-sidebar">
+        <div className="sidebar-header">
+          <h2>Ongoing Chats</h2>
+          <button onClick={fetchConversations} className="refresh-icon-btn" disabled={conversationsLoading} title="Refresh">
+            ↻
+          </button>
         </div>
-        <button onClick={logout} className="logout-btn">
-          Logout
-        </button>
+
+        {conversationsLoading && <Loader message="Loading..." />}
+        
+        {conversationsError && (
+          <div className="sidebar-error">
+            <p>{conversationsError}</p>
+            <button onClick={fetchConversations}>Retry</button>
+          </div>
+        )}
+
+        {!conversationsLoading && !conversationsError && (
+          <div className="conversations-scrollable">
+            {conversations.length === 0 ? (
+              <div className="sidebar-empty">
+                <p>No active conversations</p>
+              </div>
+            ) : (
+              conversations.map((conv) => (
+                <div
+                  key={conv._id}
+                  className={`conversation-row ${selectedConversationId === conv._id ? 'active' : ''}`}
+                  onClick={() => handleConversationClick(conv._id)}
+                >
+                  <div className="conversation-visitor-name">
+                    {getVisitorName(conv)}
+                  </div>
+                  <div className="conversation-bot-name">
+                    {getBotName(conv.botId)}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Main Content */}
-      <div className="agent-panel-content">
-        {/* Left Side: Conversations List */}
-        <div className="conversations-panel">
-          <div className="conversations-header">
-            <h2>Conversations</h2>
-            <button onClick={fetchConversations} className="refresh-btn" disabled={conversationsLoading}>
-              {conversationsLoading ? 'Refreshing...' : 'Refresh'}
-            </button>
+      {/* Right Side - Chat Window */}
+      <div className="agent-chat-area">
+        {!selectedConversationId ? (
+          <div className="chat-empty-state">
+            <p>Select a conversation to view messages</p>
           </div>
-
-          {conversationsLoading && <Loader message="Loading conversations..." />}
-          
-          {conversationsError && (
-            <div className="error-message">
-              <p>{conversationsError}</p>
-              <button onClick={fetchConversations}>Retry</button>
-            </div>
-          )}
-
-          {!conversationsLoading && !conversationsError && (
-            <div className="conversations-list">
-              {conversations.length === 0 ? (
-                <div className="empty-state">
-                  <p>No conversations yet</p>
+        ) : (
+          <>
+            {/* Top Header */}
+            <div className="chat-header">
+              <div className="chat-header-left">
+                <div className="chat-header-avatar">
+                  <span>👤</span>
                 </div>
-              ) : (
-                conversations.map((conv) => (
-                  <div
-                    key={conv._id}
-                    className={`conversation-item ${selectedConversationId === conv._id ? 'active' : ''}`}
-                    onClick={() => handleConversationClick(conv._id)}
-                  >
-                    <div className="conversation-header-row">
-                      <span className="session-id">Session: {conv.sessionId || conv._id}</span>
-                      <span className="conversation-time">{formatTime(conv.lastMessageAt || conv.updatedAt)}</span>
-                    </div>
-                    <div className="conversation-website">
-                      {getBotName(conv.botId)}
-                    </div>
-                    <div className="conversation-preview">
-                      {getLastMessagePreview(conv)}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Right Side: Messages View */}
-        <div className="messages-panel">
-          {!selectedConversationId ? (
-            <div className="empty-state">
-              <p>Select a conversation to view messages</p>
-            </div>
-          ) : (
-            <>
-              <div className="messages-header">
-                <div>
-                  <h2>Conversation Details</h2>
-                  {selectedConversation && (
-                    <div className="conversation-meta">
-                      <p><strong>Session ID:</strong> {selectedConversation.sessionId || selectedConversation._id}</p>
-                      <p><strong>Website:</strong> {getBotName(selectedConversation.botId)}</p>
-                      <p><strong>Started:</strong> {formatTime(selectedConversation.createdAt)}</p>
-                    </div>
-                  )}
+                <div className="chat-header-info">
+                  <div className="chat-header-visitor">{getVisitorName(selectedConversation)}</div>
+                  <div className="chat-header-agent">{user?.username || 'Agent'}</div>
                 </div>
               </div>
+              <button 
+                className="chat-close-btn"
+                onClick={() => setSelectedConversationId(null)}
+                title="Close conversation"
+              >
+                ✕
+              </button>
+            </div>
 
+            {/* Messages Area */}
+            <div className="chat-messages-container">
               {messagesLoading && <Loader message="Loading messages..." />}
 
               {messagesError && (
-                <div className="error-message">
+                <div className="chat-error">
                   <p>{messagesError}</p>
                   <button onClick={() => fetchMessages(selectedConversationId)}>Retry</button>
                 </div>
               )}
 
               {!messagesLoading && !messagesError && (
-                <div className="messages-list">
+                <div className="chat-messages-scroll">
                   {messages.length === 0 ? (
-                    <div className="empty-state">
-                      <p>No messages in this conversation</p>
+                    <div className="chat-empty">
+                      <p>No messages yet</p>
                     </div>
                   ) : (
-                    messages.map((msg) => (
-                      <div
-                        key={msg._id || msg.id}
-                        className={`message-item message-${msg.sender || 'user'}`}
-                      >
-                        <div className="message-header">
-                          <span className="message-sender">
-                            {msg.sender === 'user' && '👤 Visitor'}
-                            {msg.sender === 'bot' && '🤖 Bot'}
-                            {msg.sender === 'agent' && '👨‍💼 Agent'}
-                          </span>
-                          <span className="message-time">{formatTime(msg.createdAt || msg.timestamp)}</span>
+                    <>
+                      {messages.map((msg) => {
+                        const isAgent = msg.sender === 'agent';
+                        const isUser = msg.sender === 'user';
+                        const senderName = isAgent ? (user?.username || 'Agent') : (isUser ? getVisitorName(selectedConversation) : 'Bot');
+                        
+                        return (
+                          <div
+                            key={msg._id || msg.id}
+                            className={`chat-message ${isAgent ? 'message-right' : 'message-left'}`}
+                          >
+                            <div className="message-avatar">
+                              {isAgent ? '👨‍💼' : '👤'}
+                            </div>
+                            <div className="message-bubble-wrapper">
+                              <div className="message-sender-name">{senderName}</div>
+                              <div className="message-bubble">
+                                {msg.content || msg.text || '(empty message)'}
+                              </div>
+                              <div className="message-timestamp">
+                                {formatTime(msg.createdAt || msg.timestamp)}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      
+                      {/* Conversation Status */}
+                      {selectedConversation && (
+                        <div className="conversation-status">
+                          <p>Conversation Started</p>
+                          <p>At {formatTime(selectedConversation.createdAt)}</p>
                         </div>
-                        <div className="message-content">
-                          {msg.content || msg.text || '(empty message)'}
-                        </div>
-                      </div>
-                    ))
+                      )}
+                    </>
                   )}
                 </div>
               )}
-            </>
-          )}
-        </div>
+            </div>
+
+            {/* Bottom Message Input */}
+            <div className="chat-input-container">
+              <input
+                type="text"
+                className="chat-input"
+                placeholder="Type here..."
+                value={messageInput}
+                onChange={(e) => setMessageInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+                disabled={sendingMessage}
+              />
+              <button 
+                className="chat-send-btn"
+                onClick={sendMessage}
+                disabled={!messageInput.trim() || sendingMessage}
+                title="Send message"
+              >
+                <span className="send-icon">➤</span>
+              </button>
+            </div>
+          </>
+        )}
       </div>
+
+      {/* Logout Button - Top Right */}
+      <button onClick={logout} className="agent-logout-btn" title="Logout">
+        Logout
+      </button>
     </div>
   );
 }
