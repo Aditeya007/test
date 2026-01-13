@@ -666,9 +666,23 @@
 
       hideTyping();
 
-      if (response.ok && data.success && data.reply) {
-        // Add bot/agent response
-        addMessage(data.reply.text, data.reply.sender, false, data.reply.sources);
+      if (response.ok && data.success) {
+        // Check if conversation is in active agent mode
+        const isAgentMode = data.agentActive || (data.conversation && data.conversation.status === 'active');
+        
+        if (data.reply) {
+          // Add bot/agent response
+          addMessage(data.reply.text, data.reply.sender, false, data.reply.sources);
+        } else if (isAgentMode) {
+          // Agent mode with no reply - this is expected behavior
+          // Message was forwarded to agent, widget remains silent
+          console.log('RAG Widget: Message forwarded to agent, waiting for agent response');
+          // Do nothing - no error message, no bot response
+        } else {
+          // Not in agent mode and no reply - this is an error
+          const errorMessage = data.error || data.message || 'Bot service is unavailable right now.';
+          addMessage(errorMessage, 'bot', true);
+        }
       } else {
         // Handle specific widget errors
         if (data.widgetError) {
