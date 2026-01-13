@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../api';
-import { API_BASE_URL } from '../config';
 import Loader from '../components/Loader';
 import '../styles/AgentPanel.css';
 
@@ -40,47 +39,9 @@ function AgentPanel() {
   const agentData = agentDataString ? JSON.parse(agentDataString) : null;
   const agentUsername = agentData?.username || decodedToken?.username || 'Agent';
   
-  // Helper to call backend mounted at exact '/agents' path.
-  const getBackendBase = () => API_BASE_URL.replace(/\/api\/?$/, '');
-
-
-  const agentApiRequest = async (path, { method = 'GET', token: reqToken, data, params, ...custom } = {}) => {
-    const base = getBackendBase();
-    const urlBase = `${base}${path}`;
-
-    let url = urlBase;
-    if (params && typeof params === 'object') {
-      const qs = new URLSearchParams(params).toString();
-      if (qs) url += `?${qs}`;
-    }
-
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(reqToken && { Authorization: `Bearer ${reqToken}` }),
-    };
-
-    const options = {
-      method,
-      headers,
-      ...(data ? { body: JSON.stringify(data) } : {}),
-      ...custom,
-    };
-
-    const res = await fetch(url, options);
-    const contentType = res.headers.get('content-type');
-    let result;
-    if (contentType && contentType.includes('application/json')) {
-      result = await res.json();
-    } else {
-      result = { message: await res.text() };
-    }
-
-    if (!res.ok) {
-      const errorMessage = result.error || result.message || `API error: ${res.status}`;
-      throw new Error(errorMessage);
-    }
-
-    return result;  
+  // Simplified agent API request wrapper that injects agentToken
+  const agentApiRequest = (path, options = {}) => {
+    return apiRequest(path, { ...options, token: localStorage.getItem('agentToken') });
   };
   
   // Conversations state
@@ -114,7 +75,7 @@ function AgentPanel() {
     setConversationsError('');
     
     try {
-      const data = await agentApiRequest('/api/agent/conversations', { method: 'GET', token: agentToken });
+      const data = await agentApiRequest('/agent/conversations', { method: 'GET' });
       setConversations(data.conversations || data || []);
       
       // Extract unique bot IDs and fetch bot details
@@ -149,7 +110,7 @@ function AgentPanel() {
     setMessagesError('');
     
     try {
-      const data = await agentApiRequest(`/api/agent/conversations/${conversationId}/messages`, { method: 'GET', token: agentToken });
+      const data = await agentApiRequest(`/agent/conversations/${conversationId}/messages`, { method: 'GET' });
       setMessages(data.messages || data || []);
     } catch (error) {
       console.error('Failed to fetch messages:', error);
@@ -199,9 +160,8 @@ function AgentPanel() {
       setMessages(prev => [...prev, tempMessage]);
       
       // Send to API
-      await agentApiRequest(`/api/agent/conversations/${selectedConversationId}/reply`, {
+      await agentApiRequest(`/agent/conversations/${selectedConversationId}/reply`, {
         method: 'POST',
-        token: agentToken,
         data: { message: messageText }
       });
       
@@ -240,9 +200,8 @@ function AgentPanel() {
     e.stopPropagation(); // Prevent opening the chat when clicking accept
     
     try {
-      await agentApiRequest(`/api/agent/conversations/${conversationId}/accept`, {
-        method: 'POST',
-        token: agentToken
+      await agentApiRequest(`/agent/conversations/${conversationId}/accept`, {
+        method: 'POST'
       });
       
       // Refresh conversations to update the list
@@ -262,9 +221,8 @@ function AgentPanel() {
     if (!confirm('Are you sure you want to close this conversation?')) return;
     
     try {
-      await agentApiRequest(`/api/agent/conversations/${conversationId}/close`, {
-        method: 'POST',
-        token: agentToken
+      await agentApiRequest(`/agent/conversations/${conversationId}/close`, {
+        method: 'POST'
       });
       
       // Refresh conversations and clear selection if this was selected
@@ -282,9 +240,8 @@ function AgentPanel() {
   const logout = async () => {
     try {
       // Call backend logout to mark agent as offline
-      await agentApiRequest('/api/agent/logout', {
-        method: 'POST',
-        token: agentToken
+      await agentApiRequest('/agent/logout', {
+        method: 'POST'
       });
     } catch (error) {
       console.error('Logout API call failed:', error);

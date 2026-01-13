@@ -61,15 +61,17 @@ function AgentLoginPage() {
       });
 
       if (response.token) {
-        // Store agent token in separate localStorage key
-        localStorage.setItem('agentToken', response.token);
-        
-        // Store agent flag to indicate this is an agent login
-        localStorage.setItem('isAgent', 'true');
-        
-        // Store agent data for display
+        // Store agent JWT under the agent-specific key (do NOT use "token")
+        localStorage.setItem("agentToken", response.token);
+
+        // Mark this session as an agent session
+        localStorage.setItem("isAgent", "true");
+
+        // Store agent profile data for AgentPanel
         if (response.agent) {
-          localStorage.setItem('agentData', JSON.stringify(response.agent));
+          localStorage.setItem("agentData", JSON.stringify(response.agent));
+        } else {
+          localStorage.removeItem("agentData");
         }
         
         // Store tenant data for AuthContext
