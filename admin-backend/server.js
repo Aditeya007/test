@@ -55,11 +55,11 @@ const { Server } = require('socket.io');
 
 const PORT = process.env.PORT || 5000;
 
-// Create HTTP server for both Express and Socket.IO
-const httpServer = http.createServer(app);
+// Create single HTTP server for both Express and Socket.IO
+const server = http.createServer(app);
 
-// Initialize Socket.IO with CORS
-const io = new Server(httpServer, {
+// Initialize Socket.IO on the same HTTP server
+const io = new Server(server, {
   cors: {
     origin: '*', // Match Express CORS policy for widget embedding
     methods: ['GET', 'POST'],
@@ -68,7 +68,7 @@ const io = new Server(httpServer, {
   transports: ['websocket', 'polling'] // Support both for compatibility
 });
 
-console.log('🔌 Socket.IO server initialized');
+console.log('🔌 Socket.IO server initialized on same HTTP server as Express');
 
 // =============================================================================
 // TRUST PROXY CONFIGURATION
@@ -279,9 +279,9 @@ io.on('connection', (socket) => {
 app.locals.io = io;
 
 // =============================================================================
-// SERVER STARTUP
+// SERVER STARTUP - Single server for Express + Socket.IO
 // =============================================================================
-const server = httpServer.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log('='.repeat(70));
   console.log(`🚀 Admin Backend Server Started`);
   console.log(`📡 Port: ${PORT}`);
@@ -290,7 +290,7 @@ const server = httpServer.listen(PORT, () => {
   console.log(`🤖 FastAPI Bot URL: ${process.env.FASTAPI_BOT_URL || 'NOT SET'}`);
   console.log(`🛡️  CORS: ⚠️  OPEN TO ALL ORIGINS (*) - Widget embedding enabled`);
   console.log(`🔒 Security: Helmet enabled, Rate limiting active`);
-  console.log(`💬 Socket.IO: Real-time messaging enabled`);
+  console.log(`💬 Socket.IO: Real-time messaging enabled on same port`);
   console.log('='.repeat(70));
   
   // Warn if critical optional configs are missing

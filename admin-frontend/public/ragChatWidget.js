@@ -233,7 +233,7 @@
 
       if (!response.ok) {
         console.warn('RAG Widget: Failed to start conversation');
-        return;
+        return false;
       }
 
       const data = await response.json();
@@ -246,22 +246,54 @@
         
         if (!conversationId) {
           console.error('RAG Widget: No conversation._id received from server!');
-          return;
+          return false;
         }
         
         console.log('RAG Widget: Received conversation._id:', conversationId);
         state.conversationId = conversationId;
         
-        // Immediately join Socket.IO room if socket is connected
+        // CRITICAL: Immediately join Socket.IO room BEFORE loading history
+        // This prevents race condition where agent messages arrive during history load
         if (socket && socket.connected) {
-          console.log('RAG Widget: Socket already connected, joining room immediately');
+          console.log('RAG Widget: Socket connected, joining room immediately BEFORE loading history');
           joinConversationRoom(state.conversationId);
+          
+          // Wait briefly to ensure room join is processed
+          await new Promise(resolve => setTimeout(resolve, 100));
         } else {
-          console.log('RAG Widget: Socket not connected yet, will join room on connect event');
+          console.log('RAG Widget: Socket not connected yet, waiting for connection before proceeding');
+          // Wait for socket to connect with timeout
+          const waitForSocket = new Promise((resolve) => {
+            if (socket && socket.connected) {
+              resolve(true);
+              return;
+            }
+            
+            const timeout = setTimeout(() => {
+              console.warn('RAG Widget: Socket connection timeout, proceeding anyway');
+              resolve(false);
+            }, 3000);
+            
+            const checkConnection = setInterval(() => {
+              if (socket && socket.connected) {
+                clearTimeout(timeout);
+                clearInterval(checkConnection);
+                joinConversationRoom(state.conversationId);
+                setTimeout(() => resolve(true), 100);
+              }
+            }, 100);
+          });
+          
+          await waitForSocket;
         }
+        
+        return true;
       }
+      
+      return false;
     } catch (err) {
       console.error('RAG Widget: Error starting conversation:', err);
+      return false;
     }
   }
 
@@ -931,10 +963,26 @@
     const widget = createWidgetHTML();
     document.body.appendChild(widget);
 
-    // Start conversation and load history
+    // CRITICAL: Start conversation FIRST, join Socket.IO room, THEN load history
+    // This order prevents race condition where agent messages arrive before socket joins room
     (async () => {
-      await startConversation();
+      // Step 1: Start/resume conversation and get conversation._id
+      const conversationStarted = await startConversation();
+      
+      if (!conversationStarted) {
+        console.error('RAG Widget: Failed to start conversation, adding welcome message as fallback');
+        addMessage("Hello! I'm an AI assistant. How can I help you today?", 'bot');
+        return;
+      }
+      
+      // Step 2: Socket.IO room is now joined (handled in startConversation)
+      console.log('RAG Widget: Socket room joined, now loading history');
+      
+      // Step 3: Load conversation history AFTER room join
+      // Any new messages that arrive will now be delivered via socket
       await loadConversationHistory();
+      
+      console.log('RAG Widget: Initialization complete - ready to receive real-time messages');
     })();
 
     // Attach event listeners
