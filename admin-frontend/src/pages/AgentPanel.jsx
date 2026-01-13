@@ -67,8 +67,6 @@ function AgentPanel() {
 
   // Socket.IO ref
   const socketRef = useRef(null);
-  // Ref to track current selected conversation for socket handlers (avoids stale closures)
-  const selectedConversationIdRef = useRef(null);
 
   // Initialize Socket.IO connection
   useEffect(() => {
@@ -113,9 +111,9 @@ function AgentPanel() {
         socketRef.current.on('connect', () => {
           console.log('Agent Panel: Socket.IO connected:', socketRef.current.id);
           
-          // Rejoin current conversation room if viewing one (use ref for current value)
-          if (selectedConversationIdRef.current) {
-            joinConversationRoom(selectedConversationIdRef.current);
+          // Rejoin current conversation room if viewing one
+          if (selectedConversationId) {
+            joinConversationRoom(selectedConversationId);
           }
         });
 
@@ -126,9 +124,9 @@ function AgentPanel() {
         socketRef.current.on('reconnect', (attemptNumber) => {
           console.log('Agent Panel: Socket.IO reconnected after', attemptNumber, 'attempts');
           
-          // Rejoin conversation room after reconnection (use ref for current value)
-          if (selectedConversationIdRef.current) {
-            joinConversationRoom(selectedConversationIdRef.current);
+          // Rejoin conversation room after reconnection
+          if (selectedConversationId) {
+            joinConversationRoom(selectedConversationId);
           }
         });
 
@@ -136,13 +134,8 @@ function AgentPanel() {
         socketRef.current.on('message:new', (message) => {
           console.log('Agent Panel: Received real-time message:', message);
           
-          // Convert both IDs to strings for reliable comparison
-          // Use ref to get current value (avoids stale closure)
-          const messageConvId = String(message.conversationId || '');
-          const selectedConvId = String(selectedConversationIdRef.current || '');
-          
           // Only add message if it's for the currently selected conversation
-          if (messageConvId === selectedConvId) {
+          if (message.conversationId === selectedConversationId) {
             setMessages(prev => {
               // Check if message already exists to prevent duplicates
               const exists = prev.some(msg => 
@@ -176,12 +169,11 @@ function AgentPanel() {
           }
           
           // Update conversation list if message is for a conversation in the list
-          setConversations(prev => prev.map(conv => {
-            const convId = String(conv._id || '');
-            return convId === messageConvId
+          setConversations(prev => prev.map(conv => 
+            conv._id === message.conversationId
               ? { ...conv, lastActiveAt: message.createdAt }
-              : conv;
-          }));
+              : conv
+          ));
         });
 
         socketRef.current.on('connect_error', (error) => {
@@ -217,10 +209,8 @@ function AgentPanel() {
       return;
     }
 
-    // Convert to string to ensure consistency with backend room naming
-    const conversationIdStr = String(conversationId);
-    console.log('Agent Panel: Joining conversation room:', conversationIdStr);
-    socketRef.current.emit('join:conversation', conversationIdStr);
+    console.log('Agent Panel: Joining conversation room:', conversationId);
+    socketRef.current.emit('join:conversation', conversationId);
   }, []);
 
   // Leave conversation room
@@ -228,16 +218,9 @@ function AgentPanel() {
     if (!socketRef.current || !socketRef.current.connected) return;
     if (!conversationId) return;
 
-    // Convert to string to ensure consistency with backend room naming
-    const conversationIdStr = String(conversationId);
-    console.log('Agent Panel: Leaving conversation room:', conversationIdStr);
-    socketRef.current.emit('leave:conversation', conversationIdStr);
+    console.log('Agent Panel: Leaving conversation room:', conversationId);
+    socketRef.current.emit('leave:conversation', conversationId);
   }, []);
-
-  // Keep ref in sync with selectedConversationId state
-  useEffect(() => {
-    selectedConversationIdRef.current = selectedConversationId;
-  }, [selectedConversationId]);
 
   // Fetch conversations on mount
   useEffect(() => {
@@ -300,9 +283,7 @@ function AgentPanel() {
       leaveConversationRoom(selectedConversationId);
     }
     
-    // Update both state and ref
     setSelectedConversationId(conversationId);
-    selectedConversationIdRef.current = conversationId;
     fetchMessages(conversationId);
     
     // Join new conversation room
@@ -427,7 +408,6 @@ function AgentPanel() {
       await fetchConversations();
       if (selectedConversationId === conversationId) {
         setSelectedConversationId(null);
-        selectedConversationIdRef.current = null;
         setMessages([]);
       }
     } catch (error) {
@@ -631,10 +611,7 @@ function AgentPanel() {
                 )}
                 <button 
                   className="chat-window-close"
-                  onClick={() => {
-                    setSelectedConversationId(null);
-                    selectedConversationIdRef.current = null;
-                  }}
+                  onClick={() => setSelectedConversationId(null)}
                   title="Close window"
                 >
                   ✕
