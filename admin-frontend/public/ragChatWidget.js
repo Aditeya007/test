@@ -123,13 +123,24 @@
         // (user messages are already added optimistically)
         if (message.sender !== 'user') {
           // Check if message already exists to prevent duplicates
-          const exists = state.messages.some(msg => 
-            msg.id === message._id || 
-            (msg.text === message.text && msg.sender === message.sender)
-          );
+          // Use a more precise duplicate check with MongoDB _id and timestamp
+          const exists = state.messages.some(msg => {
+            // Check by MongoDB ID first (most reliable)
+            if (msg.id === message._id || msg.id === message.id) {
+              return true;
+            }
+            // Fallback: check if same text from same sender within 2 seconds
+            const timeDiff = Math.abs(msg.timestamp - Date.now());
+            return msg.text === message.text && 
+                   msg.sender === message.sender && 
+                   timeDiff < 2000;
+          });
           
           if (!exists) {
-            addMessage(message.text, message.sender, false, message.sources);
+            console.log('RAG Widget: Adding real-time message from Socket.IO:', message.sender);
+            addMessage(message.text, message.sender, false, message.sources, message._id || message.id);
+          } else {
+            console.log('RAG Widget: Skipping duplicate message:', message._id);
           }
         }
       });
@@ -157,6 +168,32 @@
 
     console.log('RAG Widget: Joining conversation room:', conversationId);
     socket.emit('join:conversation', conversationId);
+  }
+
+  // Wait for Socket.IO connection to be established
+  function waitForSocketConnection(timeoutMs = 5000) {
+    return new Promise((resolve) => {
+      if (socket && socket.connected) {
+        console.log('RAG Widget: Socket already connected');
+        resolve(true);
+        return;
+      }
+
+      const timeout = setTimeout(() => {
+        console.warn('RAG Widget: Socket connection timeout, proceeding anyway');
+        resolve(false);
+      }, timeoutMs);
+
+      // Check connection every 100ms
+      const checkInterval = setInterval(() => {
+        if (socket && socket.connected) {
+          clearTimeout(timeout);
+          clearInterval(checkInterval);
+          console.log('RAG Widget: Socket connection established');
+          resolve(true);
+        }
+      }, 100);
+    });
   }
 
   // Leave a conversation room
@@ -198,9 +235,9 @@
           messagesContainer.innerHTML = '';
         }
 
-        // Render each message from history
+        // Render each message from history with their MongoDB IDs
         data.messages.forEach(msg => {
-          addMessage(msg.text, msg.sender, false, msg.sources);
+          addMessage(msg.text, msg.sender, false, msg.sources, msg.id);
         });
 
         // Scroll to bottom
@@ -252,39 +289,15 @@
         console.log('RAG Widget: Received conversation._id:', conversationId);
         state.conversationId = conversationId;
         
-        // CRITICAL: Immediately join Socket.IO room BEFORE loading history
-        // This prevents race condition where agent messages arrive during history load
+        // Join Socket.IO room immediately (socket is guaranteed to be connected now)
         if (socket && socket.connected) {
-          console.log('RAG Widget: Socket connected, joining room immediately BEFORE loading history');
+          console.log('RAG Widget: Joining room with conversationId:', conversationId);
           joinConversationRoom(state.conversationId);
           
-          // Wait briefly to ensure room join is processed
-          await new Promise(resolve => setTimeout(resolve, 100));
+          // Wait briefly to ensure room join is processed by server
+          await new Promise(resolve => setTimeout(resolve, 150));
         } else {
-          console.log('RAG Widget: Socket not connected yet, waiting for connection before proceeding');
-          // Wait for socket to connect with timeout
-          const waitForSocket = new Promise((resolve) => {
-            if (socket && socket.connected) {
-              resolve(true);
-              return;
-            }
-            
-            const timeout = setTimeout(() => {
-              console.warn('RAG Widget: Socket connection timeout, proceeding anyway');
-              resolve(false);
-            }, 3000);
-            
-            const checkConnection = setInterval(() => {
-              if (socket && socket.connected) {
-                clearTimeout(timeout);
-                clearInterval(checkConnection);
-                joinConversationRoom(state.conversationId);
-                setTimeout(() => resolve(true), 100);
-              }
-            }, 100);
-          });
-          
-          await waitForSocket;
+          console.warn('RAG Widget: Socket not connected, cannot join room');
         }
         
         return true;
@@ -595,7 +608,7 @@
   }
 
   // Add a message to the chat
-  function addMessage(text, sender, isError = false, sources = null) {
+  function addMessage(text, sender, isError = false, sources = null, messageId = null) {
     const messagesContainer = document.getElementById('rag-widget-messages');
     if (!messagesContainer) return;
 
@@ -651,8 +664,17 @@
     // Scroll to bottom
     scrollToBottom();
 
-    // Store in state
-    state.messages.push({ text, sender, isError, sources, id: Date.now() });
+    // Store in state with timestamp for duplicate detection
+    // Use provided messageId (MongoDB _id) if available, otherwise generate one
+    const finalId = messageId || Date.now();
+    state.messages.push({ 
+      text, 
+      sender, 
+      isError, 
+      sources, 
+      id: finalId,
+      timestamp: Date.now()
+    });
   }
 
   // Scroll messages container to bottom
@@ -847,9 +869,11 @@
         const isAgentMode = data.agentActive || (data.conversation && data.conversation.status === 'active');
         
         if (data.reply) {
-          // Don't add bot/agent response here - it will come via Socket.IO
-          // This prevents duplicate messages
-          console.log('RAG Widget: Bot/agent response will be delivered via Socket.IO');
+          // Add bot/agent response immediately for this client
+          // Socket.IO will deliver to other clients (agents, other tabs)
+          // Duplicate detection in Socket.IO handler will prevent double-display
+          console.log('RAG Widget: Adding bot/agent response:', data.reply.sender);
+          addMessage(data.reply.text, data.reply.sender, false, data.reply.sources, data.reply.id || data.reply._id);
         } else if (isAgentMode) {
           // Agent mode with no reply - this is expected behavior
           // Message was forwarded to agent, widget remains silent
@@ -941,21 +965,6 @@
   }
 
   function initWidget() {
-    // Load Socket.IO client library dynamically
-    const socketScript = document.createElement('script');
-    socketScript.src = 'https://cdn.socket.io/4.5.4/socket.io.min.js';
-    socketScript.crossOrigin = 'anonymous';
-    socketScript.onload = () => {
-      console.log('RAG Widget: Socket.IO client library loaded');
-      
-      // Initialize Socket.IO connection after library loads
-      initSocketConnection();
-    };
-    socketScript.onerror = () => {
-      console.error('RAG Widget: Failed to load Socket.IO client library');
-    };
-    document.head.appendChild(socketScript);
-
     // Inject styles
     injectStyles();
 
@@ -963,27 +972,55 @@
     const widget = createWidgetHTML();
     document.body.appendChild(widget);
 
-    // CRITICAL: Start conversation FIRST, join Socket.IO room, THEN load history
-    // This order prevents race condition where agent messages arrive before socket joins room
-    (async () => {
-      // Step 1: Start/resume conversation and get conversation._id
-      const conversationStarted = await startConversation();
+    // Load Socket.IO client library dynamically and wait for it
+    const socketScript = document.createElement('script');
+    socketScript.src = 'https://cdn.socket.io/4.5.4/socket.io.min.js';
+    socketScript.crossOrigin = 'anonymous';
+    socketScript.onload = async () => {
+      console.log('RAG Widget: Socket.IO client library loaded');
       
-      if (!conversationStarted) {
-        console.error('RAG Widget: Failed to start conversation, adding welcome message as fallback');
+      // Initialize Socket.IO connection after library loads
+      initSocketConnection();
+
+      // CRITICAL: Wait for Socket.IO to connect before starting conversation
+      // This ensures we can join rooms immediately when conversation starts
+      await waitForSocketConnection();
+
+      // Now start conversation, join room, and load history
+      // This order prevents race condition where messages arrive before socket joins room
+      try {
+        // Step 1: Start/resume conversation and get conversation._id
+        const conversationStarted = await startConversation();
+        
+        if (!conversationStarted) {
+          console.error('RAG Widget: Failed to start conversation, adding welcome message as fallback');
+          addMessage("Hello! I'm an AI assistant. How can I help you today?", 'bot');
+          return;
+        }
+        
+        // Step 2: Socket.IO room is now joined (handled in startConversation)
+        console.log('RAG Widget: Socket room joined, now loading history');
+        
+        // Step 3: Load conversation history AFTER room join
+        // Any new messages that arrive will now be delivered via socket
+        await loadConversationHistory();
+        
+        console.log('RAG Widget: Initialization complete - ready to receive real-time messages');
+      } catch (err) {
+        console.error('RAG Widget: Initialization error:', err);
         addMessage("Hello! I'm an AI assistant. How can I help you today?", 'bot');
-        return;
       }
-      
-      // Step 2: Socket.IO room is now joined (handled in startConversation)
-      console.log('RAG Widget: Socket room joined, now loading history');
-      
-      // Step 3: Load conversation history AFTER room join
-      // Any new messages that arrive will now be delivered via socket
-      await loadConversationHistory();
-      
-      console.log('RAG Widget: Initialization complete - ready to receive real-time messages');
-    })();
+    };
+
+    socketScript.onerror = () => {
+      console.error('RAG Widget: Failed to load Socket.IO client library');
+      // Add welcome message as fallback if Socket.IO fails to load
+      setTimeout(() => {
+        addMessage("Hello! I'm an AI assistant. How can I help you today?", 'bot');
+      }, 500);
+    };
+    
+    document.head.appendChild(socketScript);
 
     // Attach event listeners
     const toggleBtn = document.getElementById('rag-widget-toggle');

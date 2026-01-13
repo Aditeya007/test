@@ -495,6 +495,8 @@ exports.sendMessage = async (req, res) => {
       return res.json({
         success: true,
         reply: {
+          _id: placeholderMessage._id,
+          id: placeholderMessage._id,
           sender: 'agent',
           text: agentMessage,
           createdAt: new Date()
@@ -572,6 +574,8 @@ exports.sendMessage = async (req, res) => {
       return res.json({
         success: true,
         reply: {
+          _id: botMessage._id,
+          id: botMessage._id,
           sender: 'bot',
           text: botResult.answer,
           createdAt: botMessage.createdAt,
