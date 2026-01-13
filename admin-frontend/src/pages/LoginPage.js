@@ -1,6 +1,6 @@
 // src/pages/LoginPage.js
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useTransition, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { validateField } from '../utils';
@@ -8,7 +8,7 @@ import Loader from '../components/Loader';
 import '../styles/auth.css';
 
 function LoginPage({ userMode = false }) {
-  const { login, loading } = useAuth();
+  const { login, loading, user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [isPending, startTransition] = useTransition();
   
@@ -17,6 +17,16 @@ function LoginPage({ userMode = false }) {
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!loading && isAuthenticated && user) {
+      startTransition(() => {
+        // Redirect agents to /agent, others to /dashboard
+        navigate(user.role === 'agent' ? '/agent' : '/dashboard', { replace: true });
+      });
+    }
+  }, [loading, isAuthenticated, user, navigate]);
 
   // Validate form before submission
   function validateForm() {

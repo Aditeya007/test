@@ -9,16 +9,22 @@ import Loader from './Loader';
  * AdminRoute - Guards routes that require administrator privileges
  */
 function AdminRoute({ children }) {
-  const { user, loading } = useAuth();
+  const { user, loading, isAuthenticated } = useAuth();
 
   if (loading) {
     return <Loader message="Verifying authentication..." />;
   }
 
-  if (!user) {
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
+  // Redirect agents to their panel
+  if (user.role === 'agent') {
+    return <Navigate to="/agent" replace />;
+  }
+
+  // Only allow admin users
   if (user.role !== 'admin') {
     return <Navigate to="/dashboard" replace />;
   }

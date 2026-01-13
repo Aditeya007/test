@@ -8,6 +8,7 @@ import { store } from './store';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ChatWidgetProvider } from './context/ChatWidgetContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import AgentRoute from './components/AgentRoute';
 import AdminLayout from './components/layout/AdminLayout';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -41,9 +42,9 @@ function AppContent() {
         <Route
           path="/agent"
           element={
-            <ProtectedRoute>
+            <AgentRoute>
               <AgentPanel />
-            </ProtectedRoute>
+            </AgentRoute>
           }
         />
         <Route

@@ -1,14 +1,16 @@
 // src/pages/AgentLoginPage.js
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useTransition, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../api';
 import { validateField } from '../utils';
+import { useAuth } from '../context/AuthContext';
 import Loader from '../components/Loader';
 import '../styles/auth.css';
 
 function AgentLoginPage() {
   const navigate = useNavigate();
+  const { loading: authLoading, user, isAuthenticated } = useAuth();
   const [isPending, startTransition] = useTransition();
   
   const [username, setUsername] = useState('');
@@ -17,6 +19,16 @@ function AgentLoginPage() {
   const [serverError, setServerError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && user) {
+      startTransition(() => {
+        // Redirect agents to /agent, others to /dashboard
+        navigate(user.role === 'agent' ? '/agent' : '/dashboard', { replace: true });
+      });
+    }
+  }, [authLoading, isAuthenticated, user, navigate]);
 
   // Validate form before submission
   function validateForm() {
@@ -79,9 +91,9 @@ function AgentLoginPage() {
           localStorage.setItem('agentTenant', JSON.stringify(response.tenant));
         }
 
-        // Redirect to dashboard
+        // Redirect directly to agent panel (not dashboard)
         startTransition(() => {
-          window.location.href = '/dashboard';
+          window.location.href = '/agent';
         });
       }
     } catch (error) {

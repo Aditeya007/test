@@ -1,6 +1,6 @@
 // src/pages/RegisterPage.js
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useTransition, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { validateField, getPasswordStrength } from '../utils';
@@ -8,7 +8,7 @@ import Loader from '../components/Loader';
 import '../styles/auth.css';
 
 function RegisterPage() {
-  const { register, loading } = useAuth();
+  const { register, loading, user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [isPending, startTransition] = useTransition();
 
@@ -22,6 +22,15 @@ function RegisterPage() {
   const [serverError, setServerError] = useState('');
   const [showPasswordStrength, setShowPasswordStrength] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!loading && isAuthenticated && user) {
+      startTransition(() => {
+        navigate(user.role === 'agent' ? '/agent' : '/dashboard', { replace: true });
+      });
+    }
+  }, [loading, isAuthenticated, user, navigate]);
 
   // Validate entire form
   function validateForm() {

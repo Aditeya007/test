@@ -24,16 +24,10 @@ function decodeToken(token) {
 }
 
 export function AuthProvider({ children }) {
+  // Separate state for user and agent
   const [user, setUser] = useState(null);
-  // Check for both user JWT and agent token on initialization
-  const [token, setToken] = useState(() => {
-    // First check if agent is logged in
-    const agentToken = localStorage.getItem('agentToken');
-    if (agentToken) return agentToken;
-    // Otherwise check for user JWT
-    return localStorage.getItem('jwt') || '';
-  });
-  const [loading, setLoading] = useState(true); // Add loading state
+  const [agent, setAgent] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [activeTenant, setActiveTenantState] = useState(() => {
     const stored = localStorage.getItem('activeTenant');
     if (!stored) {
@@ -48,57 +42,37 @@ export function AuthProvider({ children }) {
     }
   });
 
-  // On mount: fetch user if token exists
+  // On mount: restore either user or agent session
   useEffect(() => {
-    async function fetchUser() {
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-
+    async function restoreSession() {
       try {
-        // Decode token to determine user identity
-        const decoded = decodeToken(token);
-        
-        if (!decoded) {
-          // Invalid token
-          setUser(null);
-          setToken('');
-          localStorage.removeItem('jwt');
-          localStorage.removeItem('agentToken');
-          localStorage.removeItem('isAgent');
-          localStorage.removeItem('agentTenant');
-          setActiveTenantState(null);
-          localStorage.removeItem('activeTenant');
-          setLoading(false);
-          return;
-        }
-
-        // Determine effective user ID based on role
-        let effectiveUserId;
-        
-        if (decoded.role === 'agent') {
-          // For agents, use tenantId as the effective user ID
-          effectiveUserId = decoded.tenantId;
-        } else {
-          // For regular users and admins, use userId or id
-          effectiveUserId = decoded.userId || decoded.id;
-        }
-
-        // Construct user object with proper identity mapping
-        if (decoded.role === 'agent') {
-          // Agent token - construct user object from token and localStorage
-          const storedTenant = localStorage.getItem('agentTenant');
+        // Check for agent token first
+        const agentToken = localStorage.getItem('agentToken');
+        if (agentToken) {
+          const decoded = decodeToken(agentToken);
           
+          if (!decoded || decoded.role !== 'agent') {
+            // Invalid agent token
+            localStorage.removeItem('agentToken');
+            localStorage.removeItem('isAgent');
+            localStorage.removeItem('agentTenant');
+            setLoading(false);
+            return;
+          }
+
+          // Restore agent session from localStorage
+          const storedTenant = localStorage.getItem('agentTenant');
           if (storedTenant) {
             try {
               const tenantData = JSON.parse(storedTenant);
-              // Construct agent user object with tenantId as the effective user id
-              setUser({
+              const effectiveUserId = decoded.tenantId;
+              
+              // Set agent as the authenticated entity
+              setAgent({
                 id: effectiveUserId,
                 _id: effectiveUserId,
                 username: decoded.username,
-                role: decoded.role,
+                role: 'agent',
                 agentId: decoded.agentId || null,
                 tenantId: decoded.tenantId || null,
                 name: tenantData.name || decoded.username,
@@ -106,7 +80,21 @@ export function AuthProvider({ children }) {
                 databaseUri: tenantData.databaseUri,
                 maxAgents: tenantData.maxAgents
               });
-              // Set tenant as active for dashboard
+              
+              // Also set as user for backward compatibility with existing components
+              setUser({
+                id: effectiveUserId,
+                _id: effectiveUserId,
+                username: decoded.username,
+                role: 'agent',
+                agentId: decoded.agentId || null,
+                tenantId: decoded.tenantId || null,
+                name: tenantData.name || decoded.username,
+                email: tenantData.email,
+                databaseUri: tenantData.databaseUri,
+                maxAgents: tenantData.maxAgents
+              });
+              
               setActiveTenantState({
                 ...tenantData,
                 id: effectiveUserId,
@@ -114,57 +102,53 @@ export function AuthProvider({ children }) {
               });
             } catch (parseError) {
               console.error('Failed to parse tenant data:', parseError);
-              // Clear invalid data
-              setUser(null);
-              setToken('');
-              localStorage.removeItem('jwt');
               localStorage.removeItem('agentToken');
               localStorage.removeItem('isAgent');
               localStorage.removeItem('agentTenant');
-              setActiveTenantState(null);
-              localStorage.removeItem('activeTenant');
             }
-          } else {
-            // No tenant data stored, token invalid
-            setUser(null);
-            setToken('');
-            localStorage.removeItem('jwt');
-            localStorage.removeItem('agentToken');
-            localStorage.removeItem('isAgent');
-            setActiveTenantState(null);
-            localStorage.removeItem('activeTenant');
           }
-        } else {
-          // Regular user or admin - fetch from /user/me
+          
+          setLoading(false);
+          return;
+        }
+
+        // Check for regular user JWT
+        const userToken = localStorage.getItem('jwt');
+        if (userToken) {
+          const decoded = decodeToken(userToken);
+          
+          if (!decoded) {
+            // Invalid token
+            localStorage.removeItem('jwt');
+            setLoading(false);
+            return;
+          }
+
+          // Fetch user profile from backend
           const res = await fetch(`${API_BASE_URL}/user/me`, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${userToken}` }
           });
+          
           if (res.ok) {
             const data = await res.json();
             setUser(data);
             localStorage.removeItem('isAgent'); // Clean up agent flag
           } else {
             // Token invalid or expired
-            setUser(null);
-            setToken('');
             localStorage.removeItem('jwt');
-            localStorage.removeItem('agentToken');
-            localStorage.removeItem('isAgent');
-            setActiveTenantState(null);
-            localStorage.removeItem('activeTenant');
           }
         }
       } catch (error) {
-        console.error('Failed to fetch user:', error);
-        setUser(null);
+        console.error('Failed to restore session:', error);
       } finally {
         setLoading(false);
       }
     }
-    fetchUser();
-  }, [token]);
+    
+    restoreSession();
+  }, []); // Run once on mount
 
-  // Login helper
+  // Login helper (for admin/user)
   async function login(username, password, loginType = 'admin') {
     setLoading(true);
     try {
@@ -176,18 +160,21 @@ export function AuthProvider({ children }) {
       const data = await res.json();
       
       if (res.ok) {
-        setToken(data.token);
         localStorage.setItem('jwt', data.token);
         setUser(data.user || null);
+        setAgent(null); // Clear agent state
         setActiveTenantState(null);
         localStorage.removeItem('activeTenant');
+        localStorage.removeItem('agentToken');
+        localStorage.removeItem('isAgent');
+        localStorage.removeItem('agentTenant');
         return { success: true };
       } else {
         setUser(null);
         return { 
           success: false, 
           message: data.error || data.message || 'Login failed',
-          redirectTo: data.redirectTo // Include redirect suggestion from backend
+          redirectTo: data.redirectTo
         };
       }
     } catch (error) {
@@ -210,11 +197,14 @@ export function AuthProvider({ children }) {
       const data = await res.json();
       
       if (res.ok) {
-        setToken(data.token);
         localStorage.setItem('jwt', data.token);
         setUser(data.user || null);
+        setAgent(null); // Clear agent state
         setActiveTenantState(null);
         localStorage.removeItem('activeTenant');
+        localStorage.removeItem('agentToken');
+        localStorage.removeItem('isAgent');
+        localStorage.removeItem('agentTenant');
         return { success: true };
       } else {
         setUser(null);
@@ -230,7 +220,7 @@ export function AuthProvider({ children }) {
 
   function logout() {
     setUser(null);
-    setToken('');
+    setAgent(null);
     localStorage.removeItem('jwt');
     localStorage.removeItem('agentToken');
     localStorage.removeItem('agentData');
@@ -239,6 +229,10 @@ export function AuthProvider({ children }) {
     setActiveTenantState(null);
     localStorage.removeItem('activeTenant');
   }
+
+  // Check if user is authenticated (either as user or agent)
+  const isAuthenticated = !!(user || agent);
+  const token = localStorage.getItem('agentToken') || localStorage.getItem('jwt') || '';
 
   const setActiveTenant = useCallback((tenant) => {
     if (tenant) {
@@ -253,9 +247,11 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider
       value={{
-        user,
+        user, // Will be set for both user and agent sessions
+        agent, // Will be set only for agent sessions
         token,
         loading,
+        isAuthenticated,
         login,
         register,
         logout,
