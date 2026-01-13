@@ -151,7 +151,7 @@ function DashboardPage() {
     setAgentsError('');
     
     try {
-      const response = await apiRequest('/agents/list', {
+      const response = await apiRequest('/agent/list', {
         method: 'GET',
         token
       });
@@ -333,7 +333,7 @@ function DashboardPage() {
     setAddAgentSuccess('');
 
     try {
-      await apiRequest('/agents/create', {
+      await apiRequest('/agent/create', {
         method: 'POST',
         token,
         data: formData
@@ -688,14 +688,25 @@ function DashboardPage() {
                 border: '2px solid #3b82f6',
                 borderRadius: '8px',
                 marginBottom: '1.5rem',
-                fontSize: '1rem'
+                fontSize: '1rem',
+                width: '100%',
+                boxSizing: 'border-box',
+                color: '#1e40af',
+                lineHeight: '1.5',
+                overflow: 'visible',
+                whiteSpace: 'normal',
+                minWidth: 0
               }}>
-                <strong>You can create up to {tenantDetails?.maxBots} chatbot{tenantDetails?.maxBots > 1 ? 's' : ''}</strong>
-                {deferredBots.length > 0 && (
-                  <span style={{ marginLeft: '0.5rem', color: '#1e40af' }}>
-                    ({deferredBots.length} / {tenantDetails?.maxBots} created)
-                  </span>
-                )}
+                <span style={{ display: 'block', width: '100%' }}>
+                  <strong style={{ color: '#1e40af', fontWeight: '600' }}>
+                    You can create up to {tenantDetails?.maxBots} chatbot{tenantDetails?.maxBots > 1 ? 's' : ''}
+                  </strong>
+                  {deferredBots.length > 0 && (
+                    <span style={{ marginLeft: '0.5rem', color: '#1e40af' }}>
+                      ({deferredBots.length} / {tenantDetails?.maxBots} created)
+                    </span>
+                  )}
+                </span>
               </div>
               
               {botsLoading && <Loader message="Loading websites..." size="small" />}
@@ -764,13 +775,28 @@ function DashboardPage() {
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      color: '#065f46'
+                      color: '#065f46',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      minWidth: 0,
+                      overflow: 'visible',
+                      whiteSpace: 'normal'
                     }}>
-                      <span>
-                        <strong>Human Agents:</strong> {agents.length} / {tenantDetails.maxAgents}
+                      <span style={{ 
+                        flex: '1 1 auto',
+                        minWidth: 0,
+                        marginRight: '1rem'
+                      }}>
+                        <strong style={{ fontWeight: '600' }}>Human Agents:</strong>{' '}
+                        {agents.length} / {tenantDetails.maxAgents}
                       </span>
                       {agents.length > 0 && (
-                        <span style={{ color: '#059669', fontSize: '0.75rem' }}>
+                        <span style={{ 
+                          color: '#059669', 
+                          fontSize: '0.75rem',
+                          flexShrink: 0,
+                          whiteSpace: 'nowrap'
+                        }}>
                           {agents.filter(a => a.isActive).length} active
                         </span>
                       )}

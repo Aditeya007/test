@@ -463,7 +463,7 @@ function AgentPanel() {
       <div className="dark-sidebar">
         <div className="sidebar-brand">
           <span className="brand-icon">📋</span>
-          <span className="brand-text">Admin Panel</span>
+          <span className="brand-text">Agent Panel</span>
         </div>
 
         <nav className="sidebar-nav">

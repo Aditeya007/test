@@ -54,6 +54,8 @@ function AdminLayout({ children }) {
       dispatch(setActiveMenuItem("dashboard"));
     } else if (path === "/admin/users") {
       dispatch(setActiveMenuItem("users"));
+    } else if (path === "/agents" || path.startsWith("/agents/")) {
+      dispatch(setActiveMenuItem("agents"));
     } else if (path.startsWith("/bot/")) {
       dispatch(setActiveMenuItem("dashboard"));
     }
@@ -85,9 +87,27 @@ function AdminLayout({ children }) {
       path: "/admin/users",
       adminOnly: true,
     },
+    {
+      id: "agents",
+      label: "Agents",
+      icon: "👤",
+      path: "/agents",
+      userOnly: true, // Only show for regular users, not admins
+    },
   ];
 
   const isAdmin = user?.role === "admin";
+
+  // Get panel title based on user role
+  const getPanelTitle = () => {
+    if (user?.role === "admin") {
+      return "Admin Panel";
+    } else if (user?.role === "agent") {
+      return "Agent Panel";
+    } else {
+      return "User Panel";
+    }
+  };
 
   const handleMenuClick = (item) => {
     dispatch(setActiveMenuItem(item.id));
@@ -112,12 +132,16 @@ function AdminLayout({ children }) {
       {/* Sidebar */}
       <aside className={`admin-sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="sidebar-header">
-          <h2 className="sidebar-logo">Admin Panel</h2>
+          <h2 className="sidebar-logo">{getPanelTitle()}</h2>
         </div>
 
         <nav className="sidebar-nav">
           {menuItems
-            .filter((item) => !item.adminOnly || isAdmin)
+            .filter((item) => {
+              if (item.adminOnly && !isAdmin) return false;
+              if (item.userOnly && isAdmin) return false;
+              return true;
+            })
             .map((item) => (
               <button
                 key={item.id}

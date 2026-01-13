@@ -14,10 +14,12 @@ import RegisterPage from './pages/RegisterPage';
 import AgentLoginPage from './pages/AgentLoginPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminUsersPage from './pages/AdminUsersPage';
+import CreateEditUserPage from './pages/CreateEditUserPage';
 import UserProfilePage from './pages/UserProfilePage';
 import BotPage from './pages/BotPage';
 import HealthPage from './pages/HealthPage';
 import AgentPanel from './pages/AgentPanel';
+import AgentsPage from './pages/AgentsPage';
 import ChatWidgetWrapper from './components/ChatWidget/ChatWidgetWrapper';
 
 import './styles/index.css';
@@ -50,6 +52,26 @@ function AppContent() {
             <ProtectedRoute>
               <AdminLayout>
                 {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <DashboardPage />}
+              </AdminLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users/new"
+          element={
+            <ProtectedRoute>
+              <AdminLayout>
+                {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <CreateEditUserPage />}
+              </AdminLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users/:userId/edit"
+          element={
+            <ProtectedRoute>
+              <AdminLayout>
+                {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <CreateEditUserPage />}
               </AdminLayout>
             </ProtectedRoute>
           }
@@ -90,6 +112,16 @@ function AppContent() {
             <ProtectedRoute>
               <AdminLayout>
                 {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <HealthPage />}
+              </AdminLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/agents/:userId?"
+          element={
+            <ProtectedRoute>
+              <AdminLayout>
+                {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <AgentsPage />}
               </AdminLayout>
             </ProtectedRoute>
           }

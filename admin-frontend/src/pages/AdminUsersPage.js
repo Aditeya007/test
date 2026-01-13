@@ -1,56 +1,106 @@
 // src/pages/AdminUsersPage.js
 
-import React, { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { apiRequest } from '../api';
-import Loader from '../components/Loader';
-import UserForm from '../components/users/UserForm';
-import UserTable from '../components/users/UserTable';
-import UserResourcePanel from '../components/users/UserResourcePanel';
-import '../styles/index.css';
+import React, { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { apiRequest } from "../api";
+import Loader from "../components/Loader";
+import UserTable from "../components/users/UserTable";
+import UserResourcePanel from "../components/users/UserResourcePanel";
+import Pagination from "../components/Pagination";
+import "../styles/index.css";
 
 function AdminUsersPage() {
+  const navigate = useNavigate();
   const { token, user: currentUser, activeTenant, setActiveTenant } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-  const [formMode, setFormMode] = useState('create');
-  const [editingUser, setEditingUser] = useState(null);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [selectedUser, setSelectedUser] = useState(null);
-  const [resourceState, setResourceState] = useState({ data: null, loading: false, error: '' });
-  const [formResetKey, setFormResetKey] = useState(0);
-  const activeTenantId = activeTenant ? activeTenant.id || activeTenant._id : null;
+  const [resourceState, setResourceState] = useState({
+    data: null,
+    loading: false,
+    error: "",
+  });
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [limit] = useState(10);
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState(""); // For debounced input
+
+  const activeTenantId = activeTenant
+    ? activeTenant.id || activeTenant._id
+    : null;
 
   const fetchUsers = useCallback(async () => {
     if (!token) {
       return;
     }
     setLoading(true);
-    setErrorMessage('');
+    setErrorMessage("");
     try {
-      const response = await apiRequest('/users', {
-        method: 'GET',
-        token
+      const params = {
+        page: currentPage,
+        limit: limit,
+      };
+
+      // Add search parameter if search query exists
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
+      }
+
+      const response = await apiRequest("/users", {
+        method: "GET",
+        token,
+        params,
       });
+
+      // Backend pagination - only current page data is returned
       setUsers(response.users || []);
+      setTotalCount(response.totalCount || 0);
+      setTotalPages(response.totalPages || 1);
+
+      console.log("📄 Pagination response:", {
+        page: response.page,
+        limit: response.limit,
+        search: searchQuery,
+        totalCount: response.totalCount,
+        totalPages: response.totalPages,
+        usersReceived: response.users?.length || 0,
+      });
     } catch (err) {
-      setErrorMessage(err.message || 'Failed to load users');
+      setErrorMessage(err.message || "Failed to load users");
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, currentPage, limit, searchQuery]);
 
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
 
+  // Debounce search input - reset to page 1 when search changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput);
+      setCurrentPage(1); // Reset to first page when search changes
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   useEffect(() => {
     if (!successMessage) {
       return undefined;
     }
-    const timeout = window.setTimeout(() => setSuccessMessage(''), 4000);
+    const timeout = window.setTimeout(() => setSuccessMessage(""), 4000);
     return () => window.clearTimeout(timeout);
   }, [successMessage]);
 
@@ -58,102 +108,11 @@ function AdminUsersPage() {
     await fetchUsers();
   }, [fetchUsers]);
 
-  const resetFormState = () => {
-    setFormMode('create');
-    setEditingUser(null);
-    setFormResetKey((key) => key + 1);
-  };
-
-  const handleCreateSubmit = async (values) => {
-    setSubmitting(true);
-    setErrorMessage('');
-    try {
-      const response = await apiRequest('/users', {
-        method: 'POST',
-        token,
-        data: {
-          name: values.name.trim(),
-          email: values.email.trim(),
-          username: values.username.trim(),
-          password: values.password,
-          maxBots: values.maxBots,
-          maxAgents: values.maxAgents || 0
-        }
-      });
-      
-      setSuccessMessage('User created successfully');
-      
-      setFormResetKey((key) => key + 1);
-      
-      // Refetch the created user to get exact DB values
-      if (response.user) {
-        const userId = response.user.id || response.user._id;
-        const freshUser = await apiRequest(`/users/${userId}`, {
-          method: 'GET',
-          token
-        });
-        setActiveTenant(freshUser.user);
-      }
-      
-      await handleRefresh();
-    } catch (err) {
-      setErrorMessage(err.message || 'Failed to create user');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleEditSubmit = async (values) => {
-    if (!editingUser) {
-      return;
-    }
-
-    const payload = {};
-    if (values.name.trim() !== editingUser.name) {
-      payload.name = values.name.trim();
-    }
-    if (values.email.trim() !== editingUser.email) {
-      payload.email = values.email.trim();
-    }
-    if (values.username.trim() !== editingUser.username) {
-      payload.username = values.username.trim();
-    }
-    if (values.password) {
-      payload.password = values.password;
-    }
-    // Include maxBots if changed
-    if (values.maxBots !== editingUser.maxBots) {
-      payload.maxBots = values.maxBots;
-    }
-    // Include maxAgents if changed
-    if (values.maxAgents !== editingUser.maxAgents) {
-      payload.maxAgents = values.maxAgents;
-    }
-    if (Object.keys(payload).length === 0) {
-      setErrorMessage('No changes detected to update.');
-      return;
-    }
-
-    setSubmitting(true);
-    setErrorMessage('');
-    try {
-      const response = await apiRequest(`/users/${editingUser.id || editingUser._id}`, {
-        method: 'PUT',
-        token,
-        data: payload
-      });
-      setSuccessMessage('User updated successfully');
-      if (activeTenantId && (editingUser.id || editingUser._id) === activeTenantId && response.user) {
-        setActiveTenant(response.user);
-      }
-      resetFormState();
-      await handleRefresh();
-    } catch (err) {
-      setErrorMessage(err.message || 'Failed to update user');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const handlePageChange = useCallback((page) => {
+    setCurrentPage(page);
+    // Scroll to top when page changes
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
   const handleDeleteUser = async (userToDelete) => {
     if (!userToDelete) {
@@ -166,23 +125,33 @@ function AdminUsersPage() {
     }
 
     setSubmitting(true);
-    setErrorMessage('');
+    setErrorMessage("");
     try {
       await apiRequest(`/users/${userToDelete.id || userToDelete._id}`, {
-        method: 'DELETE',
-        token
+        method: "DELETE",
+        token,
       });
-      setSuccessMessage('User deleted successfully');
-      if (selectedUser && (selectedUser.id || selectedUser._id) === (userToDelete.id || userToDelete._id)) {
+      setSuccessMessage("User deleted successfully");
+      if (
+        selectedUser &&
+        (selectedUser.id || selectedUser._id) ===
+          (userToDelete.id || userToDelete._id)
+      ) {
         setSelectedUser(null);
-        setResourceState({ data: null, loading: false, error: '' });
+        setResourceState({ data: null, loading: false, error: "" });
       }
       if (activeTenantId === (userToDelete.id || userToDelete._id)) {
         setActiveTenant(null);
       }
-      await handleRefresh();
+      // If we're on a page with no items after deletion, go to previous page
+      if (users.length === 1 && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
+        // fetchUsers will be called automatically via useEffect when currentPage changes
+      } else {
+        await handleRefresh();
+      }
     } catch (err) {
-      setErrorMessage(err.message || 'Failed to delete user');
+      setErrorMessage(err.message || "Failed to delete user");
     } finally {
       setSubmitting(false);
     }
@@ -190,15 +159,22 @@ function AdminUsersPage() {
 
   const handleViewResources = async (userRow) => {
     setSelectedUser(userRow);
-    setResourceState({ data: null, loading: true, error: '' });
+    setResourceState({ data: null, loading: true, error: "" });
     try {
-      const response = await apiRequest(`/users/${userRow.id || userRow._id}/resources`, {
-        method: 'GET',
-        token
-      });
-      setResourceState({ data: response.tenant, loading: false, error: '' });
+      const response = await apiRequest(
+        `/users/${userRow.id || userRow._id}/resources`,
+        {
+          method: "GET",
+          token,
+        }
+      );
+      setResourceState({ data: response.tenant, loading: false, error: "" });
     } catch (err) {
-      setResourceState({ data: null, loading: false, error: err.message || 'Failed to load resources' });
+      setResourceState({
+        data: null,
+        loading: false,
+        error: err.message || "Failed to load resources",
+      });
     }
   };
 
@@ -207,12 +183,9 @@ function AdminUsersPage() {
     setSuccessMessage(`Selected ${userRow.username} as the active user.`);
   };
 
-  const handleFormSubmit = (values) => {
-    if (formMode === 'edit') {
-      handleEditSubmit(values);
-    } else {
-      handleCreateSubmit(values);
-    }
+  const handleViewAgents = (userRow) => {
+    const userId = userRow.id || userRow._id;
+    navigate(`/agents/${userId}`);
   };
 
   if (!token || !currentUser) {
@@ -222,47 +195,87 @@ function AdminUsersPage() {
   return (
     <div className="admin-users-container">
       <header className="admin-users-header">
-        <div>
-          <h2>User Management</h2>
-          <p>Provision and manage tenant accounts for the RAG platform.</p>
+        <div className="admin-users-header-content">
+          <div className="admin-users-header-title">
+            <h2>User Management</h2>
+            <p>Provision and manage tenant accounts for the RAG platform.</p>
+          </div>
+          <div className="admin-users-header-controls">
+            <div className="search-container">
+              <input
+                type="text"
+                placeholder="Search by name, username, or email..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="search-input"
+              />
+              <span className="search-icon">🔍</span>
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchInput("");
+                    setSearchQuery("");
+                    setCurrentPage(1);
+                  }}
+                  className="search-clear-btn"
+                  title="Clear search"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            <div className="admin-users-header-actions">
+              <button
+                type="button"
+                className="auth-btn"
+                onClick={() => navigate("/admin/users/new")}
+                style={{ padding: "0.6em 1.2em" }}
+              >
+                ✨ Create User
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={handleRefresh}
+                disabled={loading}
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
         </div>
-        <button type="button" className="btn-ghost" onClick={handleRefresh} disabled={loading}>
-          Refresh
-        </button>
       </header>
 
       {errorMessage && <div className="admin-users-error">{errorMessage}</div>}
-      {successMessage && <div className="admin-users-success">{successMessage}</div>}
+      {successMessage && (
+        <div className="admin-users-success">{successMessage}</div>
+      )}
 
-      <div className="admin-users-grid">
-        <section className="admin-users-column admin-users-column--form">
-          <UserForm
-            mode={formMode}
-            initialValues={editingUser}
-            loading={submitting}
-            onSubmit={handleFormSubmit}
-            onCancel={resetFormState}
-            resetKey={formResetKey}
-          />
-        </section>
-
-        <section className="admin-users-column admin-users-column--table">
-          {loading ? (
-            <Loader message="Loading users..." />
-          ) : (
+      <div style={{ marginTop: "2rem" }}>
+        {loading ? (
+          <Loader message="Loading users..." />
+        ) : (
+          <>
             <UserTable
               users={users}
-              onEdit={(userRow) => {
-                setFormMode('edit');
-                setEditingUser(userRow);
-              }}
               onDelete={handleDeleteUser}
               onViewResources={handleViewResources}
               onSelect={handleSelectActive}
+              onViewAgents={handleViewAgents}
               activeTenantId={activeTenantId}
             />
-          )}
-        </section>
+            {totalCount > 0 && (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                totalCount={totalCount}
+                limit={limit}
+              />
+            )}
+          </>
+        )}
       </div>
 
       <UserResourcePanel
@@ -270,7 +283,7 @@ function AdminUsersPage() {
         resourceState={resourceState}
         onClose={() => {
           setSelectedUser(null);
-          setResourceState({ data: null, loading: false, error: '' });
+          setResourceState({ data: null, loading: false, error: "" });
         }}
       />
     </div>
