@@ -71,6 +71,38 @@ const io = new Server(server, {
 console.log('🔌 Socket.IO server initialized on same HTTP server as Express');
 
 // =============================================================================
+// SOCKET.IO JWT AUTHENTICATION MIDDLEWARE
+// =============================================================================
+const jwt = require('jsonwebtoken');
+
+// Add JWT authentication middleware to Socket.IO
+// This middleware verifies the token in the handshake auth object
+io.use((socket, next) => {
+  try {
+    const token = socket.handshake.auth.token;
+    
+    if (!token) {
+      console.warn(`⚠️  Socket ${socket.id} attempted connection without token`);
+      return next(new Error('Authentication error: No token provided'));
+    }
+    
+    // Verify token with explicit algorithm specification
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+      algorithms: ['HS256'] // Prevent algorithm confusion attacks
+    });
+    
+    // Attach decoded token info to socket object for later use
+    socket.user = decoded;
+    
+    console.log(`✅ Socket ${socket.id} authenticated as user ${decoded.username || decoded._id}`);
+    next();
+  } catch (error) {
+    console.error(`❌ Socket authentication error:`, error.message);
+    next(new Error(`Authentication error: ${error.message}`));
+  }
+});
+
+// =============================================================================
 // TRUST PROXY CONFIGURATION
 // =============================================================================
 // Enable trust proxy when behind Nginx/reverse proxy

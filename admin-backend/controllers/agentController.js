@@ -208,6 +208,10 @@ const agentLogin = async (req, res) => {
     await foundAgent.save();
 
     // Generate JWT token for agent
+    // CRITICAL: Must use process.env.JWT_SECRET (same as Socket.IO auth middleware)
+    // This ensures agent tokens are compatible with both:
+    // - authenticateAgent middleware (verify with process.env.JWT_SECRET)
+    // - Socket.IO JWT auth (io.use(jwt.verify(process.env.JWT_SECRET)))
     const token = jwt.sign(
       {
         agentId: foundAgent._id.toString(),
@@ -216,7 +220,10 @@ const agentLogin = async (req, res) => {
         role: "agent", // Required for AuthContext to recognize agent token
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { 
+        expiresIn: "7d",
+        algorithm: 'HS256' // Explicitly match Socket.IO verification algorithm
+      }
     );
 
     // Include tenant data in response

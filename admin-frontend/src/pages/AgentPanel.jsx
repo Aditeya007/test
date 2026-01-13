@@ -97,10 +97,21 @@ function AgentPanel() {
       }
 
       try {
+        // Get agent token from localStorage for Socket.IO authentication
+        const agentToken = localStorage.getItem('agentToken');
+        
+        if (!agentToken) {
+          console.error('Agent Panel: No agent token found. Cannot initialize Socket.IO');
+          return;
+        }
+
         // Connect to Socket.IO server (same origin)
         const socketUrl = window.location.origin;
         
         socketRef.current = window.io(socketUrl, {
+          auth: {
+            token: agentToken
+          },
           transports: ['websocket', 'polling'],
           reconnection: true,
           reconnectionDelay: 1000,
@@ -109,7 +120,7 @@ function AgentPanel() {
         });
 
         socketRef.current.on('connect', () => {
-          console.log('Agent Panel: Socket.IO connected:', socketRef.current.id);
+          console.log('Agent socket connected:', socketRef.current.id);
           
           // Rejoin current conversation room if viewing one
           if (selectedConversationId) {
@@ -118,11 +129,11 @@ function AgentPanel() {
         });
 
         socketRef.current.on('disconnect', (reason) => {
-          console.log('Agent Panel: Socket.IO disconnected:', reason);
+          console.log('Agent socket disconnected:', reason);
         });
 
         socketRef.current.on('reconnect', (attemptNumber) => {
-          console.log('Agent Panel: Socket.IO reconnected after', attemptNumber, 'attempts');
+          console.log('Agent socket reconnected after', attemptNumber, 'attempts');
           
           // Rejoin conversation room after reconnection
           if (selectedConversationId) {
@@ -181,6 +192,10 @@ function AgentPanel() {
 
         socketRef.current.on('connect_error', (error) => {
           console.error('Agent Panel: Socket.IO connection error:', error);
+        });
+
+        socketRef.current.on('disconnect_error', (error) => {
+          console.error('Agent Panel: Socket.IO disconnect error:', error);
         });
 
         socketRef.current.on('message:error', (error) => {
@@ -334,12 +349,15 @@ function AgentPanel() {
       console.log('Agent Panel: Sending message via Socket.IO');
       
       // Send message via Socket.IO (NOT REST API)
-      socketRef.current.emit('message:send', {
+      const conv = conversations.find(c => c._id === selectedConversationId);
+
+      socketRef.current.emit("message:send", {
         conversationId: selectedConversationId,
         message: messageText,
-        sender: 'agent',
-        botId: selectedConversation?.botId // Include botId for context
+        sender: "agent",
+        botId: conv.botId
       });
+
 
       console.log('Agent Panel: Message sent via socket, waiting for message:new event');
       
