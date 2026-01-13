@@ -293,7 +293,8 @@
         align-items: flex-end;
       }
 
-      .rag-widget-message.bot {
+      .rag-widget-message.bot,
+      .rag-widget-message.agent {
         align-items: flex-start;
       }
 
@@ -310,7 +311,8 @@
         color: white;
       }
 
-      .rag-widget-message.bot .rag-widget-message-bubble {
+      .rag-widget-message.bot .rag-widget-message-bubble,
+      .rag-widget-message.agent .rag-widget-message-bubble {
         background: #2b3547;
         color: #e0e5ec;
       }
