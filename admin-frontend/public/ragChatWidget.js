@@ -169,8 +169,10 @@
       return;
     }
 
-    console.log("RAG Widget: Joining conversation room:", conversationId);
-    socket.emit("join:conversation", conversationId);
+    // Convert to string to ensure consistency with backend room naming
+    const conversationIdStr = String(conversationId);
+    console.log("RAG Widget: Joining conversation room:", conversationIdStr);
+    socket.emit("join:conversation", conversationIdStr);
   }
 
   // Leave a conversation room
@@ -178,8 +180,10 @@
     if (!socket || !socket.connected) return;
     if (!conversationId) return;
 
-    console.log("RAG Widget: Leaving conversation room:", conversationId);
-    socket.emit("leave:conversation", conversationId);
+    // Convert to string to ensure consistency with backend room naming
+    const conversationIdStr = String(conversationId);
+    console.log("RAG Widget: Leaving conversation room:", conversationIdStr);
+    socket.emit("leave:conversation", conversationIdStr);
   }
 
   // Load conversation history from backend
