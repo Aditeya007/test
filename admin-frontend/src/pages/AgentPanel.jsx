@@ -145,8 +145,11 @@ function AgentPanel() {
               );
               
               if (exists) {
+                console.log('Agent Panel: Skipping duplicate message:', message._id);
                 return prev;
               }
+              
+              console.log('Agent Panel: Adding real-time message:', message.sender);
               
               // Add new message
               return [...prev, {
@@ -178,6 +181,12 @@ function AgentPanel() {
 
         socketRef.current.on('connect_error', (error) => {
           console.error('Agent Panel: Socket.IO connection error:', error);
+        });
+
+        socketRef.current.on('message:error', (error) => {
+          console.error('Agent Panel: Message error from server:', error);
+          alert('Failed to send message: ' + (error.error || 'Unknown error'));
+          setSendingMessage(false);
         });
 
       } catch (error) {
@@ -312,45 +321,37 @@ function AgentPanel() {
   const sendMessage = async () => {
     if (!messageInput.trim() || !selectedConversationId || sendingMessage) return;
     
+    if (!socketRef.current || !socketRef.current.connected) {
+      alert('Socket not connected. Please refresh the page.');
+      return;
+    }
+    
     setSendingMessage(true);
     const messageText = messageInput.trim();
     setMessageInput('');
-    
-    try {
-      // Optimistically add message to UI
-      const tempMessage = {
-        _id: `temp-${Date.now()}`,
-        content: messageText,
-        text: messageText,
-        sender: 'agent',
-        createdAt: new Date().toISOString()
-      };
-      setMessages(prev => [...prev, tempMessage]);
 
-      // Auto-scroll to bottom
-      setTimeout(() => {
-        const messagesArea = document.querySelector('.messages-scroll-area');
-        if (messagesArea) {
-          messagesArea.scrollTop = messagesArea.scrollHeight;
-        }
-      }, 50);
+    try {
+      console.log('Agent Panel: Sending message via Socket.IO');
       
-      // Send to API - the real message will come back via Socket.IO
-      await agentApiRequest(`/agent/conversations/${selectedConversationId}/reply`, {
-        method: 'POST',
-        data: { message: messageText }
+      // Send message via Socket.IO (NOT REST API)
+      socketRef.current.emit('message:send', {
+        conversationId: selectedConversationId,
+        message: messageText,
+        sender: 'agent',
+        botId: selectedConversation?.botId // Include botId for context
       });
+
+      console.log('Agent Panel: Message sent via socket, waiting for message:new event');
       
-      // Remove optimistic message - the real one will come via Socket.IO
-      setMessages(prev => prev.filter(msg => msg._id !== tempMessage._id));
+      // Note: We don't add the message to UI here
+      // The server will emit message:new event
+      // Our message:new listener will handle adding it to the UI
       
     } catch (error) {
       console.error('Failed to send message:', error);
       alert('Failed to send message: ' + (error.message || 'Unknown error'));
       // Restore input on error
       setMessageInput(messageText);
-      // Remove optimistic message on error
-      setMessages(prev => prev.filter(msg => !msg._id.startsWith('temp-')));
     } finally {
       setSendingMessage(false);
     }

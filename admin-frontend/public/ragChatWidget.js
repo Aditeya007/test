@@ -119,34 +119,47 @@
       socket.on('message:new', (message) => {
         console.log('RAG Widget: Received real-time message:', message);
         
-        // Only add messages that are not from the current user
-        // (user messages are already added optimistically)
-        if (message.sender !== 'user') {
-          // Check if message already exists to prevent duplicates
-          // Use a more precise duplicate check with MongoDB _id and timestamp
-          const exists = state.messages.some(msg => {
-            // Check by MongoDB ID first (most reliable)
-            if (msg.id === message._id || msg.id === message.id) {
-              return true;
-            }
-            // Fallback: check if same text from same sender within 2 seconds
-            const timeDiff = Math.abs(msg.timestamp - Date.now());
-            return msg.text === message.text && 
-                   msg.sender === message.sender && 
-                   timeDiff < 2000;
-          });
-          
-          if (!exists) {
-            console.log('RAG Widget: Adding real-time message from Socket.IO:', message.sender);
-            addMessage(message.text, message.sender, false, message.sources, message._id || message.id);
-          } else {
-            console.log('RAG Widget: Skipping duplicate message:', message._id);
+        // Hide typing indicator when we receive a response
+        hideTyping();
+        
+        // Check if message already exists to prevent duplicates
+        const exists = state.messages.some(msg => {
+          // Check by MongoDB ID (most reliable)
+          if (msg.id === message._id || msg.id === message.id) {
+            return true;
           }
+          // Fallback: check if same text from same sender within 1 second
+          const timeDiff = Math.abs(msg.timestamp - Date.now());
+          return msg.text === message.text && 
+                 msg.sender === message.sender && 
+                 timeDiff < 1000;
+        });
+        
+        if (!exists) {
+          console.log('RAG Widget: Adding real-time message from Socket.IO:', message.sender);
+          addMessage(message.text, message.sender, message.isError || false, message.sources, message._id || message.id);
+          scrollToBottom();
+        } else {
+          console.log('RAG Widget: Skipping duplicate message:', message._id);
         }
       });
 
       socket.on('connect_error', (error) => {
         console.error('RAG Widget: Socket.IO connection error:', error);
+      });
+
+      socket.on('message:error', (error) => {
+        console.error('RAG Widget: Message error from server:', error);
+        hideTyping();
+        addMessage(error.error || 'Failed to send message. Please try again.', 'bot', true);
+        
+        // Reset button state
+        state.loading = false;
+        const sendBtn = document.getElementById('rag-widget-send');
+        if (sendBtn) {
+          sendBtn.disabled = false;
+          sendBtn.textContent = 'Send';
+        }
       });
 
     } catch (error) {
@@ -809,13 +822,18 @@
       addMessage('Widget not configured properly. Missing bot ID.', 'bot', true);
       return;
     }
-    if (!config.authToken) {
-      addMessage('Widget not configured properly. Missing authentication token.', 'bot', true);
+    if (!state.conversationId) {
+      console.error('RAG Widget: Cannot send message - no conversationId');
+      addMessage('Please wait for the conversation to initialize.', 'bot', true);
+      return;
+    }
+    if (!socket || !socket.connected) {
+      console.error('RAG Widget: Cannot send message - socket not connected');
+      addMessage('Connection lost. Please refresh the page.', 'bot', true);
       return;
     }
 
-    // Add user message
-    addMessage(message, 'user');
+    const sanitizedMessage = message.trim();
     
     // Clear input
     const input = document.getElementById('rag-widget-input');
@@ -832,86 +850,31 @@
     showTyping();
 
     try {
-      const response = await fetch(`${config.apiBase}/chat/message`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.authToken}`
-        },
-        body: JSON.stringify({
-          botId: config.botId,
-          sessionId: state.sessionId,
-          message: message
-        })
+      console.log('RAG Widget: Sending message via Socket.IO');
+      
+      // Send message via Socket.IO (NOT REST API)
+      socket.emit('message:send', {
+        conversationId: state.conversationId,
+        message: sanitizedMessage,
+        sender: 'user',
+        botId: config.botId,
+        sessionId: state.sessionId
       });
 
-      const data = await response.json();
+      console.log('RAG Widget: Message sent via socket, waiting for message:new events');
+      
+      // Note: We don't add the message to UI here
+      // The server will emit message:new events for:
+      // 1. The user message (so all clients see it)
+      // 2. The bot/agent response
+      // Our message:new listener will handle adding them to the UI
 
+    } catch (error) {
+      console.error('RAG Widget: Error sending message:', error);
       hideTyping();
-
-      if (response.ok && data.success) {
-        // Store conversation._id if provided (handles agent takeover or conversation updates)
-        if (data.conversation && data.conversation._id) {
-          const newConversationId = data.conversation._id;
-          
-          // If conversation ID changed (e.g., agent took over), switch rooms
-          if (state.conversationId !== newConversationId) {
-            console.log('RAG Widget: Conversation ID changed, switching rooms');
-            console.log('RAG Widget: Old conversationId:', state.conversationId);
-            console.log('RAG Widget: New conversationId:', newConversationId);
-            
-            if (state.conversationId) {
-              leaveConversationRoom(state.conversationId);
-            }
-            
-            state.conversationId = newConversationId;
-            
-            if (socket && socket.connected) {
-              joinConversationRoom(state.conversationId);
-            }
-          }
-        }
-        
-        // Check if conversation is in active agent mode
-        const isAgentMode = data.agentActive || (data.conversation && data.conversation.status === 'active');
-        
-        if (data.reply) {
-          // Add bot/agent response immediately for this client
-          // Socket.IO will deliver to other clients (agents, other tabs)
-          // Duplicate detection in Socket.IO handler will prevent double-display
-          console.log('RAG Widget: Adding bot/agent response:', data.reply.sender);
-          addMessage(data.reply.text, data.reply.sender, false, data.reply.sources, data.reply.id || data.reply._id);
-        } else if (isAgentMode) {
-          // Agent mode with no reply - this is expected behavior
-          // Message was forwarded to agent, widget remains silent
-          console.log('RAG Widget: Message forwarded to agent, waiting for agent response');
-          // Do nothing - no error message, no bot response
-        } else {
-          // Not in agent mode and no reply - this is an error
-          const errorMessage = data.error || data.message || 'Bot service is unavailable right now.';
-          addMessage(errorMessage, 'bot', true);
-        }
-      } else {
-        // Handle specific widget errors
-        if (data.widgetError) {
-          if (data.error && data.error.includes('No authorization header')) {
-            addMessage('Authentication failed. Please check your widget configuration.', 'bot', true);
-          } else if (data.error && data.error.includes('Invalid token')) {
-            addMessage('Your authentication token is invalid or expired. Please contact the site administrator.', 'bot', true);
-          } else {
-            addMessage(data.error || data.message || 'Unable to process your request.', 'bot', true);
-          }
-        } else {
-          const errorMessage = data.error || data.message || 'Bot service is unavailable right now.';
-          addMessage(errorMessage, 'bot', true);
-        }
-      }
-    } catch (err) {
-      hideTyping();
-      console.error('RAG Widget: Network error:', err);
-      addMessage('Network error: Unable to reach the bot service. Please check your connection.', 'bot', true);
+      addMessage('Failed to send message. Please try again.', 'bot', true);
     } finally {
-      // Reset loading state
+      // Reset button state
       state.loading = false;
       if (sendBtn) {
         sendBtn.disabled = false;

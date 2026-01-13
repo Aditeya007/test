@@ -246,6 +246,124 @@ app.use((err, req, res, next) => {
 // =============================================================================
 // SOCKET.IO EVENT HANDLERS
 // =============================================================================
+const Bot = require('./models/Bot');
+const { getUserTenantContext } = require('./services/userContextService');
+const botJob = require('./jobs/botJob');
+
+// Import tenant models helper
+async function getTenantConnection(databaseUri) {
+  if (!databaseUri) {
+    throw new Error('databaseUri is required for tenant database connection');
+  }
+
+  // Create new connection
+  const conn = await mongoose.createConnection(databaseUri, {
+    maxPoolSize: 10,
+    serverSelectionTimeoutMS: 5000,
+  }).asPromise();
+
+  return conn;
+}
+
+async function getTenantModels(databaseUri) {
+  const connection = await getTenantConnection(databaseUri);
+
+  // Load Conversation schema
+  const ConversationSchema = new mongoose.Schema(
+    {
+      botId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Bot',
+        required: true,
+        index: true
+      },
+      sessionId: {
+        type: String,
+        required: true,
+        index: true,
+        trim: true
+      },
+      status: {
+        type: String,
+        enum: ['bot', 'waiting', 'active', 'queued', 'assigned', 'closed', 'ai', 'human'],
+        default: 'bot',
+        required: true
+      },
+      assignedAgent: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Agent',
+        default: null
+      },
+      agentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Agent',
+        default: null
+      },
+      lastActiveAt: {
+        type: Date,
+        default: Date.now
+      }
+    },
+    { timestamps: true }
+  );
+
+  // Load Message schema
+  const MessageSchema = new mongoose.Schema(
+    {
+      conversationId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Conversation',
+        required: true,
+        index: true
+      },
+      sender: {
+        type: String,
+        enum: ['user', 'bot', 'agent'],
+        required: true
+      },
+      text: {
+        type: String,
+        required: true
+      },
+      sources: [{ type: String }],
+      metadata: {
+        type: mongoose.Schema.Types.Mixed,
+        default: {}
+      }
+    },
+    { timestamps: true }
+  );
+
+  // Add method to create message
+  MessageSchema.statics.createMessage = async function(conversationId, sender, text, options = {}) {
+    const message = new this({
+      conversationId,
+      sender,
+      text,
+      sources: options.sources || [],
+      metadata: options.metadata || {},
+      createdAt: options.createdAt || new Date()
+    });
+    await message.save();
+    return message;
+  };
+
+  // Add method to update activity
+  ConversationSchema.methods.updateActivity = async function() {
+    this.lastActiveAt = new Date();
+    await this.save();
+  };
+
+  const Conversation =
+    connection.models.Conversation ||
+    connection.model('Conversation', ConversationSchema);
+  const Message =
+    connection.models.Message ||
+    connection.model('Message', MessageSchema);
+
+  return { Conversation, Message };
+}
+
 io.on('connection', (socket) => {
   console.log(`🔌 Socket connected: ${socket.id}`);
 
@@ -266,6 +384,220 @@ io.on('connection', (socket) => {
     
     socket.leave(conversationId);
     console.log(`📤 Socket ${socket.id} left room: ${conversationId}`);
+  });
+
+  // Handle sending messages via Socket.IO (NEW)
+  socket.on('message:send', async (payload) => {
+    try {
+      console.log(`📨 Received message:send from ${socket.id}:`, payload);
+
+      const { conversationId, message, sender, botId, sessionId } = payload;
+
+      // Validate required fields
+      if (!conversationId || !message || !sender) {
+        console.error('❌ Invalid message:send payload - missing required fields');
+        socket.emit('message:error', { error: 'Missing required fields: conversationId, message, sender' });
+        return;
+      }
+
+      // Validate sender type
+      if (!['user', 'agent'].includes(sender)) {
+        console.error('❌ Invalid sender type:', sender);
+        socket.emit('message:error', { error: 'Invalid sender type. Must be "user" or "agent"' });
+        return;
+      }
+
+      // Sanitize message
+      const sanitizedMessage = message.trim();
+      if (!sanitizedMessage) {
+        console.error('❌ Empty message after sanitization');
+        socket.emit('message:error', { error: 'Message cannot be empty' });
+        return;
+      }
+
+      // For user messages, we need botId
+      if (sender === 'user' && !botId) {
+        console.error('❌ Missing botId for user message');
+        socket.emit('message:error', { error: 'botId is required for user messages' });
+        return;
+      }
+
+      // Load bot and tenant context
+      const bot = await Bot.findById(botId);
+      if (!bot) {
+        console.error('❌ Bot not found:', botId);
+        socket.emit('message:error', { error: 'Bot not found' });
+        return;
+      }
+
+      if (!bot.isActive) {
+        console.error('❌ Bot is inactive:', botId);
+        socket.emit('message:error', { error: 'Bot is inactive' });
+        return;
+      }
+
+      // Get tenant context
+      const tenantContext = await getUserTenantContext(bot.userId);
+      if (!tenantContext.databaseUri) {
+        console.error('❌ Tenant database not provisioned');
+        socket.emit('message:error', { error: 'Tenant database not provisioned' });
+        return;
+      }
+
+      // Load tenant models
+      const { Conversation, Message } = await getTenantModels(tenantContext.databaseUri);
+
+      // Find conversation
+      const conversation = await Conversation.findById(conversationId);
+      if (!conversation) {
+        console.error('❌ Conversation not found:', conversationId);
+        socket.emit('message:error', { error: 'Conversation not found' });
+        return;
+      }
+
+      // Save the incoming message (user or agent)
+      const savedMessage = await Message.createMessage(
+        conversationId,
+        sender,
+        sanitizedMessage
+      );
+
+      // Update conversation activity
+      await conversation.updateActivity();
+
+      console.log(`💬 ${sender} message saved for conversation ${conversationId}`);
+
+      // Emit the saved message to all clients in the conversation room
+      io.to(conversationId).emit('message:new', {
+        _id: savedMessage._id,
+        conversationId: conversationId,
+        sender: sender,
+        text: sanitizedMessage,
+        createdAt: savedMessage.createdAt
+      });
+
+      console.log(`📡 Emitted ${sender} message to conversation:${conversationId}`);
+
+      // Handle bot response for user messages
+      if (sender === 'user') {
+        // Check if agent is actively handling this conversation
+        if (conversation.status === 'active' && conversation.assignedAgent) {
+          console.log(`👤 Conversation ${conversationId} in active agent mode - no bot response`);
+          // Agent will respond manually - no bot action needed
+          return;
+        }
+
+        // Check if in human-only mode
+        if (conversation.status === 'human') {
+          console.log(`👤 Conversation ${conversationId} in human mode - sending placeholder`);
+          
+          const agentMessage = 'A human agent will join shortly.';
+          const placeholderMessage = await Message.createMessage(
+            conversationId,
+            'agent',
+            agentMessage
+          );
+
+          await conversation.updateActivity();
+
+          io.to(conversationId).emit('message:new', {
+            _id: placeholderMessage._id,
+            conversationId: conversationId,
+            sender: 'agent',
+            text: agentMessage,
+            createdAt: placeholderMessage.createdAt
+          });
+
+          console.log(`📡 Emitted placeholder message to conversation:${conversationId}`);
+          return;
+        }
+
+        // AI mode - forward to bot
+        try {
+          if (!bot.vectorStorePath) {
+            throw new Error('Bot vector store not initialized');
+          }
+
+          console.log(`🧠 Forwarding message to RAG bot for conversation ${conversationId}`);
+
+          const botResult = await botJob.runBotForUser(
+            {
+              userId: bot.userId,
+              username: `bot_${bot._id}`,
+              botEndpoint: tenantContext.botEndpoint,
+              resourceId: tenantContext.resourceId,
+              vectorStorePath: bot.vectorStorePath,
+              databaseUri: tenantContext.databaseUri
+            },
+            sanitizedMessage,
+            { sessionId: sessionId || conversation.sessionId }
+          );
+
+          // Save bot response
+          const botMessage = await Message.createMessage(
+            conversationId,
+            'bot',
+            botResult.answer,
+            {
+              sources: botResult.sources,
+              metadata: {
+                bot_session_id: botResult.session_id,
+                confidence: botResult.confidence,
+                resource_id: tenantContext.resourceId
+              }
+            }
+          );
+
+          await conversation.updateActivity();
+
+          console.log(`🤖 Bot response saved for conversation ${conversationId}`);
+
+          // Emit bot response to conversation room
+          io.to(conversationId).emit('message:new', {
+            _id: botMessage._id,
+            conversationId: conversationId,
+            sender: 'bot',
+            text: botResult.answer,
+            createdAt: botMessage.createdAt,
+            sources: botResult.sources
+          });
+
+          console.log(`📡 Emitted bot message to conversation:${conversationId}`);
+
+        } catch (botError) {
+          console.error(`❌ Bot error for conversation ${conversationId}:`, botError.message);
+
+          // Save and emit error message
+          const errorMessage = 'I apologize, but I encountered an error processing your request. Please try again.';
+          const errorMsg = await Message.createMessage(
+            conversationId,
+            'bot',
+            errorMessage,
+            { metadata: { error: true, errorMessage: botError.message } }
+          );
+
+          await conversation.updateActivity();
+
+          io.to(conversationId).emit('message:new', {
+            _id: errorMsg._id,
+            conversationId: conversationId,
+            sender: 'bot',
+            text: errorMessage,
+            createdAt: errorMsg.createdAt,
+            isError: true
+          });
+
+          console.log(`📡 Emitted error message to conversation:${conversationId}`);
+        }
+      }
+
+    } catch (error) {
+      console.error('❌ Error handling message:send:', error);
+      socket.emit('message:error', { 
+        error: 'Failed to process message',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
   });
 
   socket.on('disconnect', () => {
