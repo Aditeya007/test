@@ -147,8 +147,8 @@ app.use('/api/user', userRoutes);          // Current user info
 app.use('/api/users', usersRoutes);        // Authenticated user management
 app.use('/api/bot', botRoutes);            // Bot interaction endpoints
 app.use('/api/scrape', scrapeRoutes);      // Scraper + updater triggers
-app.use('/api', chatRoutes);               // Chat conversation and message endpoints
 app.use('/api/agent', agentRoutes);        // Agent authentication and management
+app.use('/api', chatRoutes);               // Chat conversation and message endpoints (must be last)
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
