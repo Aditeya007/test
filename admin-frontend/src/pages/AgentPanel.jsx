@@ -94,7 +94,7 @@ function AgentPanel() {
     
     for (const botId of botIds) {
       try {
-        const botData = await apiRequest(`/bots/${botId}`, { token: agentToken });
+        const botData = await agentApiRequest(`/bots/${botId}`, { method: 'GET' });
         botMap[botId] = botData.bot || botData;
       } catch (error) {
         console.error(`Failed to fetch bot ${botId}:`, error);
