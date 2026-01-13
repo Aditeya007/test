@@ -31,6 +31,7 @@ router.post('/login', agentController.agentLogin);
 router.post('/logout', authenticateAgent, agentController.agentLogout);
 router.get('/conversations', authenticateAgent, agentController.getConversations);
 router.get('/conversations/:conversationId/messages', authenticateAgent, agentController.getMessages);
+router.post('/conversations/:id/reply', authenticateAgent, agentController.replyToConversation);
 router.post('/conversations/:id/accept', authenticateAgent, agentController.acceptConversation);
 router.post('/conversations/:id/close', authenticateAgent, agentController.closeConversation);
 

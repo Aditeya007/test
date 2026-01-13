@@ -25,7 +25,14 @@ function decodeToken(token) {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(() => localStorage.getItem('jwt') || '');
+  // Check for both user JWT and agent token on initialization
+  const [token, setToken] = useState(() => {
+    // First check if agent is logged in
+    const agentToken = localStorage.getItem('agentToken');
+    if (agentToken) return agentToken;
+    // Otherwise check for user JWT
+    return localStorage.getItem('jwt') || '';
+  });
   const [loading, setLoading] = useState(true); // Add loading state
   const [activeTenant, setActiveTenantState] = useState(() => {
     const stored = localStorage.getItem('activeTenant');
@@ -58,6 +65,7 @@ export function AuthProvider({ children }) {
           setUser(null);
           setToken('');
           localStorage.removeItem('jwt');
+          localStorage.removeItem('agentToken');
           localStorage.removeItem('isAgent');
           localStorage.removeItem('agentTenant');
           setActiveTenantState(null);
@@ -110,6 +118,7 @@ export function AuthProvider({ children }) {
               setUser(null);
               setToken('');
               localStorage.removeItem('jwt');
+              localStorage.removeItem('agentToken');
               localStorage.removeItem('isAgent');
               localStorage.removeItem('agentTenant');
               setActiveTenantState(null);
@@ -120,6 +129,7 @@ export function AuthProvider({ children }) {
             setUser(null);
             setToken('');
             localStorage.removeItem('jwt');
+            localStorage.removeItem('agentToken');
             localStorage.removeItem('isAgent');
             setActiveTenantState(null);
             localStorage.removeItem('activeTenant');
@@ -138,6 +148,7 @@ export function AuthProvider({ children }) {
             setUser(null);
             setToken('');
             localStorage.removeItem('jwt');
+            localStorage.removeItem('agentToken');
             localStorage.removeItem('isAgent');
             setActiveTenantState(null);
             localStorage.removeItem('activeTenant');
@@ -221,6 +232,8 @@ export function AuthProvider({ children }) {
     setUser(null);
     setToken('');
     localStorage.removeItem('jwt');
+    localStorage.removeItem('agentToken');
+    localStorage.removeItem('agentData');
     localStorage.removeItem('isAgent');
     localStorage.removeItem('agentTenant');
     setActiveTenantState(null);

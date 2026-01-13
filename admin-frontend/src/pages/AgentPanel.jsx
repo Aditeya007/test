@@ -7,8 +7,39 @@ import { API_BASE_URL } from '../config';
 import Loader from '../components/Loader';
 import '../styles/AgentPanel.css';
 
+// Helper to decode JWT token
+function decodeToken(token) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (error) {
+    console.error('Failed to decode token:', error);
+    return null;
+  }
+}
+
 function AgentPanel() {
-  const { user, token, logout: authLogout } = useAuth();
+  const { user, logout: authLogout } = useAuth();
+  // Read agent token from localStorage (stored by AgentLoginPage)
+  const agentToken = localStorage.getItem('agentToken');
+  
+  // Decode agent token to get agentId and tenantId
+  const decodedToken = agentToken ? decodeToken(agentToken) : null;
+  const agentId = decodedToken?.agentId;
+  const tenantId = decodedToken?.tenantId;
+  
+  // Get agent data from localStorage
+  const agentDataString = localStorage.getItem('agentData');
+  const agentData = agentDataString ? JSON.parse(agentDataString) : null;
+  const agentUsername = agentData?.username || decodedToken?.username || 'Agent';
+  
   // Helper to call backend mounted at exact '/agents' path.
   const getBackendBase = () => API_BASE_URL.replace(/\/api\/?$/i, '');
 
@@ -82,7 +113,7 @@ function AgentPanel() {
     setConversationsError('');
     
     try {
-      const data = await agentApiRequest('/api/agents/conversations', { method: 'GET', token });
+      const data = await agentApiRequest('/api/agent/conversations', { method: 'GET', token: agentToken });
       setConversations(data.conversations || data || []);
       
       // Extract unique bot IDs and fetch bot details
@@ -94,14 +125,14 @@ function AgentPanel() {
     } finally {
       setConversationsLoading(false);
     }
-  }, [token]);
+  }, [agentToken]);
 
   const fetchBotDetails = async (botIds) => {
     const botMap = {};
     
     for (const botId of botIds) {
       try {
-        const botData = await apiRequest(`/bots/${botId}`, { token });
+        const botData = await apiRequest(`/bots/${botId}`, { token: agentToken });
         botMap[botId] = botData.bot || botData;
       } catch (error) {
         console.error(`Failed to fetch bot ${botId}:`, error);
@@ -117,7 +148,7 @@ function AgentPanel() {
     setMessagesError('');
     
     try {
-      const data = await agentApiRequest(`/api/agents/conversations/${conversationId}/messages`, { method: 'GET', token });
+      const data = await agentApiRequest(`/api/agent/conversations/${conversationId}/messages`, { method: 'GET', token: agentToken });
       setMessages(data.messages || data || []);
     } catch (error) {
       console.error('Failed to fetch messages:', error);
@@ -125,7 +156,7 @@ function AgentPanel() {
     } finally {
       setMessagesLoading(false);
     }
-  }, [token]);
+  }, [agentToken]);
 
   const handleConversationClick = (conversationId) => {
     setSelectedConversationId(conversationId);
@@ -167,9 +198,9 @@ function AgentPanel() {
       setMessages(prev => [...prev, tempMessage]);
       
       // Send to API
-      await agentApiRequest(`/api/agents/conversations/${selectedConversationId}/reply`, {
+      await agentApiRequest(`/api/agent/conversations/${selectedConversationId}/reply`, {
         method: 'POST',
-        token,
+        token: agentToken,
         data: { message: messageText }
       });
       
@@ -210,7 +241,7 @@ function AgentPanel() {
     try {
       await agentApiRequest(`/api/agent/conversations/${conversationId}/accept`, {
         method: 'POST',
-        token
+        token: agentToken
       });
       
       // Refresh conversations to update the list
@@ -232,7 +263,7 @@ function AgentPanel() {
     try {
       await agentApiRequest(`/api/agent/conversations/${conversationId}/close`, {
         method: 'POST',
-        token
+        token: agentToken
       });
       
       // Refresh conversations and clear selection if this was selected
@@ -252,12 +283,17 @@ function AgentPanel() {
       // Call backend logout to mark agent as offline
       await agentApiRequest('/api/agent/logout', {
         method: 'POST',
-        token
+        token: agentToken
       });
     } catch (error) {
       console.error('Logout API call failed:', error);
       // Continue with frontend logout even if backend call fails
     } finally {
+      // Clear agent-specific storage
+      localStorage.removeItem('agentToken');
+      localStorage.removeItem('agentData');
+      localStorage.removeItem('isAgent');
+      localStorage.removeItem('agentTenant');
       authLogout();
     }
   };
@@ -266,7 +302,7 @@ function AgentPanel() {
   const filteredConversations = conversations.filter(conv => {
     if (filterStatus === 'all') return true;
     if (filterStatus === 'queued') return conv.status === 'queued' || conv.status === 'waiting';
-    if (filterStatus === 'assigned') return (conv.status === 'assigned' || conv.status === 'active') && (conv.assignedAgent === user?.id || conv.agentId === user?.id);
+    if (filterStatus === 'assigned') return (conv.status === 'assigned' || conv.status === 'active') && (conv.assignedAgent === agentId || conv.agentId === agentId);
     return true;
   });
 
@@ -320,7 +356,7 @@ function AgentPanel() {
 
         <div className="sidebar-footer">
           <div className="user-info">
-            <span className="user-name">{user?.username || 'Agent'}</span>
+            <span className="user-name">{agentUsername}</span>
           </div>
           <button onClick={logout} className="sidebar-logout-btn">Logout</button>
         </div>
@@ -353,7 +389,7 @@ function AgentPanel() {
             className={`filter-tab ${filterStatus === 'assigned' ? 'active' : ''}`}
             onClick={() => setFilterStatus('assigned')}
           >
-            My Chats ({conversations.filter(c => (c.status === 'assigned' || c.status === 'active') && (c.assignedAgent === user?.id || c.agentId === user?.id)).length})
+            My Chats ({conversations.filter(c => (c.status === 'assigned' || c.status === 'active') && (c.assignedAgent === agentId || c.agentId === agentId)).length})
           </button>
         </div>
 
@@ -423,7 +459,7 @@ function AgentPanel() {
                 </div>
                 <div className="chat-window-info">
                   <div className="chat-window-visitor">{getVisitorName(selectedConversation)}</div>
-                  <div className="chat-window-agent">{user?.username || 'Agent'}</div>
+                  <div className="chat-window-agent">{agentUsername}</div>
                 </div>
               </div>
               <div className="chat-window-header-actions">
@@ -472,7 +508,7 @@ function AgentPanel() {
                       {messages.map((msg) => {
                         const isAgent = msg.sender === 'agent';
                         const isUser = msg.sender === 'user';
-                        const senderName = isAgent ? (user?.username || 'Agent') : (isUser ? getVisitorName(selectedConversation) : 'Bot');
+                        const senderName = isAgent ? agentUsername : (isUser ? getVisitorName(selectedConversation) : 'Bot');
                         
                         return (
                           <div

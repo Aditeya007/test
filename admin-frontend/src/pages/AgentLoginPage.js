@@ -52,7 +52,7 @@ function AgentLoginPage() {
 
     try {
       // Call agent login endpoint
-      const response = await apiRequest('/agents/login', {
+      const response = await apiRequest('/agent/login', {
         method: 'POST',
         data: {
           username: username.trim(),
@@ -61,11 +61,16 @@ function AgentLoginPage() {
       });
 
       if (response.token) {
-        // Store token in localStorage (use 'jwt' key for consistency)
-        localStorage.setItem('jwt', response.token);
+        // Store agent token in separate localStorage key
+        localStorage.setItem('agentToken', response.token);
         
         // Store agent flag to indicate this is an agent login
         localStorage.setItem('isAgent', 'true');
+        
+        // Store agent data for display
+        if (response.agent) {
+          localStorage.setItem('agentData', JSON.stringify(response.agent));
+        }
         
         // Store tenant data for AuthContext
         if (response.tenant) {
