@@ -67,6 +67,9 @@ function AgentPanel() {
 
   // Socket.IO ref
   const socketRef = useRef(null);
+  
+  // Ref to track the current conversation ID for socket event handlers
+  const selectedConversationRef = useRef(null);
 
   // Initialize Socket.IO connection
   useEffect(() => {
@@ -124,8 +127,11 @@ function AgentPanel() {
           console.log('Agent socket connected:', socketRef.current.id);
           
           // Rejoin current conversation room if viewing one
-          if (selectedConversationId) {
-            joinConversationRoom(selectedConversationId);
+          // Use ref to get the current value
+          const currentConversationId = selectedConversationRef.current;
+          if (currentConversationId) {
+            console.log('Agent Panel: Rejoining room on connect:', currentConversationId);
+            joinConversationRoom(currentConversationId);
           }
         });
 
@@ -137,8 +143,11 @@ function AgentPanel() {
           console.log('Agent socket reconnected after', attemptNumber, 'attempts');
           
           // Rejoin conversation room after reconnection
-          if (selectedConversationId) {
-            joinConversationRoom(selectedConversationId);
+          // Use ref to get the current value
+          const currentConversationId = selectedConversationRef.current;
+          if (currentConversationId) {
+            console.log('Agent Panel: Rejoining room on reconnect:', currentConversationId);
+            joinConversationRoom(currentConversationId);
           }
         });
 
@@ -147,7 +156,9 @@ function AgentPanel() {
           console.log('Agent Panel: Received real-time message:', message);
           
           // Only add message if it's for the currently selected conversation
-          if (message.conversationId === selectedConversationId) {
+          // Use ref to get the current value
+          const currentConversationId = selectedConversationRef.current;
+          if (message.conversationId === currentConversationId) {
             setMessages(prev => {
               // Check if message already exists to prevent duplicates
               const exists = prev.some(msg => 
@@ -237,13 +248,23 @@ function AgentPanel() {
     console.log('Agent Panel: Joining conversation room:', conversationId);
     socketRef.current.emit('join:conversation', conversationId);
   }, []);
+  
+  // Update the ref whenever selectedConversationId changes
+  useEffect(() => {
+    selectedConversationRef.current = selectedConversationId;
+  }, [selectedConversationId]);
 
   // Auto-join room whenever selectedConversationId changes
   useEffect(() => {
     if (!selectedConversationId) return;
+    
+    // If socket is already connected, join immediately
     if (socketRef.current && socketRef.current.connected) {
       console.log("AgentPanel: Auto-joining room for", selectedConversationId);
       joinConversationRoom(selectedConversationId);
+    } else {
+      // Socket not yet connected, wait for it
+      console.log("AgentPanel: Socket not connected yet, will join room on connect event");
     }
   }, [selectedConversationId, joinConversationRoom]);
 
