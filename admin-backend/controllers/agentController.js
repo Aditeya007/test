@@ -851,15 +851,16 @@ const replyToConversation = async (req, res) => {
     // Access io from the Express app via req.app.locals
     const io = req.app.locals.io;
     if (io) {
-      io.to(`conversation:${conversation._id}`).emit("message:new", {
+      const conversationIdStr = String(conversation._id);
+      io.to(`conversation:${conversationIdStr}`).emit("message:new", {
         _id: newMessage._id,
-        conversationId: conversation._id,
+        conversationId: conversationIdStr,
         sender: "agent",
         text: newMessage.text,
         createdAt: newMessage.createdAt,
       });
       console.log(
-        `📡 Emitted agent message to conversation:${conversation._id}`
+        `📡 Emitted agent message to conversation:${conversationIdStr}`
       );
     }
 

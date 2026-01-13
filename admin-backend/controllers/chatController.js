@@ -1,9 +1,9 @@
 // admin-backend/controllers/chatController.js
 
-const mongoose = require('mongoose');
-const Bot = require('../models/Bot');
-const botJob = require('../jobs/botJob');
-const { getUserTenantContext } = require('../services/userContextService');
+const mongoose = require("mongoose");
+const Bot = require("../models/Bot");
+const botJob = require("../jobs/botJob");
+const { getUserTenantContext } = require("../services/userContextService");
 
 // Cache for tenant database connections
 const tenantConnections = new Map();
@@ -14,7 +14,7 @@ const tenantConnections = new Map();
  */
 async function getTenantConnection(databaseUri) {
   if (!databaseUri) {
-    throw new Error('databaseUri is required for tenant database connection');
+    throw new Error("databaseUri is required for tenant database connection");
   }
 
   // Return cached connection if exists
@@ -23,10 +23,12 @@ async function getTenantConnection(databaseUri) {
   }
 
   // Create new connection and await it
-  const conn = await mongoose.createConnection(databaseUri, {
-    maxPoolSize: 10,
-    serverSelectionTimeoutMS: 5000,
-  }).asPromise();
+  const conn = await mongoose
+    .createConnection(databaseUri, {
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+    })
+    .asPromise();
 
   tenantConnections.set(databaseUri, conn);
   return conn;
@@ -37,10 +39,10 @@ async function getTenantConnection(databaseUri) {
  */
 async function getAgentModel(databaseUri) {
   const connection = await getTenantConnection(databaseUri);
-  const AgentSchema = require('../models/Agent');
-  
+  const AgentSchema = require("../models/Agent");
+
   // Return model from tenant connection
-  return connection.models.Agent || connection.model('Agent', AgentSchema);
+  return connection.models.Agent || connection.model("Agent", AgentSchema);
 }
 
 /**
@@ -54,50 +56,59 @@ async function getTenantModels(databaseUri) {
     {
       botId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Bot',
+        ref: "Bot",
         required: true,
-        index: true
+        index: true,
       },
       sessionId: {
         type: String,
         required: true,
         index: true,
-        trim: true
+        trim: true,
       },
       status: {
         type: String,
-        enum: ['bot', 'waiting', 'active', 'queued', 'assigned', 'closed', 'ai', 'human'],
-        default: 'bot',
-        required: true
+        enum: [
+          "bot",
+          "waiting",
+          "active",
+          "queued",
+          "assigned",
+          "closed",
+          "ai",
+          "human",
+        ],
+        default: "bot",
+        required: true,
       },
       assignedAgent: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Agent',
-        default: null
+        ref: "Agent",
+        default: null,
       },
       agentId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Agent',
-        default: null
+        ref: "Agent",
+        default: null,
       },
       requestedAt: {
         type: Date,
-        default: null
+        default: null,
       },
       endedAt: {
         type: Date,
-        default: null
+        default: null,
       },
       createdAt: {
         type: Date,
         default: Date.now,
-        index: true
+        index: true,
       },
       lastActiveAt: {
         type: Date,
         default: Date.now,
-        index: true
-      }
+        index: true,
+      },
     },
     { timestamps: false }
   );
@@ -105,32 +116,32 @@ async function getTenantModels(databaseUri) {
   ConversationSchema.index({ botId: 1, sessionId: 1 }, { unique: true });
   ConversationSchema.index({ status: 1, lastActiveAt: -1 });
 
-  ConversationSchema.pre('save', function(next) {
+  ConversationSchema.pre("save", function (next) {
     this.lastActiveAt = new Date();
     next();
   });
 
-  ConversationSchema.methods.updateActivity = function() {
+  ConversationSchema.methods.updateActivity = function () {
     this.lastActiveAt = new Date();
     return this.save();
   };
 
-  ConversationSchema.statics.findOrCreate = async function(botId, sessionId) {
+  ConversationSchema.statics.findOrCreate = async function (botId, sessionId) {
     let conversation = await this.findOne({ botId, sessionId });
-    
+
     if (!conversation) {
       conversation = new this({
         botId,
         sessionId,
-        status: 'bot',
+        status: "bot",
         createdAt: new Date(),
-        lastActiveAt: new Date()
+        lastActiveAt: new Date(),
       });
       await conversation.save();
     } else {
       await conversation.updateActivity();
     }
-    
+
     return conversation;
   };
 
@@ -139,65 +150,76 @@ async function getTenantModels(databaseUri) {
     {
       conversationId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Conversation',
+        ref: "Conversation",
         required: true,
-        index: true
+        index: true,
       },
       sender: {
         type: String,
-        enum: ['user', 'bot', 'agent'],
-        required: true
+        enum: ["user", "bot", "agent"],
+        required: true,
       },
       text: {
         type: String,
         required: true,
         trim: true,
-        maxlength: 10000
+        maxlength: 10000,
       },
       createdAt: {
         type: Date,
         default: Date.now,
-        index: true
+        index: true,
       },
       sources: {
         type: [String],
-        default: undefined
+        default: undefined,
       },
       metadata: {
         type: mongoose.Schema.Types.Mixed,
-        default: undefined
-      }
+        default: undefined,
+      },
     },
     { timestamps: false }
   );
 
   MessageSchema.index({ conversationId: 1, createdAt: 1 });
 
-  MessageSchema.statics.getConversationMessages = async function(conversationId, limit = 100) {
+  MessageSchema.statics.getConversationMessages = async function (
+    conversationId,
+    limit = 100
+  ) {
     return this.find({ conversationId })
       .sort({ createdAt: 1 })
       .limit(limit)
-      .select('sender text createdAt sources metadata')
+      .select("sender text createdAt sources metadata")
       .lean();
   };
 
-  MessageSchema.statics.createMessage = async function(conversationId, sender, text, options = {}) {
+  MessageSchema.statics.createMessage = async function (
+    conversationId,
+    sender,
+    text,
+    options = {}
+  ) {
     const message = new this({
       conversationId,
       sender,
       text,
       createdAt: new Date(),
       sources: options.sources,
-      metadata: options.metadata
+      metadata: options.metadata,
     });
-    
+
     await message.save();
     return message;
   };
 
   // Return models from tenant connection
-  const Conversation = connection.models.Conversation || connection.model('Conversation', ConversationSchema);
-  const Message = connection.models.Message || connection.model('Message', MessageSchema);
+  const Conversation =
+    connection.models.Conversation ||
+    connection.model("Conversation", ConversationSchema);
+  const Message =
+    connection.models.Message || connection.model("Message", MessageSchema);
 
   return { Conversation, Message };
 }
@@ -205,7 +227,7 @@ async function getTenantModels(databaseUri) {
 /**
  * POST /api/conversation/start
  * Find or create a conversation for a given botId and sessionId
- * 
+ *
  * @body { botId: string, sessionId: string }
  * @returns { success: boolean, conversation: Object }
  */
@@ -217,7 +239,7 @@ exports.startConversation = async (req, res) => {
     if (!botId || !sessionId) {
       return res.status(400).json({
         success: false,
-        error: 'botId and sessionId are required'
+        error: "botId and sessionId are required",
       });
     }
 
@@ -226,14 +248,14 @@ exports.startConversation = async (req, res) => {
     if (!bot) {
       return res.status(404).json({
         success: false,
-        error: 'Bot not found'
+        error: "Bot not found",
       });
     }
 
     if (!bot.isActive) {
       return res.status(403).json({
         success: false,
-        error: 'Bot is inactive'
+        error: "Bot is inactive",
       });
     }
 
@@ -242,7 +264,7 @@ exports.startConversation = async (req, res) => {
     if (!tenantContext.databaseUri) {
       return res.status(503).json({
         success: false,
-        error: 'Tenant database not provisioned'
+        error: "Tenant database not provisioned",
       });
     }
 
@@ -252,26 +274,30 @@ exports.startConversation = async (req, res) => {
     // Find or create conversation in tenant database
     const conversation = await Conversation.findOrCreate(botId, sessionId);
 
-    console.log(`✅ Conversation ${conversation.status === 'ai' ? 'resumed' : 'started'}: ${conversation._id} (session: ${sessionId})`);
+    console.log(
+      `✅ Conversation ${
+        conversation.status === "ai" ? "resumed" : "started"
+      }: ${conversation._id} (session: ${sessionId})`
+    );
 
     res.json({
       success: true,
       conversation: {
-        _id: conversation._id,  // MongoDB _id (used for Socket.IO rooms)
-        id: conversation._id,   // Alias for compatibility
+        _id: conversation._id, // MongoDB _id (used for Socket.IO rooms)
+        id: conversation._id, // Alias for compatibility
         botId: conversation.botId,
         sessionId: conversation.sessionId,
         status: conversation.status,
         createdAt: conversation.createdAt,
-        lastActiveAt: conversation.lastActiveAt
-      }
+        lastActiveAt: conversation.lastActiveAt,
+      },
     });
   } catch (err) {
-    console.error('❌ Failed to start conversation:', err.message);
+    console.error("❌ Failed to start conversation:", err.message);
     res.status(500).json({
       success: false,
-      error: 'Failed to start conversation',
-      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+      error: "Failed to start conversation",
+      details: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
   }
 };
@@ -279,7 +305,7 @@ exports.startConversation = async (req, res) => {
 /**
  * GET /api/conversation/:sessionId/messages
  * Get all messages for a conversation by sessionId
- * 
+ *
  * @param sessionId - The session ID
  * @query botId - The bot ID (required to find conversation)
  * @returns { success: boolean, messages: Array }
@@ -293,7 +319,7 @@ exports.getMessages = async (req, res) => {
     if (!sessionId || !botId) {
       return res.status(400).json({
         success: false,
-        error: 'sessionId and botId are required'
+        error: "sessionId and botId are required",
       });
     }
 
@@ -302,7 +328,7 @@ exports.getMessages = async (req, res) => {
     if (!bot) {
       return res.status(404).json({
         success: false,
-        error: 'Bot not found'
+        error: "Bot not found",
       });
     }
 
@@ -311,12 +337,14 @@ exports.getMessages = async (req, res) => {
     if (!tenantContext.databaseUri) {
       return res.status(503).json({
         success: false,
-        error: 'Tenant database not provisioned'
+        error: "Tenant database not provisioned",
       });
     }
 
     // Load models from tenant database
-    const { Conversation, Message } = await getTenantModels(tenantContext.databaseUri);
+    const { Conversation, Message } = await getTenantModels(
+      tenantContext.databaseUri
+    );
 
     // Find conversation in tenant database
     const conversation = await Conversation.findOne({ botId, sessionId });
@@ -326,34 +354,36 @@ exports.getMessages = async (req, res) => {
       return res.json({
         success: true,
         messages: [],
-        conversationId: null
+        conversationId: null,
       });
     }
 
     // Get messages for this conversation from tenant database
     const messages = await Message.getConversationMessages(conversation._id);
 
-    console.log(`✅ Retrieved ${messages.length} messages for conversation ${conversation._id}`);
+    console.log(
+      `✅ Retrieved ${messages.length} messages for conversation ${conversation._id}`
+    );
 
     res.json({
       success: true,
-      messages: messages.map(msg => ({
+      messages: messages.map((msg) => ({
         id: msg._id,
         sender: msg.sender,
         text: msg.text,
         createdAt: msg.createdAt,
         sources: msg.sources,
-        metadata: msg.metadata
+        metadata: msg.metadata,
       })),
       conversationId: conversation._id,
-      conversationStatus: conversation.status
+      conversationStatus: conversation.status,
     });
   } catch (err) {
-    console.error('❌ Failed to get messages:', err.message);
+    console.error("❌ Failed to get messages:", err.message);
     res.status(500).json({
       success: false,
-      error: 'Failed to retrieve messages',
-      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+      error: "Failed to retrieve messages",
+      details: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
   }
 };
@@ -362,7 +392,7 @@ exports.getMessages = async (req, res) => {
  * POST /api/chat/message
  * Send a message in a conversation
  * Handles both AI and human agent modes
- * 
+ *
  * @body { botId: string, sessionId: string, message: string }
  * @returns { success: boolean, reply: Object, conversation: Object }
  */
@@ -374,7 +404,7 @@ exports.sendMessage = async (req, res) => {
     if (!botId || !sessionId || !message) {
       return res.status(400).json({
         success: false,
-        error: 'botId, sessionId, and message are required'
+        error: "botId, sessionId, and message are required",
       });
     }
 
@@ -383,14 +413,14 @@ exports.sendMessage = async (req, res) => {
     if (!sanitizedMessage) {
       return res.status(400).json({
         success: false,
-        error: 'Message cannot be empty'
+        error: "Message cannot be empty",
       });
     }
 
     if (sanitizedMessage.length > 10000) {
       return res.status(400).json({
         success: false,
-        error: 'Message is too long (max 10000 characters)'
+        error: "Message is too long (max 10000 characters)",
       });
     }
 
@@ -399,14 +429,14 @@ exports.sendMessage = async (req, res) => {
     if (!bot) {
       return res.status(404).json({
         success: false,
-        error: 'Bot not found'
+        error: "Bot not found",
       });
     }
 
     if (!bot.isActive) {
       return res.status(403).json({
         success: false,
-        error: 'Bot is inactive'
+        error: "Bot is inactive",
       });
     }
 
@@ -415,18 +445,24 @@ exports.sendMessage = async (req, res) => {
     if (!tenantContext.databaseUri) {
       return res.status(503).json({
         success: false,
-        error: 'Tenant database not provisioned'
+        error: "Tenant database not provisioned",
       });
     }
 
     // Load models from tenant database
-    const { Conversation, Message } = await getTenantModels(tenantContext.databaseUri);
+    const { Conversation, Message } = await getTenantModels(
+      tenantContext.databaseUri
+    );
 
     // Find or create conversation in tenant database
     const conversation = await Conversation.findOrCreate(botId, sessionId);
 
     // Save user message to tenant database
-    const userMessage = await Message.createMessage(conversation._id, 'user', sanitizedMessage);
+    const userMessage = await Message.createMessage(
+      conversation._id,
+      "user",
+      sanitizedMessage
+    );
 
     // Update conversation activity after user message
     await conversation.updateActivity();
@@ -436,74 +472,88 @@ exports.sendMessage = async (req, res) => {
     // Emit real-time message to all clients in this conversation room
     const io = req.app.locals.io;
     if (io) {
-      io.to(`conversation:${conversation._id}`).emit('message:new', {
+      const conversationIdStr = String(conversation._id);
+      io.to(`conversation:${conversationIdStr}`).emit("message:new", {
         _id: userMessage._id,
-        conversationId: conversation._id,
-        sender: 'user',
+        conversationId: conversationIdStr,
+        sender: "user",
         text: sanitizedMessage,
-        createdAt: userMessage.createdAt
+        createdAt: userMessage.createdAt,
       });
-      console.log(`📡 Emitted user message to conversation:${conversation._id}`);
+      console.log(
+        `📡 Emitted user message to conversation:${conversationIdStr}`
+      );
     }
 
     // CHECK FOR ACTIVE AGENT TAKEOVER - Disable LLM completely
-    if (conversation.status === 'active' && conversation.assignedAgent) {
+    if (conversation.status === "active" && conversation.assignedAgent) {
       // Human agent is actively handling this conversation
       // Save message but DO NOT call LLM - agent will respond manually
-      console.log(`👤 Conversation ${conversation._id} in active agent mode - message forwarded to agent ${conversation.assignedAgent}`);
+      console.log(
+        `👤 Conversation ${conversation._id} in active agent mode - message forwarded to agent ${conversation.assignedAgent}`
+      );
 
       // Return empty response - widget should remain silent while waiting for agent
       return res.json({
         success: true,
         reply: null, // No automated reply - widget will not render anything
         conversation: {
-          _id: conversation._id,  // MongoDB _id (used for Socket.IO rooms)
+          _id: conversation._id, // MongoDB _id (used for Socket.IO rooms)
           id: conversation._id,
           status: conversation.status,
-          assignedAgent: conversation.assignedAgent
+          assignedAgent: conversation.assignedAgent,
         },
-        agentActive: true
+        agentActive: true,
       });
     }
 
     // Handle based on conversation status
-    if (conversation.status === 'human') {
+    if (conversation.status === "human") {
       // Human agent mode - save message but don't call bot
-      const agentMessage = 'A human agent will join shortly.';
-      
+      const agentMessage = "A human agent will join shortly.";
+
       // Save agent placeholder message to tenant database
-      const placeholderMessage = await Message.createMessage(conversation._id, 'agent', agentMessage);
+      const placeholderMessage = await Message.createMessage(
+        conversation._id,
+        "agent",
+        agentMessage
+      );
 
       // Update conversation activity after agent message
       await conversation.updateActivity();
 
-      console.log(`👤 Conversation ${conversation._id} in human mode - agent notified`);
+      console.log(
+        `👤 Conversation ${conversation._id} in human mode - agent notified`
+      );
 
       // Emit real-time placeholder message to all clients in this conversation room
       const io = req.app.locals.io;
       if (io) {
-        io.to(`conversation:${conversation._id}`).emit('message:new', {
+        const conversationIdStr = String(conversation._id);
+        io.to(`conversation:${conversationIdStr}`).emit("message:new", {
           _id: placeholderMessage._id,
-          conversationId: conversation._id,
-          sender: 'agent',
+          conversationId: conversationIdStr,
+          sender: "agent",
           text: agentMessage,
-          createdAt: placeholderMessage.createdAt
+          createdAt: placeholderMessage.createdAt,
         });
-        console.log(`📡 Emitted placeholder message to conversation:${conversation._id}`);
+        console.log(
+          `📡 Emitted placeholder message to conversation:${conversationIdStr}`
+        );
       }
 
       return res.json({
         success: true,
         reply: {
-          sender: 'agent',
+          sender: "agent",
           text: agentMessage,
-          createdAt: new Date()
+          createdAt: new Date(),
         },
         conversation: {
-          _id: conversation._id,  // MongoDB _id (used for Socket.IO rooms)
+          _id: conversation._id, // MongoDB _id (used for Socket.IO rooms)
           id: conversation._id,
-          status: conversation.status
-        }
+          status: conversation.status,
+        },
       });
     }
 
@@ -513,13 +563,16 @@ exports.sendMessage = async (req, res) => {
       if (!bot.vectorStorePath) {
         return res.status(503).json({
           success: false,
-          error: 'Bot vector store not initialized. Please scrape websites first.',
-          errorType: 'SERVICE_UNAVAILABLE',
-          widgetError: true
+          error:
+            "Bot vector store not initialized. Please scrape websites first.",
+          errorType: "SERVICE_UNAVAILABLE",
+          widgetError: true,
         });
       }
 
-      console.log(`🧠 Forwarding message to RAG bot for conversation ${conversation._id}`);
+      console.log(
+        `🧠 Forwarding message to RAG bot for conversation ${conversation._id}`
+      );
 
       // Call bot service
       const botResult = await botJob.runBotForUser(
@@ -529,7 +582,7 @@ exports.sendMessage = async (req, res) => {
           botEndpoint: tenantContext.botEndpoint,
           resourceId: tenantContext.resourceId,
           vectorStorePath: bot.vectorStorePath,
-          databaseUri: tenantContext.databaseUri
+          databaseUri: tenantContext.databaseUri,
         },
         sanitizedMessage,
         { sessionId }
@@ -538,15 +591,15 @@ exports.sendMessage = async (req, res) => {
       // Save bot response to tenant database
       const botMessage = await Message.createMessage(
         conversation._id,
-        'bot',
+        "bot",
         botResult.answer,
         {
           sources: botResult.sources,
           metadata: {
             bot_session_id: botResult.session_id,
             confidence: botResult.confidence,
-            resource_id: tenantContext.resourceId
-          }
+            resource_id: tenantContext.resourceId,
+          },
         }
       );
 
@@ -558,39 +611,46 @@ exports.sendMessage = async (req, res) => {
       // Emit real-time bot message to all clients in this conversation room
       const io = req.app.locals.io;
       if (io) {
-        io.to(`conversation:${conversation._id}`).emit('message:new', {
+        const conversationIdStr = String(conversation._id);
+        io.to(`conversation:${conversationIdStr}`).emit("message:new", {
           _id: botMessage._id,
-          conversationId: conversation._id,
-          sender: 'bot',
+          conversationId: conversationIdStr,
+          sender: "bot",
           text: botResult.answer,
           createdAt: botMessage.createdAt,
-          sources: botResult.sources
+          sources: botResult.sources,
         });
-        console.log(`📡 Emitted bot message to conversation:${conversation._id}`);
+        console.log(
+          `📡 Emitted bot message to conversation:${conversationIdStr}`
+        );
       }
 
       return res.json({
         success: true,
         reply: {
-          sender: 'bot',
+          sender: "bot",
           text: botResult.answer,
           createdAt: botMessage.createdAt,
-          sources: botResult.sources
+          sources: botResult.sources,
         },
         conversation: {
-          _id: conversation._id,  // MongoDB _id (used for Socket.IO rooms)
+          _id: conversation._id, // MongoDB _id (used for Socket.IO rooms)
           id: conversation._id,
-          status: conversation.status
-        }
+          status: conversation.status,
+        },
       });
     } catch (botError) {
-      console.error(`❌ Bot error for conversation ${conversation._id}:`, botError.message);
+      console.error(
+        `❌ Bot error for conversation ${conversation._id}:`,
+        botError.message
+      );
 
       // Save error message to tenant database
-      const errorMessage = 'I apologize, but I encountered an error processing your request. Please try again.';
+      const errorMessage =
+        "I apologize, but I encountered an error processing your request. Please try again.";
       const errorMsg = await Message.createMessage(
         conversation._id,
-        'bot',
+        "bot",
         errorMessage,
         { metadata: { error: true, errorMessage: botError.message } }
       );
@@ -601,44 +661,51 @@ exports.sendMessage = async (req, res) => {
       // Emit error message to conversation room
       const io = req.app.locals.io;
       if (io) {
-        io.to(`conversation:${conversation._id}`).emit('message:new', {
+        const conversationIdStr = String(conversation._id);
+        io.to(`conversation:${conversationIdStr}`).emit("message:new", {
           _id: errorMsg._id,
-          conversationId: conversation._id,
-          sender: 'bot',
+          conversationId: conversationIdStr,
+          sender: "bot",
           text: errorMessage,
           createdAt: errorMsg.createdAt,
-          isError: true
+          isError: true,
         });
-        console.log(`📡 Emitted error message to conversation:${conversation._id}`);
+        console.log(
+          `📡 Emitted error message to conversation:${conversationIdStr}`
+        );
       }
 
       // Determine appropriate status and error message
       let statusCode = botError.statusCode || 500;
       let userMessage = errorMessage;
 
-      if (botError.message.includes('Cannot connect') || botError.code === 'ECONNREFUSED') {
+      if (
+        botError.message.includes("Cannot connect") ||
+        botError.code === "ECONNREFUSED"
+      ) {
         statusCode = 503;
-        userMessage = 'Bot service is currently unavailable. Please try again later.';
+        userMessage =
+          "Bot service is currently unavailable. Please try again later.";
       }
 
       return res.status(statusCode).json({
         success: false,
         error: userMessage,
-        errorType: 'BOT_ERROR',
+        errorType: "BOT_ERROR",
         widgetError: true,
         conversation: {
-          _id: conversation._id,  // MongoDB _id (used for Socket.IO rooms)
+          _id: conversation._id, // MongoDB _id (used for Socket.IO rooms)
           id: conversation._id,
-          status: conversation.status
-        }
+          status: conversation.status,
+        },
       });
     }
   } catch (err) {
-    console.error('❌ Failed to send message:', err.message);
+    console.error("❌ Failed to send message:", err.message);
     res.status(500).json({
       success: false,
-      error: 'Failed to send message',
-      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+      error: "Failed to send message",
+      details: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
   }
 };
@@ -646,7 +713,7 @@ exports.sendMessage = async (req, res) => {
 /**
  * PUT /api/conversation/:conversationId/status
  * Update conversation status (AI <-> Human handoff)
- * 
+ *
  * @param conversationId - The conversation ID
  * @body { status: 'ai' | 'human' }
  * @returns { success: boolean, conversation: Object }
@@ -660,14 +727,14 @@ exports.updateConversationStatus = async (req, res) => {
     if (!conversationId || !botId) {
       return res.status(400).json({
         success: false,
-        error: 'conversationId and botId are required'
+        error: "conversationId and botId are required",
       });
     }
 
-    if (!status || !['ai', 'human'].includes(status)) {
+    if (!status || !["ai", "human"].includes(status)) {
       return res.status(400).json({
         success: false,
-        error: 'status must be either "ai" or "human"'
+        error: 'status must be either "ai" or "human"',
       });
     }
 
@@ -676,7 +743,7 @@ exports.updateConversationStatus = async (req, res) => {
     if (!bot) {
       return res.status(404).json({
         success: false,
-        error: 'Bot not found'
+        error: "Bot not found",
       });
     }
 
@@ -685,7 +752,7 @@ exports.updateConversationStatus = async (req, res) => {
     if (!tenantContext.databaseUri) {
       return res.status(503).json({
         success: false,
-        error: 'Tenant database not provisioned'
+        error: "Tenant database not provisioned",
       });
     }
 
@@ -698,7 +765,7 @@ exports.updateConversationStatus = async (req, res) => {
     if (!conversation) {
       return res.status(404).json({
         success: false,
-        error: 'Conversation not found'
+        error: "Conversation not found",
       });
     }
 
@@ -706,7 +773,9 @@ exports.updateConversationStatus = async (req, res) => {
     conversation.status = status;
     await conversation.save();
 
-    console.log(`✅ Conversation ${conversationId} status updated to: ${status}`);
+    console.log(
+      `✅ Conversation ${conversationId} status updated to: ${status}`
+    );
 
     res.json({
       success: true,
@@ -715,15 +784,15 @@ exports.updateConversationStatus = async (req, res) => {
         botId: conversation.botId,
         sessionId: conversation.sessionId,
         status: conversation.status,
-        lastActiveAt: conversation.lastActiveAt
-      }
+        lastActiveAt: conversation.lastActiveAt,
+      },
     });
   } catch (err) {
-    console.error('❌ Failed to update conversation status:', err.message);
+    console.error("❌ Failed to update conversation status:", err.message);
     res.status(500).json({
       success: false,
-      error: 'Failed to update conversation status',
-      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+      error: "Failed to update conversation status",
+      details: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
   }
 };
@@ -743,7 +812,7 @@ exports.requestAgentByConversationId = async (req, res) => {
     if (!id || !botId) {
       return res.status(400).json({
         success: false,
-        error: 'conversationId and botId are required'
+        error: "conversationId and botId are required",
       });
     }
 
@@ -752,7 +821,7 @@ exports.requestAgentByConversationId = async (req, res) => {
     if (!bot) {
       return res.status(404).json({
         success: false,
-        error: 'Bot not found'
+        error: "Bot not found",
       });
     }
 
@@ -761,7 +830,7 @@ exports.requestAgentByConversationId = async (req, res) => {
     if (!tenantContext.databaseUri) {
       return res.status(503).json({
         success: false,
-        error: 'Tenant database not provisioned'
+        error: "Tenant database not provisioned",
       });
     }
 
@@ -774,12 +843,12 @@ exports.requestAgentByConversationId = async (req, res) => {
     if (!conversation) {
       return res.status(404).json({
         success: false,
-        error: 'Conversation not found'
+        error: "Conversation not found",
       });
     }
 
     // Set conversation to queued status and clear assigned agent
-    conversation.status = 'queued';
+    conversation.status = "queued";
     conversation.assignedAgent = null;
     await conversation.save();
 
@@ -787,21 +856,22 @@ exports.requestAgentByConversationId = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Your request has been queued. An agent will be with you shortly.',
+      message:
+        "Your request has been queued. An agent will be with you shortly.",
       conversation: {
         id: conversation._id,
         botId: conversation.botId,
         sessionId: conversation.sessionId,
         status: conversation.status,
-        lastActiveAt: conversation.lastActiveAt
-      }
+        lastActiveAt: conversation.lastActiveAt,
+      },
     });
   } catch (err) {
-    console.error('❌ Failed to request agent:', err.message);
+    console.error("❌ Failed to request agent:", err.message);
     res.status(500).json({
       success: false,
-      error: 'Failed to request agent',
-      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+      error: "Failed to request agent",
+      details: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
   }
 };
@@ -819,7 +889,7 @@ exports.requestAgent = async (req, res) => {
     if (!sessionId || !botId) {
       return res.status(400).json({
         success: false,
-        error: 'sessionId and botId are required'
+        error: "sessionId and botId are required",
       });
     }
 
@@ -828,14 +898,14 @@ exports.requestAgent = async (req, res) => {
     if (!bot) {
       return res.status(404).json({
         success: false,
-        error: 'Bot not found'
+        error: "Bot not found",
       });
     }
 
     if (!bot.isActive) {
       return res.status(403).json({
         success: false,
-        error: 'Bot is not active'
+        error: "Bot is not active",
       });
     }
 
@@ -844,24 +914,26 @@ exports.requestAgent = async (req, res) => {
     if (!tenantContext.databaseUri) {
       return res.status(503).json({
         success: false,
-        error: 'Tenant database not provisioned'
+        error: "Tenant database not provisioned",
       });
     }
 
     // Load Agent model to check availability
     const Agent = await getAgentModel(tenantContext.databaseUri);
-    
+
     // Check agent availability
-    const availableCount = await Agent.countDocuments({ status: 'available' });
-    const busyCount = await Agent.countDocuments({ status: 'busy' });
-    
+    const availableCount = await Agent.countDocuments({ status: "available" });
+    const busyCount = await Agent.countDocuments({ status: "busy" });
+
     // If no agents are online at all (neither available nor busy)
     if (availableCount === 0 && busyCount === 0) {
-      console.log(`📞 Agent request denied - no agents online (session: ${sessionId})`);
+      console.log(
+        `📞 Agent request denied - no agents online (session: ${sessionId})`
+      );
       return res.json({
         ok: false,
-        state: 'offline',
-        message: 'No agents are currently available.'
+        state: "offline",
+        message: "No agents are currently available.",
       });
     }
 
@@ -874,39 +946,41 @@ exports.requestAgent = async (req, res) => {
     if (!conversation) {
       return res.status(404).json({
         success: false,
-        error: 'Conversation not found'
+        error: "Conversation not found",
       });
     }
 
     // Update conversation to waiting status
-    conversation.status = 'waiting';
+    conversation.status = "waiting";
     conversation.requestedAt = new Date();
     conversation.assignedAgent = null;
     await conversation.save();
 
-    console.log(`📞 Agent requested for conversation ${conversation._id} (session: ${sessionId})`);
+    console.log(
+      `📞 Agent requested for conversation ${conversation._id} (session: ${sessionId})`
+    );
 
     // If all agents are busy
     if (availableCount === 0 && busyCount > 0) {
       return res.json({
         ok: true,
-        state: 'busy',
-        message: 'All agents are busy. Please wait while we connect you.'
+        state: "busy",
+        message: "All agents are busy. Please wait while we connect you.",
       });
     }
 
     // If at least one agent is available
     return res.json({
       ok: true,
-      state: 'available',
-      message: 'Connecting you to a human agent…'
+      state: "available",
+      message: "Connecting you to a human agent…",
     });
   } catch (err) {
-    console.error('❌ Failed to request agent:', err.message);
+    console.error("❌ Failed to request agent:", err.message);
     res.status(500).json({
       success: false,
-      error: 'Failed to request agent',
-      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+      error: "Failed to request agent",
+      details: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
   }
 };
@@ -924,7 +998,7 @@ exports.endSession = async (req, res) => {
     if (!sessionId || !botId) {
       return res.status(400).json({
         success: false,
-        error: 'sessionId and botId are required'
+        error: "sessionId and botId are required",
       });
     }
 
@@ -933,7 +1007,7 @@ exports.endSession = async (req, res) => {
     if (!bot) {
       return res.status(404).json({
         success: false,
-        error: 'Bot not found'
+        error: "Bot not found",
       });
     }
 
@@ -942,7 +1016,7 @@ exports.endSession = async (req, res) => {
     if (!tenantContext.databaseUri) {
       return res.status(503).json({
         success: false,
-        error: 'Tenant database not provisioned'
+        error: "Tenant database not provisioned",
       });
     }
 
@@ -956,35 +1030,36 @@ exports.endSession = async (req, res) => {
       // No conversation found - this is ok, just return success
       return res.json({
         success: true,
-        message: 'No active conversation to close'
+        message: "No active conversation to close",
       });
     }
 
     // Only close if not already closed
-    if (conversation.status !== 'closed') {
-      conversation.status = 'closed';
+    if (conversation.status !== "closed") {
+      conversation.status = "closed";
       conversation.endedAt = new Date();
       await conversation.save();
 
-      console.log(`🔒 Session ended for conversation ${conversation._id} (session: ${sessionId})`);
+      console.log(
+        `🔒 Session ended for conversation ${conversation._id} (session: ${sessionId})`
+      );
     }
 
     res.json({
       success: true,
-      message: 'Session ended successfully',
+      message: "Session ended successfully",
       conversation: {
         id: conversation._id,
         status: conversation.status,
-        endedAt: conversation.endedAt
-      }
+        endedAt: conversation.endedAt,
+      },
     });
   } catch (err) {
-    console.error('❌ Failed to end session:', err.message);
+    console.error("❌ Failed to end session:", err.message);
     res.status(500).json({
       success: false,
-      error: 'Failed to end session',
-      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+      error: "Failed to end session",
+      details: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
   }
 };
-

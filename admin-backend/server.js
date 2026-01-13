@@ -256,7 +256,8 @@ io.on('connection', (socket) => {
       return;
     }
     
-    const roomName = `conversation:${conversationId}`;
+    // Convert to string to ensure consistency (handles both ObjectId and string)
+    const roomName = `conversation:${String(conversationId)}`;
     socket.join(roomName);
     console.log(`📥 Socket ${socket.id} joined room: ${roomName}`);
   });
@@ -265,7 +266,8 @@ io.on('connection', (socket) => {
   socket.on('leave:conversation', (conversationId) => {
     if (!conversationId) return;
     
-    const roomName = `conversation:${conversationId}`;
+    // Convert to string to ensure consistency
+    const roomName = `conversation:${String(conversationId)}`;
     socket.leave(roomName);
     console.log(`📤 Socket ${socket.id} left room: ${roomName}`);
   });
