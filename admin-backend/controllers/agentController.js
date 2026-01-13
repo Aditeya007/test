@@ -663,7 +663,7 @@ const replyToConversation = async (req, res) => {
 
     const MessageSchema = new mongoose.Schema({
       conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: true },
-      sender: { type: String, enum: ['user', 'bot', 'agent'], required: true },
+      sender: { type: String, enum: ['user', 'bot', 'agent', 'human'], required: true },
       text: { type: String, required: true },
       createdAt: { type: Date, default: Date.now }
     });
@@ -692,9 +692,10 @@ const replyToConversation = async (req, res) => {
     }
 
     // Create and save message
+    // Use sender='human' so widget displays agent replies correctly
     const newMessage = new Message({
-      conversationId: id,
-      sender: 'agent',
+      conversationId: conversation._id,
+      sender: 'human',
       text: message.trim(),
       createdAt: new Date()
     });
