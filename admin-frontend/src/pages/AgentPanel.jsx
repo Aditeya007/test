@@ -222,15 +222,6 @@ function AgentPanel() {
     };
   }, []); // Run once on mount
 
-  // Auto-join room whenever selectedConversationId changes
-  useEffect(() => {
-    if (!selectedConversationId) return;
-    if (socketRef.current && socketRef.current.connected) {
-      console.log("AgentPanel: Auto-joining room for", selectedConversationId);
-      joinConversationRoom(selectedConversationId);
-    }
-  }, [selectedConversationId, joinConversationRoom]);
-
   // Join conversation room when selecting a conversation
   const joinConversationRoom = useCallback((conversationId) => {
     if (!socketRef.current || !socketRef.current.connected) {
@@ -246,6 +237,15 @@ function AgentPanel() {
     console.log('Agent Panel: Joining conversation room:', conversationId);
     socketRef.current.emit('join:conversation', conversationId);
   }, []);
+
+  // Auto-join room whenever selectedConversationId changes
+  useEffect(() => {
+    if (!selectedConversationId) return;
+    if (socketRef.current && socketRef.current.connected) {
+      console.log("AgentPanel: Auto-joining room for", selectedConversationId);
+      joinConversationRoom(selectedConversationId);
+    }
+  }, [selectedConversationId, joinConversationRoom]);
 
   // Leave conversation room
   const leaveConversationRoom = useCallback((conversationId) => {
