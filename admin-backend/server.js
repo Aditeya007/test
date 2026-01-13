@@ -76,29 +76,37 @@ console.log('🔌 Socket.IO server initialized on same HTTP server as Express');
 const jwt = require('jsonwebtoken');
 
 // Add JWT authentication middleware to Socket.IO
-// This middleware verifies the token in the handshake auth object
+// This middleware allows anonymous widget connections and verifies agent tokens
 io.use((socket, next) => {
   try {
     const token = socket.handshake.auth.token;
     
+    // If no token provided, allow connection as anonymous widget
     if (!token) {
-      console.warn(`⚠️  Socket ${socket.id} attempted connection without token`);
-      return next(new Error('Authentication error: No token provided'));
+      socket.user = { role: 'widget' };
+      console.log(`✅ Socket ${socket.id} connected as widget (anonymous)`);
+      return next();
     }
     
-    // Verify token with explicit algorithm specification
-    const decoded = jwt.verify(token, process.env.JWT_SECRET, {
-      algorithms: ['HS256'] // Prevent algorithm confusion attacks
-    });
-    
-    // Attach decoded token info to socket object for later use
-    socket.user = decoded;
-    
-    console.log(`✅ Socket ${socket.id} authenticated as user ${decoded.username || decoded._id}`);
-    next();
+    // Token exists - verify it
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+        algorithms: ['HS256'] // Prevent algorithm confusion attacks
+      });
+      
+      // Attach decoded token info to socket object for later use
+      socket.user = decoded;
+      
+      console.log(`✅ Socket ${socket.id} authenticated as user ${decoded.username || decoded._id} (role: ${decoded.role})`);
+      next();
+    } catch (verifyError) {
+      // Token was provided but is invalid - reject the connection
+      console.error(`❌ Socket ${socket.id} authentication failed:`, verifyError.message);
+      next(new Error(`Authentication error: ${verifyError.message}`));
+    }
   } catch (error) {
-    console.error(`❌ Socket authentication error:`, error.message);
-    next(new Error(`Authentication error: ${error.message}`));
+    console.error(`❌ Socket connection error:`, error.message);
+    next(new Error(`Connection error: ${error.message}`));
   }
 });
 
