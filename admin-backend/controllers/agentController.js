@@ -941,9 +941,13 @@ const closeConversation = async (req, res) => {
     // Get the assigned agent (if any)
     const assignedAgentId = conversation.assignedAgent;
 
-    // Close conversation
-    conversation.status = 'closed';
+    // Close conversation and return to bot mode
+    // Set status to 'bot' so LLM becomes active again
+    conversation.status = 'bot';
+    conversation.assignedAgent = null;
+    conversation.agentId = null;
     conversation.lastActiveAt = new Date();
+    conversation.endedAt = new Date();
     await conversation.save();
 
     // If there was an assigned agent, mark them as available

@@ -432,6 +432,25 @@ exports.sendMessage = async (req, res) => {
 
     console.log(`💬 User message saved for conversation ${conversation._id}`);
 
+    // CHECK FOR ACTIVE AGENT TAKEOVER - Disable LLM completely
+    if (conversation.status === 'active' && conversation.assignedAgent) {
+      // Human agent is actively handling this conversation
+      // Save message but DO NOT call LLM - agent will respond manually
+      console.log(`👤 Conversation ${conversation._id} in active agent mode - message forwarded to agent ${conversation.assignedAgent}`);
+
+      return res.json({
+        success: true,
+        reply: null, // No automated reply when agent is active
+        conversation: {
+          id: conversation._id,
+          status: conversation.status,
+          assignedAgent: conversation.assignedAgent
+        },
+        agentActive: true,
+        message: 'Your message has been forwarded to the agent'
+      });
+    }
+
     // Handle based on conversation status
     if (conversation.status === 'human') {
       // Human agent mode - save message but don't call bot
