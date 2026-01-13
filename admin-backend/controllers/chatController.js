@@ -438,16 +438,16 @@ exports.sendMessage = async (req, res) => {
       // Save message but DO NOT call LLM - agent will respond manually
       console.log(`👤 Conversation ${conversation._id} in active agent mode - message forwarded to agent ${conversation.assignedAgent}`);
 
+      // Return empty response - widget should remain silent while waiting for agent
       return res.json({
         success: true,
-        reply: null, // No automated reply when agent is active
+        reply: null, // No automated reply - widget will not render anything
         conversation: {
           id: conversation._id,
           status: conversation.status,
           assignedAgent: conversation.assignedAgent
         },
-        agentActive: true,
-        message: 'Your message has been forwarded to the agent'
+        agentActive: true
       });
     }
 
