@@ -425,12 +425,25 @@ exports.sendMessage = async (req, res) => {
     const conversation = await Conversation.findOrCreate(botId, sessionId);
 
     // Save user message to tenant database
-    await Message.createMessage(conversation._id, 'user', sanitizedMessage);
+    const userMessage = await Message.createMessage(conversation._id, 'user', sanitizedMessage);
 
     // Update conversation activity after user message
     await conversation.updateActivity();
 
     console.log(`💬 User message saved for conversation ${conversation._id}`);
+
+    // Emit real-time message to all clients in this conversation room
+    const io = req.app.locals.io;
+    if (io) {
+      io.to(`conversation:${conversation._id}`).emit('message:new', {
+        _id: userMessage._id,
+        conversationId: conversation._id,
+        sender: 'user',
+        text: sanitizedMessage,
+        createdAt: userMessage.createdAt
+      });
+      console.log(`📡 Emitted user message to conversation:${conversation._id}`);
+    }
 
     // CHECK FOR ACTIVE AGENT TAKEOVER - Disable LLM completely
     if (conversation.status === 'active' && conversation.assignedAgent) {
@@ -525,6 +538,20 @@ exports.sendMessage = async (req, res) => {
       await conversation.updateActivity();
 
       console.log(`🤖 Bot response saved for conversation ${conversation._id}`);
+
+      // Emit real-time bot message to all clients in this conversation room
+      const io = req.app.locals.io;
+      if (io) {
+        io.to(`conversation:${conversation._id}`).emit('message:new', {
+          _id: botMessage._id,
+          conversationId: conversation._id,
+          sender: 'bot',
+          text: botResult.answer,
+          createdAt: botMessage.createdAt,
+          sources: botResult.sources
+        });
+        console.log(`📡 Emitted bot message to conversation:${conversation._id}`);
+      }
 
       return res.json({
         success: true,

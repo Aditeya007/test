@@ -50,7 +50,25 @@ if (process.env.NODE_ENV === 'production' && process.env.CORS_ORIGIN === '*') {
 }
 
 const app = express();
+const http = require('http');
+const { Server } = require('socket.io');
+
 const PORT = process.env.PORT || 5000;
+
+// Create HTTP server for both Express and Socket.IO
+const httpServer = http.createServer(app);
+
+// Initialize Socket.IO with CORS
+const io = new Server(httpServer, {
+  cors: {
+    origin: '*', // Match Express CORS policy for widget embedding
+    methods: ['GET', 'POST'],
+    credentials: false
+  },
+  transports: ['websocket', 'polling'] // Support both for compatibility
+});
+
+console.log('🔌 Socket.IO server initialized');
 
 // =============================================================================
 // TRUST PROXY CONFIGURATION
@@ -226,9 +244,44 @@ app.use((err, req, res, next) => {
 });
 
 // =============================================================================
+// SOCKET.IO EVENT HANDLERS
+// =============================================================================
+io.on('connection', (socket) => {
+  console.log(`🔌 Socket connected: ${socket.id}`);
+
+  // Handle joining a conversation room
+  socket.on('join:conversation', (conversationId) => {
+    if (!conversationId) {
+      console.warn(`⚠️  Socket ${socket.id} attempted to join without conversationId`);
+      return;
+    }
+    
+    const roomName = `conversation:${conversationId}`;
+    socket.join(roomName);
+    console.log(`📥 Socket ${socket.id} joined room: ${roomName}`);
+  });
+
+  // Handle leaving a conversation room
+  socket.on('leave:conversation', (conversationId) => {
+    if (!conversationId) return;
+    
+    const roomName = `conversation:${conversationId}`;
+    socket.leave(roomName);
+    console.log(`📤 Socket ${socket.id} left room: ${roomName}`);
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`🔌 Socket disconnected: ${socket.id}`);
+  });
+});
+
+// Export io instance for use in controllers
+app.locals.io = io;
+
+// =============================================================================
 // SERVER STARTUP
 // =============================================================================
-const server = app.listen(PORT, () => {
+const server = httpServer.listen(PORT, () => {
   console.log('='.repeat(70));
   console.log(`🚀 Admin Backend Server Started`);
   console.log(`📡 Port: ${PORT}`);
@@ -237,6 +290,7 @@ const server = app.listen(PORT, () => {
   console.log(`🤖 FastAPI Bot URL: ${process.env.FASTAPI_BOT_URL || 'NOT SET'}`);
   console.log(`🛡️  CORS: ⚠️  OPEN TO ALL ORIGINS (*) - Widget embedding enabled`);
   console.log(`🔒 Security: Helmet enabled, Rate limiting active`);
+  console.log(`💬 Socket.IO: Real-time messaging enabled`);
   console.log('='.repeat(70));
   
   // Warn if critical optional configs are missing

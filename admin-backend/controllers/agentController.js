@@ -707,6 +707,20 @@ const replyToConversation = async (req, res) => {
 
     console.log(`💬 Agent ${agentId} sent message to conversation ${id}`);
 
+    // Emit real-time agent message to all clients in this conversation room
+    // Access io from the Express app via req.app.locals
+    const io = req.app.locals.io;
+    if (io) {
+      io.to(`conversation:${conversation._id}`).emit('message:new', {
+        _id: newMessage._id,
+        conversationId: conversation._id,
+        sender: 'agent',
+        text: newMessage.text,
+        createdAt: newMessage.createdAt
+      });
+      console.log(`📡 Emitted agent message to conversation:${conversation._id}`);
+    }
+
     res.json({
       message: 'Message sent successfully',
       data: {
