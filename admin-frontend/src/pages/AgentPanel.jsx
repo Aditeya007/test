@@ -105,8 +105,8 @@ function AgentPanel() {
           return;
         }
 
-        // Connect to Socket.IO server (same origin)
-        const socketUrl = window.location.origin;
+        // Connect to Socket.IO server on backend port (5000)
+        const socketUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
         
         socketRef.current = window.io(socketUrl, {
           auth: {

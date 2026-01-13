@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useChatWidget } from '../../context/ChatWidgetContext';
 import useApi from '../../hooks/useApi';
+import io from 'socket.io-client';
 import './ChatWidget.css';
 
 // Helper component for the close icon in the header
@@ -22,7 +23,9 @@ const ChatWidget = ({ toggleChatbot }) => {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [sessionId, setSessionId] = useState('');
+    const [conversationId, setConversationId] = useState(null);
     const messagesEndRef = useRef(null);
+    const socketRef = useRef(null);
 
     const isUser = user?.role === 'user';
     const activeTenantId = activeTenant?.id || activeTenant?._id || null;
@@ -63,6 +66,77 @@ const ChatWidget = ({ toggleChatbot }) => {
             behavior: "smooth"
         });
     }, [messages]);
+
+    // Socket.IO connection effect - listen for real-time messages
+    useEffect(() => {
+        if (!conversationId) {
+            // No conversation yet, can't connect
+            return;
+        }
+
+        // Initialize socket connection to backend
+        const socketUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+        socketRef.current = io(socketUrl, {
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+        });
+
+        socketRef.current.on('connect', () => {
+            console.log('ChatWidget: Socket connected:', socketRef.current.id);
+            // Join the conversation room
+            socketRef.current.emit('join:conversation', conversationId);
+        });
+
+        socketRef.current.on('disconnect', (reason) => {
+            console.log('ChatWidget: Socket disconnected:', reason);
+        });
+
+        // Listen for new messages
+        socketRef.current.on('message:new', (message) => {
+            console.log('ChatWidget: Received real-time message:', message);
+            
+            // Check if message is for this conversation
+            if (message.conversationId === conversationId) {
+                setMessages(prev => {
+                    // Check if message already exists to prevent duplicates
+                    const exists = prev.some(msg => 
+                        msg.id === message._id || 
+                        msg.id === message.id ||
+                        (msg.text === message.text && msg.sender === message.sender && 
+                         Math.abs(new Date(msg.createdAt || Date.now()) - new Date(message.createdAt)) < 1000)
+                    );
+                    
+                    if (exists) {
+                        console.log('ChatWidget: Skipping duplicate message');
+                        return prev;
+                    }
+                    
+                    // Add new message
+                    return [...prev, {
+                        id: message._id || message.id || `msg_${Date.now()}`,
+                        text: message.text || message.content,
+                        sender: message.sender,
+                        createdAt: message.createdAt
+                    }];
+                });
+            }
+        });
+
+        socketRef.current.on('connect_error', (error) => {
+            console.error('ChatWidget: Socket connection error:', error);
+        });
+
+        // Cleanup on unmount or when conversationId changes
+        return () => {
+            if (socketRef.current) {
+                console.log('ChatWidget: Disconnecting socket');
+                socketRef.current.disconnect();
+                socketRef.current = null;
+            }
+        };
+    }, [conversationId]);
 
     // This is the function that sends the request to the backend.
     const handleSend = useCallback(async () => {
@@ -117,6 +191,12 @@ const ChatWidget = ({ toggleChatbot }) => {
         if (result.success && result.data?.answer) {
             if (result.data.session_id) {
                 setSessionId(result.data.session_id);
+            }
+
+            // Extract and store conversationId for socket connection
+            if (result.data.conversationId || result.data.conversation?._id) {
+                const convId = result.data.conversationId || result.data.conversation._id;
+                setConversationId(convId);
             }
 
             setMessages(prev => [...prev, { 
