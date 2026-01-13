@@ -9,9 +9,10 @@ import { API_BASE_URL } from '../config';
  * @returns {Promise<Object>} Response data
  * @throws {Error} API error with message
  */
-export async function apiRequest(endpoint, { method = 'GET', token, data, params, ...custom } = {}) {
+export async function apiRequest(endpoint, { method = 'GET', token, data, params, headers: customHeaders, ...custom } = {}) {
   const headers = {
     'Content-Type': 'application/json',
+    ...customHeaders,
     ...(token && { Authorization: `Bearer ${token}` }),
   };
 

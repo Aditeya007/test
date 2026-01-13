@@ -147,8 +147,8 @@ const agentLogin = async (req, res) => {
     // Generate JWT token for agent
     const token = jwt.sign(
       {
-        role: 'agent',
         agentId: foundAgent._id.toString(),
+        username: foundAgent.username,
         tenantId: foundTenant._id.toString()
       },
       process.env.JWT_SECRET,

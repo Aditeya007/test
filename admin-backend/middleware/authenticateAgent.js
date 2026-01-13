@@ -49,10 +49,9 @@ const getAgentModel = async (databaseUri) => {
  * 
  * Token payload structure:
  * {
- *   role: "agent",
  *   agentId: <agent_id>,
- *   tenantId: <user_id>,
- *   username: <agent_username>
+ *   username: <agent_username>,
+ *   tenantId: <user_id>
  * }
  * 
  * Usage: router.get('/agent-protected', authenticateAgent, controller.method)
@@ -96,11 +95,11 @@ const authenticateAgent = async (req, res, next) => {
       algorithms: ['HS256'] // Prevent algorithm confusion attacks
     });
     
-    // Verify this is an agent token (not admin/user)
-    if (decoded.role !== 'agent') {
+    // Validate required JWT fields
+    if (!decoded.agentId || !decoded.tenantId) {
       return res.status(403).json({ 
-        error: 'Invalid token type',
-        message: 'This endpoint requires agent authentication'
+        error: 'Invalid token payload',
+        message: 'Token is missing required agent information'
       });
     }
     
@@ -126,10 +125,9 @@ const authenticateAgent = async (req, res, next) => {
     
     // Attach agent info to request object for use in controllers
     req.agent = {
-      id: agent._id.toString(),
-      tenantId: tenant._id.toString(),
-      username: agent.username,
-      role: 'agent'
+      agentId: decoded.agentId,
+      tenantId: decoded.tenantId,
+      username: decoded.username
     };
     
     next();
