@@ -41,7 +41,8 @@ function AgentPanel() {
   const agentUsername = agentData?.username || decodedToken?.username || 'Agent';
   
   // Helper to call backend mounted at exact '/agents' path.
-  const getBackendBase = () => API_BASE_URL;
+  const getBackendBase = () => API_BASE_URL.replace(/\/api\/?$/, '');
+
 
   const agentApiRequest = async (path, { method = 'GET', token: reqToken, data, params, ...custom } = {}) => {
     const base = getBackendBase();
@@ -79,7 +80,7 @@ function AgentPanel() {
       throw new Error(errorMessage);
     }
 
-    return result;
+    return result;  
   };
   
   // Conversations state

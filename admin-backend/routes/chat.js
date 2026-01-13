@@ -43,7 +43,7 @@ router.get('/conversation/:sessionId/messages', chatController.getMessages);
  * - status === "ai": Forward to RAG bot, save and return bot response
  * - status === "human": Save message, return agent placeholder
  */
-router.post('/message', botLimiter, chatController.sendMessage);
+router.post('/chat/message', botLimiter, chatController.sendMessage);
 
 /**
  * @route   PUT /api/conversation/:conversationId/status
@@ -80,7 +80,7 @@ router.post('/conversations/:id/request-agent', chatController.requestAgentByCon
  * Sets conversation status to 'waiting' for agent pickup.
  * Triggered when user clicks "Talk to Human" button in widget.
  */
-router.post('/request-agent', chatController.requestAgent);
+router.post('/chat/request-agent', chatController.requestAgent);
 
 /**
  * @route   POST /api/chat/end-session
@@ -91,6 +91,6 @@ router.post('/request-agent', chatController.requestAgent);
  * 
  * Sets conversation status to 'closed' when user leaves.
  */
-router.post('/end-session', chatController.endSession);
+router.post('/chat/end-session', chatController.endSession);
 
 module.exports = router;
