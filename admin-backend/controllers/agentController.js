@@ -140,6 +140,10 @@ const agentLogin = async (req, res) => {
       });
     }
 
+    // Mark agent as available
+    foundAgent.status = 'available';
+    await foundAgent.save();
+
     // Generate JWT token for agent
     const token = jwt.sign(
       {
@@ -477,7 +481,11 @@ const getConversations = async (req, res) => {
     const ConversationSchema = new mongoose.Schema({
       botId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bot', required: true },
       sessionId: { type: String, required: true },
-      status: { type: String, enum: ['ai', 'human'], default: 'ai' },
+      status: { type: String, enum: ['bot', 'waiting', 'active', 'queued', 'assigned', 'closed', 'ai', 'human'], default: 'bot' },
+      assignedAgent: { type: mongoose.Schema.Types.ObjectId, ref: 'Agent', default: null },
+      agentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agent', default: null },
+      requestedAt: { type: Date, default: null },
+      endedAt: { type: Date, default: null },
       createdAt: { type: Date, default: Date.now },
       lastActiveAt: { type: Date, default: Date.now }
     });
@@ -486,12 +494,21 @@ const getConversations = async (req, res) => {
     const Conversation = tenantConnection.models.Conversation || 
                          tenantConnection.model('Conversation', ConversationSchema);
 
-    // Query ALL conversations (no status filter), sorted by lastActiveAt
-    const conversations = await Conversation.find()
+    // Query conversations: show WAITING chats OR chats assigned to this agent
+    // Do NOT show chats taken by other agents
+    const agentId = req.agent.agentId;
+    const conversations = await Conversation.find({
+      $or: [
+        { status: 'waiting' },
+        { status: 'queued' },
+        { assignedAgent: agentId },
+        { agentId: agentId }
+      ]
+    })
       .sort({ lastActiveAt: -1 })
       .lean();
 
-    console.log(`📋 Retrieved ${conversations.length} conversations for tenant ${tenant.username}`);
+    console.log(`📋 Retrieved ${conversations.length} conversations for agent ${agentId}`);
 
     // Get bot IDs to fetch bot details from admin DB
     const botIds = [...new Set(conversations.map(c => c.botId?.toString()))]
@@ -513,6 +530,7 @@ const getConversations = async (req, res) => {
         websiteUrl,
         sessionId: conv.sessionId,
         status: conv.status,
+        assignedAgent: conv.assignedAgent,
         lastActiveAt: conv.lastActiveAt,
         createdAt: conv.createdAt
       };
@@ -599,12 +617,252 @@ const getMessages = async (req, res) => {
 // - updateConversationStatus - Toggle AI/human mode
 // ============================================================================
 
+/**
+ * POST /api/agent/logout
+ * Agent logout - mark agent as offline
+ * Requires agent authentication
+ */
+const agentLogout = async (req, res) => {
+  try {
+    const agentId = req.agent.agentId;
+    const tenantId = req.agent.tenantId;
+
+    // Get tenant info
+    const tenant = await User.findById(tenantId);
+    if (!tenant) {
+      return res.status(404).json({
+        error: 'Tenant not found',
+        message: 'Invalid tenant'
+      });
+    }
+
+    // Get Agent model and update status
+    const Agent = await getAgentModel(tenant.databaseUri);
+    const agent = await Agent.findById(agentId);
+    
+    if (!agent) {
+      return res.status(404).json({
+        error: 'Agent not found',
+        message: 'Agent does not exist'
+      });
+    }
+
+    agent.status = 'offline';
+    await agent.save();
+
+    console.log(`🚪 Agent ${agent.username} logged out and marked offline`);
+
+    res.json({
+      message: 'Logout successful',
+      status: 'offline'
+    });
+  } catch (error) {
+    console.error('Agent logout error:', error);
+    res.status(500).json({
+      error: 'Logout failed',
+      message: 'An error occurred during logout'
+    });
+  }
+};
+
+/**
+ * POST /api/agent/conversations/:id/accept
+ * Agent accepts a waiting conversation
+ * Atomically assigns conversation to agent and marks agent as busy
+ * Returns 409 if conversation is not waiting
+ */
+const acceptConversation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const agentId = req.agent.agentId;
+    const tenantId = req.agent.tenantId;
+
+    // Get tenant info
+    const tenant = await User.findById(tenantId);
+    if (!tenant) {
+      return res.status(404).json({
+        error: 'Tenant not found',
+        message: 'Invalid tenant'
+      });
+    }
+
+    // Connect to tenant database
+    const tenantConnection = await getTenantConnection(tenant.databaseUri);
+
+    // Define Conversation schema
+    const ConversationSchema = new mongoose.Schema({
+      botId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bot', required: true },
+      sessionId: { type: String, required: true },
+      status: { type: String, enum: ['bot', 'waiting', 'active', 'queued', 'assigned', 'closed', 'ai', 'human'], default: 'bot' },
+      assignedAgent: { type: mongoose.Schema.Types.ObjectId, ref: 'Agent', default: null },
+      agentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agent', default: null },
+      requestedAt: { type: Date, default: null },
+      endedAt: { type: Date, default: null },
+      createdAt: { type: Date, default: Date.now },
+      lastActiveAt: { type: Date, default: Date.now }
+    });
+
+    const Conversation = tenantConnection.models.Conversation || 
+                         tenantConnection.model('Conversation', ConversationSchema);
+
+    // Find conversation
+    const conversation = await Conversation.findById(id);
+    if (!conversation) {
+      return res.status(404).json({
+        error: 'Conversation not found',
+        message: 'The specified conversation does not exist'
+      });
+    }
+
+    // Check if conversation is waiting (support both 'waiting' and 'queued' for backward compatibility)
+    if (conversation.status !== 'waiting' && conversation.status !== 'queued') {
+      return res.status(409).json({
+        error: 'Conversation not available',
+        message: 'This conversation is not in waiting status',
+        currentStatus: conversation.status
+      });
+    }
+
+    // Assign conversation to agent
+    conversation.status = 'active';
+    conversation.agentId = agentId;
+    conversation.assignedAgent = agentId;
+    conversation.lastActiveAt = new Date();
+    await conversation.save();
+
+    // Mark agent as busy
+    const Agent = await getAgentModel(tenant.databaseUri);
+    const agent = await Agent.findById(agentId);
+    if (agent) {
+      agent.status = 'busy';
+      await agent.save();
+    }
+
+    console.log(`✅ Agent ${agentId} accepted conversation ${id}`);
+
+    res.json({
+      message: 'Conversation accepted',
+      conversation: {
+        _id: conversation._id,
+        status: conversation.status,
+        agentId: conversation.agentId,
+        assignedAgent: conversation.assignedAgent
+      }
+    });
+  } catch (error) {
+    console.error('Accept conversation error:', error);
+    res.status(500).json({
+      error: 'Failed to accept conversation',
+      message: 'An error occurred while accepting the conversation'
+    });
+  }
+};
+
+/**
+ * POST /api/agent/conversations/:id/close
+ * Close a conversation and mark agent as available
+ * Can be called by agent or when user closes chat
+ */
+const closeConversation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const agentId = req.agent?.agentId; // Optional - can be called without agent auth
+    const tenantId = req.agent?.tenantId;
+
+    // If no agent context, get tenant from conversation
+    let tenant;
+    if (tenantId) {
+      tenant = await User.findById(tenantId);
+    } else {
+      // Need to find tenant from conversation - get botId first
+      // For now, require agent auth
+      return res.status(401).json({
+        error: 'Authentication required',
+        message: 'Agent authentication is required to close conversations'
+      });
+    }
+
+    if (!tenant) {
+      return res.status(404).json({
+        error: 'Tenant not found',
+        message: 'Invalid tenant'
+      });
+    }
+
+    // Connect to tenant database
+    const tenantConnection = await getTenantConnection(tenant.databaseUri);
+
+    // Define Conversation schema
+    const ConversationSchema = new mongoose.Schema({
+      botId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bot', required: true },
+      sessionId: { type: String, required: true },
+      status: { type: String, enum: ['bot', 'waiting', 'active', 'queued', 'assigned', 'closed', 'ai', 'human'], default: 'bot' },
+      assignedAgent: { type: mongoose.Schema.Types.ObjectId, ref: 'Agent', default: null },
+      agentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agent', default: null },
+      requestedAt: { type: Date, default: null },
+      endedAt: { type: Date, default: null },
+      createdAt: { type: Date, default: Date.now },
+      lastActiveAt: { type: Date, default: Date.now }
+    });
+
+    const Conversation = tenantConnection.models.Conversation || 
+                         tenantConnection.model('Conversation', ConversationSchema);
+
+    // Find conversation
+    const conversation = await Conversation.findById(id);
+    if (!conversation) {
+      return res.status(404).json({
+        error: 'Conversation not found',
+        message: 'The specified conversation does not exist'
+      });
+    }
+
+    // Get the assigned agent (if any)
+    const assignedAgentId = conversation.assignedAgent;
+
+    // Close conversation
+    conversation.status = 'closed';
+    conversation.lastActiveAt = new Date();
+    await conversation.save();
+
+    // If there was an assigned agent, mark them as available
+    if (assignedAgentId) {
+      const Agent = await getAgentModel(tenant.databaseUri);
+      const agent = await Agent.findById(assignedAgentId);
+      if (agent && agent.status === 'busy') {
+        agent.status = 'available';
+        await agent.save();
+        console.log(`🟢 Agent ${assignedAgentId} marked as available after closing conversation ${id}`);
+      }
+    }
+
+    console.log(`🔒 Conversation ${id} closed`);
+
+    res.json({
+      message: 'Conversation closed',
+      conversation: {
+        _id: conversation._id,
+        status: conversation.status
+      }
+    });
+  } catch (error) {
+    console.error('Close conversation error:', error);
+    res.status(500).json({
+      error: 'Failed to close conversation',
+      message: 'An error occurred while closing the conversation'
+    });
+  }
+};
+
 module.exports = {
   agentLogin,
+  agentLogout,
   createAgent,
   listAgents,
   updateAgent,
   deleteAgent,
   getConversations,
-  getMessages
+  getMessages,
+  acceptConversation,
+  closeConversation
 };

@@ -8,7 +8,7 @@ import Loader from '../components/Loader';
 import '../styles/AgentPanel.css';
 
 function AgentPanel() {
-  const { user, token, logout } = useAuth();
+  const { user, token, logout: authLogout } = useAuth();
   // Helper to call backend mounted at exact '/agents' path.
   const getBackendBase = () => API_BASE_URL.replace(/\/api\/?$/i, '');
 
@@ -68,6 +68,9 @@ function AgentPanel() {
   // Message input state
   const [messageInput, setMessageInput] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
+
+  // Filter state
+  const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'queued', 'assigned'
 
   // Fetch conversations on mount
   useEffect(() => {
@@ -201,6 +204,86 @@ function AgentPanel() {
     return conversation?.sessionId || conversation?.userId || `Visitor ${conversation?._id?.slice(-4)}`;
   };
 
+  const handleAcceptChat = async (conversationId, e) => {
+    e.stopPropagation(); // Prevent opening the chat when clicking accept
+    
+    try {
+      await agentApiRequest(`/api/agent/conversations/${conversationId}/accept`, {
+        method: 'POST',
+        token
+      });
+      
+      // Refresh conversations to update the list
+      await fetchConversations();
+      
+      // If this conversation is selected, refresh its messages
+      if (selectedConversationId === conversationId) {
+        await fetchMessages(conversationId);
+      }
+    } catch (error) {
+      console.error('Failed to accept chat:', error);
+      alert('Failed to accept chat: ' + (error.message || 'Unknown error'));
+    }
+  };
+
+  const handleCloseChat = async (conversationId) => {
+    if (!confirm('Are you sure you want to close this conversation?')) return;
+    
+    try {
+      await agentApiRequest(`/api/agent/conversations/${conversationId}/close`, {
+        method: 'POST',
+        token
+      });
+      
+      // Refresh conversations and clear selection if this was selected
+      await fetchConversations();
+      if (selectedConversationId === conversationId) {
+        setSelectedConversationId(null);
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error('Failed to close chat:', error);
+      alert('Failed to close chat: ' + (error.message || 'Unknown error'));
+    }
+  };
+
+  const logout = async () => {
+    try {
+      // Call backend logout to mark agent as offline
+      await agentApiRequest('/api/agent/logout', {
+        method: 'POST',
+        token
+      });
+    } catch (error) {
+      console.error('Logout API call failed:', error);
+      // Continue with frontend logout even if backend call fails
+    } finally {
+      authLogout();
+    }
+  };
+
+  // Filter conversations based on status
+  const filteredConversations = conversations.filter(conv => {
+    if (filterStatus === 'all') return true;
+    if (filterStatus === 'queued') return conv.status === 'queued' || conv.status === 'waiting';
+    if (filterStatus === 'assigned') return (conv.status === 'assigned' || conv.status === 'active') && (conv.assignedAgent === user?.id || conv.agentId === user?.id);
+    return true;
+  });
+
+  const getStatusBadge = (status) => {
+    const badges = {
+      'bot': '🤖 Bot',
+      'waiting': '⏳ Waiting',
+      'active': '✅ Active',
+      'queued': '⏳ Queued',
+      'assigned': '✅ Assigned',
+      'closed': '🔒 Closed',
+      'ai': '🤖 AI',
+      'human': '👤 Human'
+    };
+    return badges[status] || status;
+  };
+
   return (
     <div className="agent-panel-3col">
       {/* LEFT COLUMN: Dark Sidebar with Navigation */}
@@ -252,6 +335,28 @@ function AgentPanel() {
           </button>
         </div>
 
+        {/* Filter Tabs */}
+        <div className="chat-filter-tabs">
+          <button 
+            className={`filter-tab ${filterStatus === 'all' ? 'active' : ''}`}
+            onClick={() => setFilterStatus('all')}
+          >
+            All ({conversations.length})
+          </button>
+          <button 
+            className={`filter-tab ${filterStatus === 'queued' ? 'active' : ''}`}
+            onClick={() => setFilterStatus('queued')}
+          >
+            Queued ({conversations.filter(c => c.status === 'queued' || c.status === 'waiting').length})
+          </button>
+          <button 
+            className={`filter-tab ${filterStatus === 'assigned' ? 'active' : ''}`}
+            onClick={() => setFilterStatus('assigned')}
+          >
+            My Chats ({conversations.filter(c => (c.status === 'assigned' || c.status === 'active') && (c.assignedAgent === user?.id || c.agentId === user?.id)).length})
+          </button>
+        </div>
+
         {conversationsLoading && (
           <div className="chat-list-loading">
             <Loader message="Loading..." />
@@ -267,12 +372,12 @@ function AgentPanel() {
 
         {!conversationsLoading && !conversationsError && (
           <div className="chat-list-scroll">
-            {conversations.length === 0 ? (
+            {filteredConversations.length === 0 ? (
               <div className="chat-list-empty">
-                <p>No active conversations</p>
+                <p>No conversations matching filter</p>
               </div>
             ) : (
-              conversations.map((conv) => (
+              filteredConversations.map((conv) => (
                 <div
                   key={conv._id}
                   className={`chat-list-item ${selectedConversationId === conv._id ? 'active' : ''}`}
@@ -283,7 +388,17 @@ function AgentPanel() {
                     <div className="chat-list-item-content">
                       <div className="chat-list-visitor">{getVisitorName(conv)}</div>
                       <div className="chat-list-bot">{getBotName(conv.botId)}</div>
+                      <div className="chat-list-status">{getStatusBadge(conv.status)}</div>
                     </div>
+                    {(conv.status === 'queued' || conv.status === 'waiting') && (
+                      <button 
+                        className="accept-chat-btn"
+                        onClick={(e) => handleAcceptChat(conv._id, e)}
+                        title="Accept this chat"
+                      >
+                        Accept
+                      </button>
+                    )}
                   </div>
                 </div>
               ))
@@ -311,13 +426,24 @@ function AgentPanel() {
                   <div className="chat-window-agent">{user?.username || 'Agent'}</div>
                 </div>
               </div>
-              <button 
-                className="chat-window-close"
-                onClick={() => setSelectedConversationId(null)}
-                title="Close conversation"
-              >
-                ✕
-              </button>
+              <div className="chat-window-header-actions">
+                {(selectedConversation?.status === 'assigned' || selectedConversation?.status === 'active') && (
+                  <button 
+                    className="close-conversation-btn"
+                    onClick={() => handleCloseChat(selectedConversationId)}
+                    title="Close conversation"
+                  >
+                    Close Chat
+                  </button>
+                )}
+                <button 
+                  className="chat-window-close"
+                  onClick={() => setSelectedConversationId(null)}
+                  title="Close window"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {/* Messages Area */}

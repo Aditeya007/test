@@ -179,6 +179,7 @@
             autocomplete="off"
           />
           <button id="rag-widget-send" class="rag-widget-send-btn">Send</button>
+          <button id="rag-widget-request-agent" class="rag-widget-request-agent-btn">Talk to Human</button>
         </div>
       </div>
     `;
@@ -400,6 +401,29 @@
         cursor: not-allowed;
       }
 
+      .rag-widget-request-agent-btn {
+        padding: 0.8em 1.2em;
+        background: #28a745;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+      }
+
+      .rag-widget-request-agent-btn:hover:not(:disabled) {
+        background: #218838;
+        transform: translateY(-1px);
+      }
+
+      .rag-widget-request-agent-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        background: #6c757d;
+      }
+
       /* Mobile Responsive */
       @media (max-width: 480px) {
         .rag-widget-window {
@@ -506,6 +530,90 @@
     const typingIndicator = document.getElementById('rag-widget-typing-indicator');
     if (typingIndicator) {
       typingIndicator.remove();
+    }
+  }
+
+  // Request human agent
+  async function requestAgent() {
+    if (state.loading) return;
+    if (!config.botId) {
+      addMessage('Widget not configured properly. Missing bot ID.', 'bot', true);
+      return;
+    }
+    if (!config.authToken) {
+      addMessage('Widget not configured properly. Missing authentication token.', 'bot', true);
+      return;
+    }
+
+    // Disable the request agent button
+    const requestAgentBtn = document.getElementById('rag-widget-request-agent');
+    if (requestAgentBtn) {
+      requestAgentBtn.disabled = true;
+      requestAgentBtn.textContent = 'Requesting...';
+    }
+
+    try {
+      const response = await fetch(`${config.apiBase}/chat/request-agent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.authToken}`
+        },
+        body: JSON.stringify({
+          sessionId: state.sessionId,
+          botId: config.botId
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Handle new state-based responses
+        if (data.state === 'offline') {
+          addMessage('No agents are currently available.', 'bot');
+          // Re-enable button on offline
+          if (requestAgentBtn) {
+            requestAgentBtn.disabled = false;
+            requestAgentBtn.textContent = 'Talk to Human';
+          }
+          return;
+        }
+
+        if (data.state === 'busy') {
+          addMessage('All agents are busy. Please wait while we connect you.', 'bot');
+          // Keep button disabled
+          return;
+        }
+
+        if (data.state === 'available') {
+          addMessage('Connecting you to a human agent…', 'bot');
+          // Keep button disabled
+          return;
+        }
+
+        // Fallback for old response format
+        if (data.success) {
+          addMessage('Connecting you to a human agent... Please wait.', 'bot');
+          // Keep button disabled
+          return;
+        }
+      }
+
+      // Handle errors
+      addMessage(data.error || data.message || 'Failed to request agent.', 'bot', true);
+      // Re-enable button on error
+      if (requestAgentBtn) {
+        requestAgentBtn.disabled = false;
+        requestAgentBtn.textContent = 'Talk to Human';
+      }
+    } catch (err) {
+      console.error('RAG Widget: Error requesting agent:', err);
+      addMessage('Network error: Unable to request agent. Please check your connection.', 'bot', true);
+      // Re-enable button on error
+      if (requestAgentBtn) {
+        requestAgentBtn.disabled = false;
+        requestAgentBtn.textContent = 'Talk to Human';
+      }
     }
   }
 
@@ -683,6 +791,26 @@
         }
       });
     }
+
+    // Attach request agent button listener
+    const requestAgentBtn = document.getElementById('rag-widget-request-agent');
+    if (requestAgentBtn) {
+      requestAgentBtn.addEventListener('click', requestAgent);
+    }
+
+    // Handle widget unload - end session
+    window.addEventListener('beforeunload', async () => {
+      try {
+        // Use sendBeacon for reliable delivery during page unload
+        const blob = new Blob(
+          [JSON.stringify({ sessionId: state.sessionId, botId: config.botId })],
+          { type: 'application/json' }
+        );
+        navigator.sendBeacon(`${config.apiBase}/chat/end-session`, blob);
+      } catch (err) {
+        console.error('RAG Widget: Error ending session:', err);
+      }
+    });
 
     window.RAGWidget._initialized = true;
   }

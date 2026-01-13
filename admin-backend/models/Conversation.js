@@ -25,9 +25,14 @@ const ConversationSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['ai', 'human'],
-      default: 'ai',
+      enum: ['bot', 'queued', 'assigned', 'closed', 'ai', 'human'],
+      default: 'bot',
       required: true
+    },
+    assignedAgent: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Agent',
+      default: null
     },
     createdAt: {
       type: Date,
@@ -71,7 +76,7 @@ ConversationSchema.statics.findOrCreate = async function(botId, sessionId) {
     conversation = new this({
       botId,
       sessionId,
-      status: 'ai',
+      status: 'bot',
       createdAt: new Date(),
       lastActiveAt: new Date()
     });

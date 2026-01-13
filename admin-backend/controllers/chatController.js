@@ -33,6 +33,17 @@ async function getTenantConnection(databaseUri) {
 }
 
 /**
+ * Get Agent model for a specific tenant database
+ */
+async function getAgentModel(databaseUri) {
+  const connection = await getTenantConnection(databaseUri);
+  const AgentSchema = require('../models/Agent');
+  
+  // Return model from tenant connection
+  return connection.models.Agent || connection.model('Agent', AgentSchema);
+}
+
+/**
  * Get Conversation and Message models for a specific tenant database
  */
 async function getTenantModels(databaseUri) {
@@ -55,9 +66,27 @@ async function getTenantModels(databaseUri) {
       },
       status: {
         type: String,
-        enum: ['ai', 'human'],
-        default: 'ai',
+        enum: ['bot', 'waiting', 'active', 'queued', 'assigned', 'closed', 'ai', 'human'],
+        default: 'bot',
         required: true
+      },
+      assignedAgent: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Agent',
+        default: null
+      },
+      agentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Agent',
+        default: null
+      },
+      requestedAt: {
+        type: Date,
+        default: null
+      },
+      endedAt: {
+        type: Date,
+        default: null
       },
       createdAt: {
         type: Date,
@@ -93,7 +122,7 @@ async function getTenantModels(databaseUri) {
       conversation = new this({
         botId,
         sessionId,
-        status: 'ai',
+        status: 'bot',
         createdAt: new Date(),
         lastActiveAt: new Date()
       });
@@ -620,3 +649,264 @@ exports.updateConversationStatus = async (req, res) => {
     });
   }
 };
+
+/**
+ * POST /api/conversations/:id/request-agent
+ * Request a human agent for a conversation
+ * Sets conversation status to 'queued' and clears any assigned agent
+ * This is triggered when a user requests to talk to a human
+ */
+exports.requestAgentByConversationId = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { botId } = req.body;
+
+    // Validate input
+    if (!id || !botId) {
+      return res.status(400).json({
+        success: false,
+        error: 'conversationId and botId are required'
+      });
+    }
+
+    // Validate bot exists
+    const bot = await Bot.findById(botId);
+    if (!bot) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bot not found'
+      });
+    }
+
+    // Get tenant context to load tenant database
+    const tenantContext = await getUserTenantContext(bot.userId);
+    if (!tenantContext.databaseUri) {
+      return res.status(503).json({
+        success: false,
+        error: 'Tenant database not provisioned'
+      });
+    }
+
+    // Load models from tenant database
+    const { Conversation } = await getTenantModels(tenantContext.databaseUri);
+
+    // Find conversation in tenant database
+    const conversation = await Conversation.findById(id);
+
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        error: 'Conversation not found'
+      });
+    }
+
+    // Set conversation to queued status and clear assigned agent
+    conversation.status = 'queued';
+    conversation.assignedAgent = null;
+    await conversation.save();
+
+    console.log(`📞 Conversation ${id} queued for human agent`);
+
+    res.json({
+      success: true,
+      message: 'Your request has been queued. An agent will be with you shortly.',
+      conversation: {
+        id: conversation._id,
+        botId: conversation.botId,
+        sessionId: conversation.sessionId,
+        status: conversation.status,
+        lastActiveAt: conversation.lastActiveAt
+      }
+    });
+  } catch (err) {
+    console.error('❌ Failed to request agent:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to request agent',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
+/**
+ * POST /api/chat/request-agent
+ * Request a human agent for the current session
+ * Checks agent availability before queueing conversation
+ */
+exports.requestAgent = async (req, res) => {
+  try {
+    const { sessionId, botId } = req.body;
+
+    // Validate input
+    if (!sessionId || !botId) {
+      return res.status(400).json({
+        success: false,
+        error: 'sessionId and botId are required'
+      });
+    }
+
+    // Validate bot exists and is active
+    const bot = await Bot.findById(botId);
+    if (!bot) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bot not found'
+      });
+    }
+
+    if (!bot.isActive) {
+      return res.status(403).json({
+        success: false,
+        error: 'Bot is not active'
+      });
+    }
+
+    // Get tenant context to load tenant database
+    const tenantContext = await getUserTenantContext(bot.userId);
+    if (!tenantContext.databaseUri) {
+      return res.status(503).json({
+        success: false,
+        error: 'Tenant database not provisioned'
+      });
+    }
+
+    // Load Agent model to check availability
+    const Agent = await getAgentModel(tenantContext.databaseUri);
+    
+    // Check agent availability
+    const availableCount = await Agent.countDocuments({ status: 'available' });
+    const busyCount = await Agent.countDocuments({ status: 'busy' });
+    
+    // If no agents are online at all (neither available nor busy)
+    if (availableCount === 0 && busyCount === 0) {
+      console.log(`📞 Agent request denied - no agents online (session: ${sessionId})`);
+      return res.json({
+        ok: false,
+        state: 'offline',
+        message: 'No agents are currently available.'
+      });
+    }
+
+    // Load conversation model from tenant database
+    const { Conversation } = await getTenantModels(tenantContext.databaseUri);
+
+    // Find conversation by sessionId and botId
+    const conversation = await Conversation.findOne({ botId, sessionId });
+
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        error: 'Conversation not found'
+      });
+    }
+
+    // Update conversation to waiting status
+    conversation.status = 'waiting';
+    conversation.requestedAt = new Date();
+    conversation.assignedAgent = null;
+    await conversation.save();
+
+    console.log(`📞 Agent requested for conversation ${conversation._id} (session: ${sessionId})`);
+
+    // If all agents are busy
+    if (availableCount === 0 && busyCount > 0) {
+      return res.json({
+        ok: true,
+        state: 'busy',
+        message: 'All agents are busy. Please wait while we connect you.'
+      });
+    }
+
+    // If at least one agent is available
+    return res.json({
+      ok: true,
+      state: 'available',
+      message: 'Connecting you to a human agent…'
+    });
+  } catch (err) {
+    console.error('❌ Failed to request agent:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to request agent',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
+/**
+ * POST /api/chat/end-session
+ * End a chat session when user leaves
+ * Sets conversation status to 'closed'
+ */
+exports.endSession = async (req, res) => {
+  try {
+    const { sessionId, botId } = req.body;
+
+    // Validate input
+    if (!sessionId || !botId) {
+      return res.status(400).json({
+        success: false,
+        error: 'sessionId and botId are required'
+      });
+    }
+
+    // Validate bot exists
+    const bot = await Bot.findById(botId);
+    if (!bot) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bot not found'
+      });
+    }
+
+    // Get tenant context to load tenant database
+    const tenantContext = await getUserTenantContext(bot.userId);
+    if (!tenantContext.databaseUri) {
+      return res.status(503).json({
+        success: false,
+        error: 'Tenant database not provisioned'
+      });
+    }
+
+    // Load models from tenant database
+    const { Conversation } = await getTenantModels(tenantContext.databaseUri);
+
+    // Find conversation by sessionId and botId
+    const conversation = await Conversation.findOne({ botId, sessionId });
+
+    if (!conversation) {
+      // No conversation found - this is ok, just return success
+      return res.json({
+        success: true,
+        message: 'No active conversation to close'
+      });
+    }
+
+    // Only close if not already closed
+    if (conversation.status !== 'closed') {
+      conversation.status = 'closed';
+      conversation.endedAt = new Date();
+      await conversation.save();
+
+      console.log(`🔒 Session ended for conversation ${conversation._id} (session: ${sessionId})`);
+    }
+
+    res.json({
+      success: true,
+      message: 'Session ended successfully',
+      conversation: {
+        id: conversation._id,
+        status: conversation.status,
+        endedAt: conversation.endedAt
+      }
+    });
+  } catch (err) {
+    console.error('❌ Failed to end session:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to end session',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+

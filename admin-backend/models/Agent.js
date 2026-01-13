@@ -55,6 +55,11 @@ const AgentSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true
+    },
+    status: {
+      type: String,
+      enum: ['offline', 'available', 'busy'],
+      default: 'offline'
     }
   },
   {
@@ -78,6 +83,7 @@ AgentSchema.methods.toPublicProfile = function() {
     email: this.email,
     phone: this.phone,
     isActive: this.isActive,
+    status: this.status,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt
   };

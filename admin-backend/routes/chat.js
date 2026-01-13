@@ -57,4 +57,40 @@ router.post('/chat/message', botLimiter, chatController.sendMessage);
  */
 router.put('/conversation/:conversationId/status', authenticateBotToken, chatController.updateConversationStatus);
 
+/**
+ * @route   POST /api/conversations/:id/request-agent
+ * @desc    Request a human agent for a conversation
+ * @access  Public (widget authentication via bot token)
+ * @param   id - The conversation ID
+ * @body    { botId: string }
+ * @returns { success: boolean, conversation: Object }
+ * 
+ * Sets conversation status to 'queued' for agent pickup.
+ * Triggered when user requests to talk to a human.
+ */
+router.post('/conversations/:id/request-agent', chatController.requestAgentByConversationId);
+
+/**
+ * @route   POST /api/chat/request-agent
+ * @desc    Request a human agent for the current session
+ * @access  Public (widget authentication via bot token)
+ * @body    { sessionId: string, botId: string }
+ * @returns { success: boolean, conversation: Object }
+ * 
+ * Sets conversation status to 'waiting' for agent pickup.
+ * Triggered when user clicks "Talk to Human" button in widget.
+ */
+router.post('/request-agent', chatController.requestAgent);
+
+/**
+ * @route   POST /api/chat/end-session
+ * @desc    End a chat session when user closes widget
+ * @access  Public (widget authentication via bot token)
+ * @body    { sessionId: string, botId: string }
+ * @returns { success: boolean, conversation: Object }
+ * 
+ * Sets conversation status to 'closed' when user leaves.
+ */
+router.post('/end-session', chatController.endSession);
+
 module.exports = router;

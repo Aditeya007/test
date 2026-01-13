@@ -27,14 +27,17 @@ const authenticateAgent = require('../middleware/authenticateAgent');
 // Public routes
 router.post('/login', agentController.agentLogin);
 
+// Agent-protected routes (agent actions)
+router.post('/logout', authenticateAgent, agentController.agentLogout);
+router.get('/conversations', authenticateAgent, agentController.getConversations);
+router.get('/conversations/:conversationId/messages', authenticateAgent, agentController.getMessages);
+router.post('/conversations/:id/accept', authenticateAgent, agentController.acceptConversation);
+router.post('/conversations/:id/close', authenticateAgent, agentController.closeConversation);
+
 // Tenant-protected routes (user creates/manages their agents)
 router.post('/create', auth, agentController.createAgent);
 router.get('/list', auth, agentController.listAgents);
 router.patch('/:agentId', auth, agentController.updateAgent);
 router.delete('/:agentId', auth, agentController.deleteAgent);
-
-// Agent-protected routes (agent views conversations)
-router.get('/conversations', authenticateAgent, agentController.getConversations);
-router.get('/conversations/:conversationId/messages', authenticateAgent, agentController.getMessages);
 
 module.exports = router;

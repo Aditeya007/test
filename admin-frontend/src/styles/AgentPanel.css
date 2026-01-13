@@ -578,6 +578,99 @@
   }
 }
 
+/* ========================================
+   AGENT ROUTING FEATURES
+   ======================================== */
+
+/* Filter Tabs */
+.chat-filter-tabs {
+  display: flex;
+  gap: 5px;
+  padding: 10px 15px;
+  border-bottom: 1px solid #e0e0e0;
+  background-color: #fafafa;
+}
+
+.filter-tab {
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  background-color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  color: #666;
+}
+
+.filter-tab:hover {
+  background-color: #f0f0f0;
+  border-color: #00d084;
+}
+
+.filter-tab.active {
+  background-color: #00d084;
+  color: white;
+  border-color: #00d084;
+  font-weight: 600;
+}
+
+/* Status Badge in Chat List */
+.chat-list-status {
+  font-size: 0.8rem;
+  color: #666;
+  margin-top: 4px;
+}
+
+/* Accept Chat Button */
+.accept-chat-btn {
+  padding: 6px 14px;
+  background-color: #00d084;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: background-color 0.2s;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.accept-chat-btn:hover {
+  background-color: #00b872;
+}
+
+.accept-chat-btn:active {
+  transform: scale(0.98);
+}
+
+/* Chat Window Header Actions */
+.chat-window-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.close-conversation-btn {
+  padding: 8px 16px;
+  background-color: #ff4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.close-conversation-btn:hover {
+  background-color: #cc0000;
+}
+
+.close-conversation-btn:active {
+  transform: scale(0.98);
+}
+
 @media (max-width: 768px) {
   .agent-panel-3col {
     flex-direction: column;
