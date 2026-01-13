@@ -91,32 +91,72 @@ const agentLogin = async (req, res) => {
       });
     }
 
+    // Normalize username (trim whitespace)
+    const normalizedUsername = username.trim();
+
+    // Check JWT_SECRET is configured
+    if (!process.env.JWT_SECRET) {
+      console.error('❌ JWT_SECRET is not configured');
+      return res.status(500).json({
+        error: 'Server configuration error',
+        message: 'Authentication service is not properly configured'
+      });
+    }
+
+    console.log(`🔍 Agent login attempt for username: "${normalizedUsername}"`);
+
     // Search for agent across all tenants with agents enabled
     const tenants = await User.find({ maxAgents: { $gt: 0 }, role: 'user' });
     
+    console.log(`📋 Found ${tenants.length} tenant(s) with agents enabled`);
+
+    if (tenants.length === 0) {
+      console.warn('⚠️  No tenants found with agents enabled');
+      return res.status(401).json({
+        error: 'Invalid credentials',
+        message: 'Username or password is incorrect'
+      });
+    }
+
     let foundAgent = null;
     let foundTenant = null;
+    let tenantsChecked = 0;
+    let tenantsWithDbUri = 0;
 
     // Search each tenant's database for the agent
     for (const tenant of tenants) {
-      if (!tenant.databaseUri) continue;
+      if (!tenant.databaseUri) {
+        console.warn(`⚠️  Tenant ${tenant._id} (${tenant.username}) has no databaseUri`);
+        continue;
+      }
 
+      tenantsWithDbUri++;
+      
       try {
         const Agent = await getAgentModel(tenant.databaseUri);
-        const agent = await Agent.findOne({ username });
+        const agent = await Agent.findOne({ username: normalizedUsername });
+
+        tenantsChecked++;
 
         if (agent) {
+          console.log(`✅ Found agent "${normalizedUsername}" in tenant ${tenant._id} (${tenant.username})`);
           foundAgent = agent;
           foundTenant = tenant;
           break;
         }
       } catch (err) {
-        console.error(`Error checking tenant ${tenant._id}:`, err.message);
+        console.error(`❌ Error checking tenant ${tenant._id} (${tenant.username}):`, {
+          error: err.message,
+          stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
         continue;
       }
     }
 
+    console.log(`📊 Search complete: Checked ${tenantsChecked}/${tenantsWithDbUri} tenant databases`);
+
     if (!foundAgent) {
+      console.warn(`⚠️  Agent "${normalizedUsername}" not found in any tenant database`);
       return res.status(401).json({
         error: 'Invalid credentials',
         message: 'Username or password is incorrect'
@@ -125,6 +165,7 @@ const agentLogin = async (req, res) => {
 
     // Check if agent is active
     if (!foundAgent.isActive) {
+      console.warn(`⚠️  Agent "${normalizedUsername}" attempted login but account is disabled`);
       return res.status(403).json({
         error: 'Account disabled',
         message: 'Your agent account has been deactivated'
@@ -134,6 +175,7 @@ const agentLogin = async (req, res) => {
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, foundAgent.passwordHash);
     if (!isPasswordValid) {
+      console.warn(`⚠️  Agent "${normalizedUsername}" attempted login with incorrect password`);
       return res.status(401).json({
         error: 'Invalid credentials',
         message: 'Username or password is incorrect'
@@ -159,6 +201,8 @@ const agentLogin = async (req, res) => {
     const tenantData = foundTenant.toObject();
     delete tenantData.password;
 
+    console.log(`✅ Agent "${normalizedUsername}" logged in successfully`);
+
     res.json({
       message: 'Login successful',
       token,
@@ -169,7 +213,10 @@ const agentLogin = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Agent login error:', error);
+    console.error('❌ Agent login error:', {
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
     res.status(500).json({
       error: 'Login failed',
       message: 'An error occurred during login'
