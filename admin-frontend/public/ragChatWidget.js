@@ -92,9 +92,12 @@
       socket.on('connect', () => {
         console.log('RAG Widget: Socket.IO connected:', socket.id);
         
-        // Join conversation room if we have a conversationId
+        // Join conversation room ONLY if we have a valid conversationId
         if (state.conversationId) {
+          console.log('RAG Widget: Rejoining room on connect with conversationId:', state.conversationId);
           joinConversationRoom(state.conversationId);
+        } else {
+          console.log('RAG Widget: Socket connected but no conversationId yet - will join room once conversation starts');
         }
       });
 
@@ -105,8 +108,9 @@
       socket.on('reconnect', (attemptNumber) => {
         console.log('RAG Widget: Socket.IO reconnected after', attemptNumber, 'attempts');
         
-        // Rejoin conversation room after reconnection
+        // Rejoin conversation room after reconnection ONLY if we have a valid conversationId
         if (state.conversationId) {
+          console.log('RAG Widget: Rejoining room on reconnect with conversationId:', state.conversationId);
           joinConversationRoom(state.conversationId);
         }
       });
@@ -237,11 +241,23 @@
       if (data.success && data.conversation) {
         console.log(`RAG Widget: Conversation ${data.conversation.status === 'ai' ? 'started' : 'resumed'}`);
         
-        // Store conversation ID and join Socket.IO room
-        state.conversationId = data.conversation.id || data.conversation._id;
+        // CRITICAL: Store conversation._id (MongoDB ID) for Socket.IO room
+        const conversationId = data.conversation._id;
         
-        if (state.conversationId && socket && socket.connected) {
+        if (!conversationId) {
+          console.error('RAG Widget: No conversation._id received from server!');
+          return;
+        }
+        
+        console.log('RAG Widget: Received conversation._id:', conversationId);
+        state.conversationId = conversationId;
+        
+        // Immediately join Socket.IO room if socket is connected
+        if (socket && socket.connected) {
+          console.log('RAG Widget: Socket already connected, joining room immediately');
           joinConversationRoom(state.conversationId);
+        } else {
+          console.log('RAG Widget: Socket not connected yet, will join room on connect event');
         }
       }
     } catch (err) {
@@ -773,16 +789,22 @@
       hideTyping();
 
       if (response.ok && data.success) {
-        // Store conversation ID if provided
-        if (data.conversation && (data.conversation.id || data.conversation._id)) {
-          const newConversationId = data.conversation.id || data.conversation._id;
+        // Store conversation._id if provided (handles agent takeover or conversation updates)
+        if (data.conversation && data.conversation._id) {
+          const newConversationId = data.conversation._id;
           
-          // If conversation ID changed, join new room
+          // If conversation ID changed (e.g., agent took over), switch rooms
           if (state.conversationId !== newConversationId) {
+            console.log('RAG Widget: Conversation ID changed, switching rooms');
+            console.log('RAG Widget: Old conversationId:', state.conversationId);
+            console.log('RAG Widget: New conversationId:', newConversationId);
+            
             if (state.conversationId) {
               leaveConversationRoom(state.conversationId);
             }
+            
             state.conversationId = newConversationId;
+            
             if (socket && socket.connected) {
               joinConversationRoom(state.conversationId);
             }

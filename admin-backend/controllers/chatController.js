@@ -257,7 +257,8 @@ exports.startConversation = async (req, res) => {
     res.json({
       success: true,
       conversation: {
-        id: conversation._id,
+        _id: conversation._id,  // MongoDB _id (used for Socket.IO rooms)
+        id: conversation._id,   // Alias for compatibility
         botId: conversation.botId,
         sessionId: conversation.sessionId,
         status: conversation.status,
@@ -456,6 +457,7 @@ exports.sendMessage = async (req, res) => {
         success: true,
         reply: null, // No automated reply - widget will not render anything
         conversation: {
+          _id: conversation._id,  // MongoDB _id (used for Socket.IO rooms)
           id: conversation._id,
           status: conversation.status,
           assignedAgent: conversation.assignedAgent
@@ -498,6 +500,7 @@ exports.sendMessage = async (req, res) => {
           createdAt: new Date()
         },
         conversation: {
+          _id: conversation._id,  // MongoDB _id (used for Socket.IO rooms)
           id: conversation._id,
           status: conversation.status
         }
@@ -575,6 +578,7 @@ exports.sendMessage = async (req, res) => {
           sources: botResult.sources
         },
         conversation: {
+          _id: conversation._id,  // MongoDB _id (used for Socket.IO rooms)
           id: conversation._id,
           status: conversation.status
         }
@@ -623,6 +627,7 @@ exports.sendMessage = async (req, res) => {
         errorType: 'BOT_ERROR',
         widgetError: true,
         conversation: {
+          _id: conversation._id,  // MongoDB _id (used for Socket.IO rooms)
           id: conversation._id,
           status: conversation.status
         }
