@@ -38,8 +38,12 @@
     isOpen: false,
     messages: [],
     sessionId: '',
+    conversationId: null, // Track conversation ID for Socket.IO room
     loading: false
   };
+
+  // Socket.IO connection
+  let socket = null;
 
   // Generate unique session ID
   function generateSessionId() {
@@ -63,6 +67,101 @@
     localStorage.setItem(storageKey, newSessionId);
     console.log('RAG Widget: Starting new conversation');
     return newSessionId;
+  }
+
+  // Initialize Socket.IO connection
+  function initSocketConnection() {
+    if (socket && socket.connected) {
+      console.log('RAG Widget: Socket already connected');
+      return;
+    }
+
+    try {
+      // Extract base URL without /api
+      const socketUrl = config.apiBase.replace(/\/api$/, '');
+      
+      // Connect to Socket.IO server
+      socket = io(socketUrl, {
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: Infinity
+      });
+
+      socket.on('connect', () => {
+        console.log('RAG Widget: Socket.IO connected:', socket.id);
+        
+        // Join conversation room if we have a conversationId
+        if (state.conversationId) {
+          joinConversationRoom(state.conversationId);
+        }
+      });
+
+      socket.on('disconnect', (reason) => {
+        console.log('RAG Widget: Socket.IO disconnected:', reason);
+      });
+
+      socket.on('reconnect', (attemptNumber) => {
+        console.log('RAG Widget: Socket.IO reconnected after', attemptNumber, 'attempts');
+        
+        // Rejoin conversation room after reconnection
+        if (state.conversationId) {
+          joinConversationRoom(state.conversationId);
+        }
+      });
+
+      // Listen for new messages
+      socket.on('message:new', (message) => {
+        console.log('RAG Widget: Received real-time message:', message);
+        
+        // Only add messages that are not from the current user
+        // (user messages are already added optimistically)
+        if (message.sender !== 'user') {
+          // Check if message already exists to prevent duplicates
+          const exists = state.messages.some(msg => 
+            msg.id === message._id || 
+            (msg.text === message.text && msg.sender === message.sender)
+          );
+          
+          if (!exists) {
+            addMessage(message.text, message.sender, false, message.sources);
+          }
+        }
+      });
+
+      socket.on('connect_error', (error) => {
+        console.error('RAG Widget: Socket.IO connection error:', error);
+      });
+
+    } catch (error) {
+      console.error('RAG Widget: Failed to initialize Socket.IO:', error);
+    }
+  }
+
+  // Join a conversation room
+  function joinConversationRoom(conversationId) {
+    if (!socket || !socket.connected) {
+      console.warn('RAG Widget: Cannot join room, socket not connected');
+      return;
+    }
+
+    if (!conversationId) {
+      console.warn('RAG Widget: Cannot join room, no conversationId');
+      return;
+    }
+
+    console.log('RAG Widget: Joining conversation room:', conversationId);
+    socket.emit('join:conversation', conversationId);
+  }
+
+  // Leave a conversation room
+  function leaveConversationRoom(conversationId) {
+    if (!socket || !socket.connected) return;
+    if (!conversationId) return;
+
+    console.log('RAG Widget: Leaving conversation room:', conversationId);
+    socket.emit('leave:conversation', conversationId);
   }
 
   // Load conversation history from backend
@@ -135,8 +234,15 @@
 
       const data = await response.json();
 
-      if (data.success) {
+      if (data.success && data.conversation) {
         console.log(`RAG Widget: Conversation ${data.conversation.status === 'ai' ? 'started' : 'resumed'}`);
+        
+        // Store conversation ID and join Socket.IO room
+        state.conversationId = data.conversation.id || data.conversation._id;
+        
+        if (state.conversationId && socket && socket.connected) {
+          joinConversationRoom(state.conversationId);
+        }
       }
     } catch (err) {
       console.error('RAG Widget: Error starting conversation:', err);
@@ -667,12 +773,29 @@
       hideTyping();
 
       if (response.ok && data.success) {
+        // Store conversation ID if provided
+        if (data.conversation && (data.conversation.id || data.conversation._id)) {
+          const newConversationId = data.conversation.id || data.conversation._id;
+          
+          // If conversation ID changed, join new room
+          if (state.conversationId !== newConversationId) {
+            if (state.conversationId) {
+              leaveConversationRoom(state.conversationId);
+            }
+            state.conversationId = newConversationId;
+            if (socket && socket.connected) {
+              joinConversationRoom(state.conversationId);
+            }
+          }
+        }
+        
         // Check if conversation is in active agent mode
         const isAgentMode = data.agentActive || (data.conversation && data.conversation.status === 'active');
         
         if (data.reply) {
-          // Add bot/agent response
-          addMessage(data.reply.text, data.reply.sender, false, data.reply.sources);
+          // Don't add bot/agent response here - it will come via Socket.IO
+          // This prevents duplicate messages
+          console.log('RAG Widget: Bot/agent response will be delivered via Socket.IO');
         } else if (isAgentMode) {
           // Agent mode with no reply - this is expected behavior
           // Message was forwarded to agent, widget remains silent
@@ -764,6 +887,21 @@
   }
 
   function initWidget() {
+    // Load Socket.IO client library dynamically
+    const socketScript = document.createElement('script');
+    socketScript.src = 'https://cdn.socket.io/4.5.4/socket.io.min.js';
+    socketScript.crossOrigin = 'anonymous';
+    socketScript.onload = () => {
+      console.log('RAG Widget: Socket.IO client library loaded');
+      
+      // Initialize Socket.IO connection after library loads
+      initSocketConnection();
+    };
+    socketScript.onerror = () => {
+      console.error('RAG Widget: Failed to load Socket.IO client library');
+    };
+    document.head.appendChild(socketScript);
+
     // Inject styles
     injectStyles();
 

@@ -1,6 +1,6 @@
 // src/pages/AgentPanel.jsx
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../api';
 import Loader from '../components/Loader';
@@ -65,6 +65,163 @@ function AgentPanel() {
   // Filter state
   const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'queued', 'assigned'
 
+  // Socket.IO ref
+  const socketRef = useRef(null);
+
+  // Initialize Socket.IO connection
+  useEffect(() => {
+    // Dynamically load Socket.IO client library
+    const loadSocketIO = async () => {
+      if (window.io) {
+        initializeSocket();
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://cdn.socket.io/4.5.4/socket.io.min.js';
+      script.crossOrigin = 'anonymous';
+      script.onload = () => {
+        console.log('Agent Panel: Socket.IO client library loaded');
+        initializeSocket();
+      };
+      script.onerror = () => {
+        console.error('Agent Panel: Failed to load Socket.IO client library');
+      };
+      document.head.appendChild(script);
+    };
+
+    const initializeSocket = () => {
+      if (socketRef.current && socketRef.current.connected) {
+        console.log('Agent Panel: Socket already connected');
+        return;
+      }
+
+      try {
+        // Connect to Socket.IO server (same origin)
+        const socketUrl = window.location.origin;
+        
+        socketRef.current = window.io(socketUrl, {
+          transports: ['websocket', 'polling'],
+          reconnection: true,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+          reconnectionAttempts: Infinity
+        });
+
+        socketRef.current.on('connect', () => {
+          console.log('Agent Panel: Socket.IO connected:', socketRef.current.id);
+          
+          // Rejoin current conversation room if viewing one
+          if (selectedConversationId) {
+            joinConversationRoom(selectedConversationId);
+          }
+        });
+
+        socketRef.current.on('disconnect', (reason) => {
+          console.log('Agent Panel: Socket.IO disconnected:', reason);
+        });
+
+        socketRef.current.on('reconnect', (attemptNumber) => {
+          console.log('Agent Panel: Socket.IO reconnected after', attemptNumber, 'attempts');
+          
+          // Rejoin conversation room after reconnection
+          if (selectedConversationId) {
+            joinConversationRoom(selectedConversationId);
+          }
+        });
+
+        // Listen for new messages
+        socketRef.current.on('message:new', (message) => {
+          console.log('Agent Panel: Received real-time message:', message);
+          
+          // Only add message if it's for the currently selected conversation
+          if (message.conversationId === selectedConversationId) {
+            setMessages(prev => {
+              // Check if message already exists to prevent duplicates
+              const exists = prev.some(msg => 
+                msg._id === message._id ||
+                (msg.text === message.text && msg.sender === message.sender && 
+                 Math.abs(new Date(msg.createdAt) - new Date(message.createdAt)) < 1000)
+              );
+              
+              if (exists) {
+                return prev;
+              }
+              
+              // Add new message
+              return [...prev, {
+                _id: message._id,
+                conversationId: message.conversationId,
+                sender: message.sender,
+                text: message.text,
+                content: message.text,
+                createdAt: message.createdAt
+              }];
+            });
+
+            // Auto-scroll to bottom
+            setTimeout(() => {
+              const messagesArea = document.querySelector('.messages-scroll-area');
+              if (messagesArea) {
+                messagesArea.scrollTop = messagesArea.scrollHeight;
+              }
+            }, 100);
+          }
+          
+          // Update conversation list if message is for a conversation in the list
+          setConversations(prev => prev.map(conv => 
+            conv._id === message.conversationId
+              ? { ...conv, lastActiveAt: message.createdAt }
+              : conv
+          ));
+        });
+
+        socketRef.current.on('connect_error', (error) => {
+          console.error('Agent Panel: Socket.IO connection error:', error);
+        });
+
+      } catch (error) {
+        console.error('Agent Panel: Failed to initialize Socket.IO:', error);
+      }
+    };
+
+    loadSocketIO();
+
+    // Cleanup on unmount
+    return () => {
+      if (socketRef.current) {
+        console.log('Agent Panel: Disconnecting Socket.IO');
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, []); // Run once on mount
+
+  // Join conversation room when selecting a conversation
+  const joinConversationRoom = useCallback((conversationId) => {
+    if (!socketRef.current || !socketRef.current.connected) {
+      console.warn('Agent Panel: Cannot join room, socket not connected');
+      return;
+    }
+
+    if (!conversationId) {
+      console.warn('Agent Panel: Cannot join room, no conversationId');
+      return;
+    }
+
+    console.log('Agent Panel: Joining conversation room:', conversationId);
+    socketRef.current.emit('join:conversation', conversationId);
+  }, []);
+
+  // Leave conversation room
+  const leaveConversationRoom = useCallback((conversationId) => {
+    if (!socketRef.current || !socketRef.current.connected) return;
+    if (!conversationId) return;
+
+    console.log('Agent Panel: Leaving conversation room:', conversationId);
+    socketRef.current.emit('leave:conversation', conversationId);
+  }, []);
+
   // Fetch conversations on mount
   useEffect(() => {
     fetchConversations();
@@ -121,8 +278,18 @@ function AgentPanel() {
   }, [agentToken]);
 
   const handleConversationClick = (conversationId) => {
+    // Leave previous room if any
+    if (selectedConversationId && selectedConversationId !== conversationId) {
+      leaveConversationRoom(selectedConversationId);
+    }
+    
     setSelectedConversationId(conversationId);
     fetchMessages(conversationId);
+    
+    // Join new conversation room
+    if (socketRef.current && socketRef.current.connected) {
+      joinConversationRoom(conversationId);
+    }
   };
 
   const formatTime = (timestamp) => {
@@ -154,24 +321,36 @@ function AgentPanel() {
       const tempMessage = {
         _id: `temp-${Date.now()}`,
         content: messageText,
+        text: messageText,
         sender: 'agent',
         createdAt: new Date().toISOString()
       };
       setMessages(prev => [...prev, tempMessage]);
+
+      // Auto-scroll to bottom
+      setTimeout(() => {
+        const messagesArea = document.querySelector('.messages-scroll-area');
+        if (messagesArea) {
+          messagesArea.scrollTop = messagesArea.scrollHeight;
+        }
+      }, 50);
       
-      // Send to API
+      // Send to API - the real message will come back via Socket.IO
       await agentApiRequest(`/agent/conversations/${selectedConversationId}/reply`, {
         method: 'POST',
         data: { message: messageText }
       });
       
-      // Refresh messages to get the actual message from server
-      await fetchMessages(selectedConversationId);
+      // Remove optimistic message - the real one will come via Socket.IO
+      setMessages(prev => prev.filter(msg => msg._id !== tempMessage._id));
+      
     } catch (error) {
       console.error('Failed to send message:', error);
       alert('Failed to send message: ' + (error.message || 'Unknown error'));
       // Restore input on error
       setMessageInput(messageText);
+      // Remove optimistic message on error
+      setMessages(prev => prev.filter(msg => !msg._id.startsWith('temp-')));
     } finally {
       setSendingMessage(false);
     }

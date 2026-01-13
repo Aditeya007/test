@@ -470,12 +470,25 @@ exports.sendMessage = async (req, res) => {
       const agentMessage = 'A human agent will join shortly.';
       
       // Save agent placeholder message to tenant database
-      await Message.createMessage(conversation._id, 'agent', agentMessage);
+      const placeholderMessage = await Message.createMessage(conversation._id, 'agent', agentMessage);
 
       // Update conversation activity after agent message
       await conversation.updateActivity();
 
       console.log(`👤 Conversation ${conversation._id} in human mode - agent notified`);
+
+      // Emit real-time placeholder message to all clients in this conversation room
+      const io = req.app.locals.io;
+      if (io) {
+        io.to(`conversation:${conversation._id}`).emit('message:new', {
+          _id: placeholderMessage._id,
+          conversationId: conversation._id,
+          sender: 'agent',
+          text: agentMessage,
+          createdAt: placeholderMessage.createdAt
+        });
+        console.log(`📡 Emitted placeholder message to conversation:${conversation._id}`);
+      }
 
       return res.json({
         success: true,
@@ -571,7 +584,7 @@ exports.sendMessage = async (req, res) => {
 
       // Save error message to tenant database
       const errorMessage = 'I apologize, but I encountered an error processing your request. Please try again.';
-      await Message.createMessage(
+      const errorMsg = await Message.createMessage(
         conversation._id,
         'bot',
         errorMessage,
@@ -580,6 +593,20 @@ exports.sendMessage = async (req, res) => {
 
       // Update conversation activity after error message
       await conversation.updateActivity();
+
+      // Emit error message to conversation room
+      const io = req.app.locals.io;
+      if (io) {
+        io.to(`conversation:${conversation._id}`).emit('message:new', {
+          _id: errorMsg._id,
+          conversationId: conversation._id,
+          sender: 'bot',
+          text: errorMessage,
+          createdAt: errorMsg.createdAt,
+          isError: true
+        });
+        console.log(`📡 Emitted error message to conversation:${conversation._id}`);
+      }
 
       // Determine appropriate status and error message
       let statusCode = botError.statusCode || 500;
