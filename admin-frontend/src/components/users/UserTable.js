@@ -1,8 +1,10 @@
 // src/components/users/UserTable.js
 
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
-function UserTable({ users, onEdit, onDelete, onViewResources, onSelect, activeTenantId }) {
+function UserTable({ users, onEdit, onDelete, onViewResources, onSelect, activeTenantId, onViewAgents }) {
+  const navigate = useNavigate();
   if (!users || users.length === 0) {
     return (
       <div className="empty-state">
@@ -101,10 +103,28 @@ function UserTable({ users, onEdit, onDelete, onViewResources, onSelect, activeT
                     >
                       Resources
                     </button>
+                    {onViewAgents && (user.maxAgents > 0) && (
+                      <button
+                        type="button"
+                        className="action-btn action-btn-purple"
+                        onClick={() => onViewAgents(user)}
+                        title="View agents"
+                        style={{
+                          background: '#9333ea',
+                          borderColor: '#9333ea',
+                          color: 'white'
+                        }}
+                      >
+                        Agents
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="action-btn action-btn-secondary"
-                      onClick={() => onEdit(user)}
+                      onClick={() => {
+                        const userId = user.id || user._id;
+                        navigate(`/admin/users/${userId}/edit`);
+                      }}
                       title="Edit user"
                     >
                       Edit

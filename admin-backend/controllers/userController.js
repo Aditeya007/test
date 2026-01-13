@@ -1,19 +1,60 @@
 // admin-backend/controllers/userController.js
 
-const User = require('../models/User');
-const Bot = require('../models/Bot');
-const bcrypt = require('bcryptjs');
+const User = require("../models/User");
+const Bot = require("../models/Bot");
+const bcrypt = require("bcryptjs");
 const {
   provisionResourcesForUser,
   provisionResourcesForBot,
-  ensureUserResources
-} = require('../services/provisioningService');
+  ensureUserResources,
+} = require("../services/provisioningService");
 const {
   invalidateUserTenantContext,
-  getUserTenantContext
-} = require('../services/userContextService');
+  getUserTenantContext,
+} = require("../services/userContextService");
 
 const SALT_ROUNDS = parseInt(process.env.BCRYPT_SALT_ROUNDS, 10) || 10;
+
+// Cache for tenant database connections (for agent queries)
+const tenantConnections = new Map();
+
+/**
+ * Get or create a connection to the tenant's database
+ */
+const getTenantConnection = async (databaseUri) => {
+  if (!databaseUri) {
+    throw new Error("databaseUri is required for tenant database connection");
+  }
+
+  if (tenantConnections.has(databaseUri)) {
+    return tenantConnections.get(databaseUri);
+  }
+
+  const mongoose = require("mongoose");
+  const conn = await mongoose
+    .createConnection(databaseUri, {
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+    })
+    .asPromise();
+
+  tenantConnections.set(databaseUri, conn);
+  return conn;
+};
+
+/**
+ * Get Agent model for a specific tenant database
+ */
+const getAgentModel = async (databaseUri) => {
+  const tenantDB = await getTenantConnection(databaseUri);
+  const AgentSchema = require("../models/Agent");
+
+  if (tenantDB.models.Agent) {
+    return tenantDB.models.Agent;
+  }
+
+  return tenantDB.model("Agent", AgentSchema);
+};
 
 const toSafeUser = (userDoc, { includeVectorStore = false } = {}) => {
   if (!userDoc) {
@@ -29,30 +70,30 @@ const toSafeUser = (userDoc, { includeVectorStore = false } = {}) => {
 
   return {
     ...safeUser,
-    id: safeUser._id
+    id: safeUser._id,
   };
 };
 
 const normalizeBoolean = (value, defaultValue) => {
-  if (typeof value === 'undefined') {
-    return typeof defaultValue === 'undefined' ? true : !!defaultValue;
+  if (typeof value === "undefined") {
+    return typeof defaultValue === "undefined" ? true : !!defaultValue;
   }
-  if (typeof value === 'boolean') {
+  if (typeof value === "boolean") {
     return value;
   }
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
-    if (['true', '1', 'yes', 'on'].includes(normalized)) {
+    if (["true", "1", "yes", "on"].includes(normalized)) {
       return true;
     }
-    if (['false', '0', 'no', 'off'].includes(normalized)) {
+    if (["false", "0", "no", "off"].includes(normalized)) {
       return false;
     }
   }
-  if (typeof value === 'number') {
+  if (typeof value === "number") {
     return value !== 0;
   }
-  return typeof defaultValue === 'undefined' ? true : !!defaultValue;
+  return typeof defaultValue === "undefined" ? true : !!defaultValue;
 };
 
 /**
@@ -66,18 +107,18 @@ exports.getMe = async (req, res) => {
     const user = await User.findById(req.user.userId);
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
-  const safeUser = toSafeUser(user, { includeVectorStore: true });
+    const safeUser = toSafeUser(user, { includeVectorStore: true });
 
     res.json(safeUser);
   } catch (err) {
-    console.error('❌ Error fetching user profile:', {
+    console.error("❌ Error fetching user profile:", {
       message: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
-    res.status(500).json({ error: 'Server error fetching profile' });
+    res.status(500).json({ error: "Server error fetching profile" });
   }
 };
 
@@ -96,59 +137,59 @@ exports.updateMe = async (req, res) => {
   if (name) updates.name = name.trim();
   if (email) updates.email = email.toLowerCase().trim();
   if (username) updates.username = username.trim();
-  
+
   // Hash password if provided
   if (password) {
     try {
       const salt = await bcrypt.genSalt(10);
       updates.password = await bcrypt.hash(password, salt);
     } catch (err) {
-      console.error('❌ Error hashing password:', err);
-      return res.status(500).json({ error: 'Error updating password' });
+      console.error("❌ Error hashing password:", err);
+      return res.status(500).json({ error: "Error updating password" });
     }
   }
 
   try {
     const currentUser = await User.findById(req.user.userId);
     if (!currentUser) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
     // Check for duplicate email/username before updating
     // Email: For admins, check globally; for regular users, check within their admin's scope
     if (email) {
-      const emailQuery = { 
+      const emailQuery = {
         email: email.toLowerCase().trim(),
-        _id: { $ne: req.user.userId } // Exclude current user
+        _id: { $ne: req.user.userId }, // Exclude current user
       };
-      
+
       // If current user is a regular user, scope email check to their admin
-      if (currentUser.role === 'user' && currentUser.adminId) {
+      if (currentUser.role === "user" && currentUser.adminId) {
         emailQuery.adminId = currentUser.adminId;
-      } else if (currentUser.role === 'admin') {
+      } else if (currentUser.role === "admin") {
         // For admins, check only among other admins
-        emailQuery.role = 'admin';
+        emailQuery.role = "admin";
       }
-      
+
       const existingEmail = await User.findOne(emailQuery);
       if (existingEmail) {
-        return res.status(400).json({ 
-          error: 'Email already in use by another user',
-          field: 'email'
+        return res.status(400).json({
+          error: "Email already in use by another user",
+          field: "email",
         });
       }
     }
-    
+
     // Username: Check global uniqueness across ALL users
     if (username) {
-      const existingUsername = await User.findOne({ 
+      const existingUsername = await User.findOne({
         username: username.trim(),
-        _id: { $ne: req.user.userId } // Exclude current user
+        _id: { $ne: req.user.userId }, // Exclude current user
       });
       if (existingUsername) {
-        return res.status(400).json({ 
-          error: 'Username already taken. Please choose a different username.',
-          field: 'username'
+        return res.status(400).json({
+          error: "Username already taken. Please choose a different username.",
+          field: "username",
         });
       }
     }
@@ -158,44 +199,46 @@ exports.updateMe = async (req, res) => {
       req.user.userId,
       { $set: updates },
       { new: true, runValidators: true }
-    ).select('-password');
+    ).select("-password");
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
-    
+
     console.log(`✅ User profile updated: ${user.username}`);
 
     invalidateUserTenantContext(req.user.userId);
-    
+
     const responseUser = user.toObject({ versionKey: false });
-    if (responseUser.role !== 'admin') {
+    if (responseUser.role !== "admin") {
       delete responseUser.vectorStorePath;
     }
 
     res.json({
-      message: 'Profile updated successfully',
-      user: responseUser
+      message: "Profile updated successfully",
+      user: responseUser,
     });
   } catch (err) {
-    console.error('❌ Profile update error:', err);
-    
+    console.error("❌ Profile update error:", err);
+
     // Handle mongoose validation errors
-    if (err.name === 'ValidationError') {
-      const messages = Object.values(err.errors).map(e => e.message);
-      return res.status(400).json({ error: messages.join(', ') });
+    if (err.name === "ValidationError") {
+      const messages = Object.values(err.errors).map((e) => e.message);
+      return res.status(400).json({ error: messages.join(", ") });
     }
-    
+
     // Handle duplicate key errors
     if (err.code === 11000) {
       const field = Object.keys(err.keyPattern)[0];
-      return res.status(400).json({ 
-        error: `${field.charAt(0).toUpperCase() + field.slice(1)} already in use`,
-        field
+      return res.status(400).json({
+        error: `${
+          field.charAt(0).toUpperCase() + field.slice(1)
+        } already in use`,
+        field,
       });
     }
-    
-    res.status(500).json({ error: 'Update failed' });
+
+    res.status(500).json({ error: "Update failed" });
   }
 };
 
@@ -207,19 +250,63 @@ exports.getAllUsers = async (req, res) => {
     // If the current user is an admin, only show users they created
     // If somehow a regular user accesses this, show nothing
     let query = {};
-    if (currentUserRole === 'admin') {
+    if (currentUserRole === "admin") {
       query.adminId = currentUserId;
     } else {
       // Regular users shouldn't access this endpoint, but just in case
-      return res.status(403).json({ error: 'Access denied' });
+      return res.status(403).json({ error: "Access denied" });
     }
 
-    const users = await User.find(query).sort({ createdAt: -1 });
-    const payload = users.map((user) => toSafeUser(user, { includeVectorStore: true }));
-    res.json({ users: payload, count: payload.length });
+    // Search functionality
+    const searchTerm = req.query.search?.trim();
+    if (searchTerm) {
+      // Case-insensitive search across name, username, and email
+      query.$or = [
+        { name: { $regex: searchTerm, $options: "i" } },
+        { username: { $regex: searchTerm, $options: "i" } },
+        { email: { $regex: searchTerm, $options: "i" } },
+      ];
+    }
+
+    // Pagination parameters - default to 5 per page
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 5;
+    const skip = (page - 1) * limit;
+
+    // Get total count for pagination (with search filter applied)
+    const totalCount = await User.countDocuments(query);
+
+    // Fetch users with pagination - ONLY the current page's data
+    const users = await User.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const payload = users.map((user) =>
+      toSafeUser(user, { includeVectorStore: true })
+    );
+
+    const totalPages = Math.ceil(totalCount / limit);
+
+    console.log(
+      `📄 Pagination: Page ${page}, Limit ${limit}, Search: "${
+        searchTerm || "none"
+      }", Total: ${totalCount}, Pages: ${totalPages}, Returning: ${
+        payload.length
+      } users`
+    );
+
+    res.json({
+      users: payload,
+      count: payload.length,
+      totalCount,
+      page,
+      limit,
+      totalPages,
+    });
   } catch (err) {
-    console.error('❌ Error fetching users:', err);
-    res.status(500).json({ error: 'Failed to fetch users' });
+    console.error("❌ Error fetching users:", err);
+    res.status(500).json({ error: "Failed to fetch users" });
   }
 };
 
@@ -232,38 +319,40 @@ exports.createUser = async (req, res) => {
     const currentUserRole = req.user.role;
 
     // Only admins can create users
-    if (currentUserRole !== 'admin') {
-      return res.status(403).json({ error: 'Only administrators can create users' });
+    if (currentUserRole !== "admin") {
+      return res
+        .status(403)
+        .json({ error: "Only administrators can create users" });
     }
 
     const sanitizedEmail = email.toLowerCase().trim();
     const sanitizedUsername = username.trim();
     const sanitizedName = name.trim();
     const isActive = normalizeBoolean(requestedActive, true);
-    
+
     // Parse maxBots exactly as provided by admin
     const userMaxBots = Number(maxBots);
-    
+
     // Parse maxAgents (default to 0 if not provided)
     const userMaxAgents = maxAgents !== undefined ? Number(maxAgents) : 0;
 
     // Check for duplicate email and username for the ONE user
     const [existingEmail, existingUsername] = await Promise.all([
       User.findOne({ email: sanitizedEmail, adminId: currentUserId }),
-      User.findOne({ username: sanitizedUsername })
+      User.findOne({ username: sanitizedUsername }),
     ]);
 
     if (existingEmail) {
-      return res.status(400).json({ 
-        error: `Email ${sanitizedEmail} already in use by another user under your account`, 
-        field: 'email' 
+      return res.status(400).json({
+        error: `Email ${sanitizedEmail} already in use by another user under your account`,
+        field: "email",
       });
     }
 
     if (existingUsername) {
-      return res.status(400).json({ 
-        error: `Username ${sanitizedUsername} already taken. Please choose a different username.`, 
-        field: 'username' 
+      return res.status(400).json({
+        error: `Username ${sanitizedUsername} already taken. Please choose a different username.`,
+        field: "username",
       });
     }
 
@@ -275,23 +364,25 @@ exports.createUser = async (req, res) => {
       email: sanitizedEmail,
       username: sanitizedUsername,
       password: hashedPassword,
-      role: 'user',
+      role: "user",
       isActive,
       adminId: currentUserId,
       maxBots: userMaxBots,
-      maxAgents: userMaxAgents
+      maxAgents: userMaxAgents,
     });
 
     // Provision user-level resources
     try {
       const resources = provisionResourcesForUser({
         userId: user._id.toString(),
-        username: sanitizedUsername
+        username: sanitizedUsername,
       });
       user.set(resources);
     } catch (provisionErr) {
-      console.error('❌ User provisioning failed:', provisionErr);
-      return res.status(500).json({ error: 'Failed to provision user resources' });
+      console.error("❌ User provisioning failed:", provisionErr);
+      return res
+        .status(500)
+        .json({ error: "Failed to provision user resources" });
     }
 
     await user.save();
@@ -299,28 +390,30 @@ exports.createUser = async (req, res) => {
 
     // Return response
     const safeUser = toSafeUser(user, { includeVectorStore: true });
-    
+
     res.status(201).json({
-      message: 'User created successfully',
-      user: safeUser
+      message: "User created successfully",
+      user: safeUser,
     });
   } catch (err) {
-    console.error('❌ Create user error:', err);
+    console.error("❌ Create user error:", err);
 
-    if (err.name === 'ValidationError') {
+    if (err.name === "ValidationError") {
       const messages = Object.values(err.errors).map((e) => e.message);
-      return res.status(400).json({ error: messages.join(', ') });
+      return res.status(400).json({ error: messages.join(", ") });
     }
 
     if (err.code === 11000) {
       const field = Object.keys(err.keyPattern)[0];
       return res.status(400).json({
-        error: `${field.charAt(0).toUpperCase() + field.slice(1)} already in use`,
-        field
+        error: `${
+          field.charAt(0).toUpperCase() + field.slice(1)
+        } already in use`,
+        field,
       });
     }
 
-    res.status(500).json({ error: 'Failed to create user' });
+    res.status(500).json({ error: "Failed to create user" });
   }
 };
 
@@ -334,23 +427,31 @@ exports.getUserById = async (req, res) => {
     const user = await User.findById(id);
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
     // Admins can only view users they created
-    if (currentUserRole === 'admin' && user.adminId && user.adminId.toString() !== currentUserId) {
-      return res.status(403).json({ error: 'Access denied: You can only view users you created' });
+    if (
+      currentUserRole === "admin" &&
+      user.adminId &&
+      user.adminId.toString() !== currentUserId
+    ) {
+      return res
+        .status(403)
+        .json({ error: "Access denied: You can only view users you created" });
     }
 
     // Regular users can only view their own profile
-    if (currentUserRole === 'user' && user._id.toString() !== currentUserId) {
-      return res.status(403).json({ error: 'Access denied: You can only view your own profile' });
+    if (currentUserRole === "user" && user._id.toString() !== currentUserId) {
+      return res
+        .status(403)
+        .json({ error: "Access denied: You can only view your own profile" });
     }
 
     res.json({ user: toSafeUser(user, { includeVectorStore: true }) });
   } catch (err) {
     console.error(`❌ Error fetching user ${id}:`, err);
-    res.status(500).json({ error: 'Failed to fetch user' });
+    res.status(500).json({ error: "Failed to fetch user" });
   }
 };
 
@@ -358,20 +459,25 @@ exports.getUserResources = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const tenantContext = await getUserTenantContext(id, { forceRefresh: true });
+    const tenantContext = await getUserTenantContext(id, {
+      forceRefresh: true,
+    });
     res.json({
-      tenant: tenantContext
+      tenant: tenantContext,
     });
   } catch (err) {
     console.error(`❌ Error loading tenant context for ${id}:`, err);
     const status = err.statusCode || 500;
-    res.status(status).json({ error: err.message || 'Failed to load tenant resources' });
+    res
+      .status(status)
+      .json({ error: err.message || "Failed to load tenant resources" });
   }
 };
 
 exports.updateUser = async (req, res) => {
   const { id } = req.params;
-  const { name, email, username, password, isActive, maxBots, maxAgents } = req.body;
+  const { name, email, username, password, isActive, maxBots, maxAgents } =
+    req.body;
 
   const updates = {};
 
@@ -384,27 +490,27 @@ exports.updateUser = async (req, res) => {
   if (username) {
     updates.username = username.trim();
   }
-  if (typeof isActive !== 'undefined') {
+  if (typeof isActive !== "undefined") {
     updates.isActive = normalizeBoolean(isActive, true);
   }
   // Allow admins to update maxBots
-  if (typeof maxBots !== 'undefined') {
+  if (typeof maxBots !== "undefined") {
     const parsedMaxBots = Number(maxBots);
     if (isNaN(parsedMaxBots) || parsedMaxBots < 1 || parsedMaxBots > 10) {
-      return res.status(400).json({ 
-        error: 'maxBots must be a number between 1 and 10',
-        field: 'maxBots'
+      return res.status(400).json({
+        error: "maxBots must be a number between 1 and 10",
+        field: "maxBots",
       });
     }
     updates.maxBots = parsedMaxBots;
   }
   // Allow admins to update maxAgents
-  if (typeof maxAgents !== 'undefined') {
+  if (typeof maxAgents !== "undefined") {
     const parsedMaxAgents = Number(maxAgents);
     if (isNaN(parsedMaxAgents) || parsedMaxAgents < 0 || parsedMaxAgents > 50) {
-      return res.status(400).json({ 
-        error: 'maxAgents must be a number between 0 and 50',
-        field: 'maxAgents'
+      return res.status(400).json({
+        error: "maxAgents must be a number between 0 and 50",
+        field: "maxAgents",
       });
     }
     updates.maxAgents = parsedMaxAgents;
@@ -417,31 +523,50 @@ exports.updateUser = async (req, res) => {
     // Check if user exists and verify ownership
     const userToUpdate = await User.findById(id);
     if (!userToUpdate) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
     // Admins can only update users they created
-    if (currentUserRole === 'admin' && userToUpdate.adminId && userToUpdate.adminId.toString() !== currentUserId) {
-      return res.status(403).json({ error: 'Access denied: You can only update users you created' });
+    if (
+      currentUserRole === "admin" &&
+      userToUpdate.adminId &&
+      userToUpdate.adminId.toString() !== currentUserId
+    ) {
+      return res
+        .status(403)
+        .json({
+          error: "Access denied: You can only update users you created",
+        });
     }
 
     // Regular users can only update their own profile
-    if (currentUserRole === 'user' && userToUpdate._id.toString() !== currentUserId) {
-      return res.status(403).json({ error: 'Access denied: You can only update your own profile' });
+    if (
+      currentUserRole === "user" &&
+      userToUpdate._id.toString() !== currentUserId
+    ) {
+      return res
+        .status(403)
+        .json({ error: "Access denied: You can only update your own profile" });
     }
 
     // Get the adminId for scoping duplicate checks
-    const adminIdForCheck = currentUserRole === 'admin' ? currentUserId : userToUpdate.adminId;
+    const adminIdForCheck =
+      currentUserRole === "admin" ? currentUserId : userToUpdate.adminId;
 
     // Email: Check uniqueness within the same admin's scope
     if (updates.email) {
       const existingEmail = await User.findOne({
         email: updates.email,
         adminId: adminIdForCheck,
-        _id: { $ne: id }
+        _id: { $ne: id },
       });
       if (existingEmail) {
-        return res.status(400).json({ error: 'Email already in use by another user under this admin', field: 'email' });
+        return res
+          .status(400)
+          .json({
+            error: "Email already in use by another user under this admin",
+            field: "email",
+          });
       }
     }
 
@@ -449,10 +574,16 @@ exports.updateUser = async (req, res) => {
     if (updates.username) {
       const existingUsername = await User.findOne({
         username: updates.username,
-        _id: { $ne: id }
+        _id: { $ne: id },
       });
       if (existingUsername) {
-        return res.status(400).json({ error: 'Username already taken. Please choose a different username.', field: 'username' });
+        return res
+          .status(400)
+          .json({
+            error:
+              "Username already taken. Please choose a different username.",
+            field: "username",
+          });
       }
     }
 
@@ -467,24 +598,24 @@ exports.updateUser = async (req, res) => {
     );
 
     if (!updatedUser) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
     invalidateUserTenantContext(id);
 
     res.json({
-      message: 'User updated successfully',
-      user: toSafeUser(updatedUser, { includeVectorStore: true })
+      message: "User updated successfully",
+      user: toSafeUser(updatedUser, { includeVectorStore: true }),
     });
   } catch (err) {
-  console.error(`❌ Error updating user ${id}:`, err);
+    console.error(`❌ Error updating user ${id}:`, err);
 
-    if (err.name === 'ValidationError') {
+    if (err.name === "ValidationError") {
       const messages = Object.values(err.errors).map((e) => e.message);
-      return res.status(400).json({ error: messages.join(', ') });
+      return res.status(400).json({ error: messages.join(", ") });
     }
 
-    res.status(500).json({ error: 'Failed to update user' });
+    res.status(500).json({ error: "Failed to update user" });
   }
 };
 
@@ -493,7 +624,7 @@ exports.deleteUser = async (req, res) => {
 
   if (req.user.userId === id) {
     return res.status(400).json({
-      error: 'You cannot delete your own account while signed in'
+      error: "You cannot delete your own account while signed in",
     });
   }
 
@@ -504,17 +635,27 @@ exports.deleteUser = async (req, res) => {
     const user = await User.findById(id);
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
     // Admins can only delete users they created
-    if (currentUserRole === 'admin' && user.adminId && user.adminId.toString() !== currentUserId) {
-      return res.status(403).json({ error: 'Access denied: You can only delete users you created' });
+    if (
+      currentUserRole === "admin" &&
+      user.adminId &&
+      user.adminId.toString() !== currentUserId
+    ) {
+      return res
+        .status(403)
+        .json({
+          error: "Access denied: You can only delete users you created",
+        });
     }
 
     // Regular users shouldn't be able to delete anyone
-    if (currentUserRole === 'user') {
-      return res.status(403).json({ error: 'Access denied: Users cannot delete accounts' });
+    if (currentUserRole === "user") {
+      return res
+        .status(403)
+        .json({ error: "Access denied: Users cannot delete accounts" });
     }
 
     // Delete all bots owned by this user
@@ -523,10 +664,10 @@ exports.deleteUser = async (req, res) => {
     await user.deleteOne();
     invalidateUserTenantContext(id);
 
-    res.json({ message: 'User deleted successfully' });
+    res.json({ message: "User deleted successfully" });
   } catch (err) {
     console.error(`❌ Error deleting user ${id}:`, err);
-    res.status(500).json({ error: 'Failed to delete user' });
+    res.status(500).json({ error: "Failed to delete user" });
   }
 };
 
@@ -540,12 +681,12 @@ exports.deleteUser = async (req, res) => {
 exports.getApiToken = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const regenerate = req.query.regenerate === 'true';
+    const regenerate = req.query.regenerate === "true";
 
     const user = await User.findById(userId);
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
     // If user already has a token and regenerate not requested, return it
@@ -557,15 +698,19 @@ exports.getApiToken = async (req, res) => {
     const apiToken = user.generateApiToken();
     await user.save();
 
-    console.log(`🔑 API token ${regenerate ? 'regenerated' : 'generated'} for user: ${user.username}`);
+    console.log(
+      `🔑 API token ${regenerate ? "regenerated" : "generated"} for user: ${
+        user.username
+      }`
+    );
 
     res.json({ apiToken });
   } catch (err) {
-    console.error('❌ Error generating API token:', {
+    console.error("❌ Error generating API token:", {
       message: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
-    res.status(500).json({ error: 'Failed to generate API token' });
+    res.status(500).json({ error: "Failed to generate API token" });
   }
 };
 
@@ -580,24 +725,35 @@ exports.getApiToken = async (req, res) => {
 exports.getUserApiToken = async (req, res) => {
   try {
     const { id } = req.params;
-    const regenerate = req.query.regenerate === 'true';
+    const regenerate = req.query.regenerate === "true";
     const currentUserRole = req.user.role;
     const currentUserId = req.user.userId;
 
     const user = await User.findById(id);
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
     // Admins can only get tokens for users they created
-    if (currentUserRole === 'admin' && user.adminId && user.adminId.toString() !== currentUserId) {
-      return res.status(403).json({ error: 'Access denied: You can only access tokens for users you created' });
+    if (
+      currentUserRole === "admin" &&
+      user.adminId &&
+      user.adminId.toString() !== currentUserId
+    ) {
+      return res
+        .status(403)
+        .json({
+          error:
+            "Access denied: You can only access tokens for users you created",
+        });
     }
 
     // Regular users can only get their own token
-    if (currentUserRole === 'user' && user._id.toString() !== currentUserId) {
-      return res.status(403).json({ error: 'Access denied: You can only access your own token' });
+    if (currentUserRole === "user" && user._id.toString() !== currentUserId) {
+      return res
+        .status(403)
+        .json({ error: "Access denied: You can only access your own token" });
     }
 
     // If user already has a token and regenerate not requested, return it
@@ -609,15 +765,19 @@ exports.getUserApiToken = async (req, res) => {
     const apiToken = user.generateApiToken();
     await user.save();
 
-    console.log(`🔑 API token ${regenerate ? 'regenerated' : 'generated'} for user: ${user.username} (by ${req.user.username})`);
+    console.log(
+      `🔑 API token ${regenerate ? "regenerated" : "generated"} for user: ${
+        user.username
+      } (by ${req.user.username})`
+    );
 
     res.json({ apiToken });
   } catch (err) {
-    console.error('❌ Error generating API token:', {
+    console.error("❌ Error generating API token:", {
       message: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
-    res.status(500).json({ error: 'Failed to generate API token' });
+    res.status(500).json({ error: "Failed to generate API token" });
   }
 };
 
@@ -634,29 +794,42 @@ exports.getBotApiToken = async (req, res) => {
     const currentUserRole = req.user.role;
     const currentUserId = req.user.userId;
 
-    const bot = await Bot.findById(botId).populate('userId');
+    const bot = await Bot.findById(botId).populate("userId");
 
     if (!bot) {
-      return res.status(404).json({ error: 'Bot not found' });
+      return res.status(404).json({ error: "Bot not found" });
     }
 
     // Admins can only get tokens for bots of users they created
-    if (currentUserRole === 'admin' && bot.userId.adminId && bot.userId.adminId.toString() !== currentUserId) {
-      return res.status(403).json({ error: 'Access denied: You can only access tokens for your bots' });
+    if (
+      currentUserRole === "admin" &&
+      bot.userId.adminId &&
+      bot.userId.adminId.toString() !== currentUserId
+    ) {
+      return res
+        .status(403)
+        .json({
+          error: "Access denied: You can only access tokens for your bots",
+        });
     }
 
     // Regular users can only get tokens for their own bots
-    if (currentUserRole === 'user' && bot.userId._id.toString() !== currentUserId) {
-      return res.status(403).json({ error: 'Access denied: You can only access your own bots' });
+    if (
+      currentUserRole === "user" &&
+      bot.userId._id.toString() !== currentUserId
+    ) {
+      return res
+        .status(403)
+        .json({ error: "Access denied: You can only access your own bots" });
     }
 
     res.json({ apiToken: bot.apiToken });
   } catch (err) {
-    console.error('❌ Error fetching bot API token:', {
+    console.error("❌ Error fetching bot API token:", {
       message: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
-    res.status(500).json({ error: 'Failed to fetch bot API token' });
+    res.status(500).json({ error: "Failed to fetch bot API token" });
   }
 };
 
@@ -676,35 +849,110 @@ exports.getUserBots = async (req, res) => {
     const user = await User.findById(id);
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
     // Admins can only view bots for users they created
-    if (currentUserRole === 'admin' && user.adminId && user.adminId.toString() !== currentUserId) {
-      return res.status(403).json({ error: 'Access denied: You can only view bots for users you created' });
+    if (
+      currentUserRole === "admin" &&
+      user.adminId &&
+      user.adminId.toString() !== currentUserId
+    ) {
+      return res
+        .status(403)
+        .json({
+          error: "Access denied: You can only view bots for users you created",
+        });
     }
 
     // Regular users can only view their own bots
-    if (currentUserRole === 'user' && user._id.toString() !== currentUserId) {
-      return res.status(403).json({ error: 'Access denied: You can only view your own bots' });
+    if (currentUserRole === "user" && user._id.toString() !== currentUserId) {
+      return res
+        .status(403)
+        .json({ error: "Access denied: You can only view your own bots" });
     }
 
     const bots = await Bot.find({ userId: id }).sort({ createdAt: 1 });
 
-    const botsWithId = bots.map(bot => {
+    const botsWithId = bots.map((bot) => {
       const botObj = bot.toObject({ versionKey: false });
       return {
         ...botObj,
-        id: botObj._id
+        id: botObj._id,
       };
     });
 
     res.json({ bots: botsWithId, count: botsWithId.length });
   } catch (err) {
-    console.error('❌ Error fetching user bots:', {
+    console.error("❌ Error fetching user bots:", {
       message: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
-    res.status(500).json({ error: 'Failed to fetch user bots' });
+    res.status(500).json({ error: "Failed to fetch user bots" });
+  }
+};
+
+/**
+ * Get all agents for a user
+ * @route   GET /api/users/:id/agents
+ * @access  Protected (requires JWT, admin only for viewing other users' agents)
+ * @param   {string} id - User ID
+ * @returns {Object} { agents: Array, count: number, maxAgents: number }
+ */
+exports.getUserAgents = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const currentUserRole = req.user.role;
+    const currentUserId = req.user.userId;
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Admins can only view agents for users they created
+    if (
+      currentUserRole === "admin" &&
+      user.adminId &&
+      user.adminId.toString() !== currentUserId
+    ) {
+      return res
+        .status(403)
+        .json({
+          error:
+            "Access denied: You can only view agents for users you created",
+        });
+    }
+
+    // Regular users can only view their own agents
+    if (currentUserRole === "user" && user._id.toString() !== currentUserId) {
+      return res
+        .status(403)
+        .json({ error: "Access denied: You can only view your own agents" });
+    }
+
+    // Check if user has agents enabled
+    if (!user.databaseUri) {
+      return res.json({ agents: [], count: 0, maxAgents: user.maxAgents || 0 });
+    }
+
+    // Get agents from tenant database
+    const Agent = await getAgentModel(user.databaseUri);
+    const agents = await Agent.find().sort({ createdAt: -1 });
+
+    const agentsWithId = agents.map((agent) => agent.toPublicProfile());
+
+    res.json({
+      agents: agentsWithId,
+      count: agentsWithId.length,
+      maxAgents: user.maxAgents || 0,
+    });
+  } catch (err) {
+    console.error("❌ Error fetching user agents:", {
+      message: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    });
+    res.status(500).json({ error: "Failed to fetch user agents" });
   }
 };

@@ -71,4 +71,11 @@ router.get('/:id/api-token', userController.getUserApiToken);
  */
 router.get('/:id/bots', userController.getUserBots);
 
+/**
+ * @route   GET /api/users/:id/agents
+ * @desc    Get all agents for a user
+ * @access  Protected (admin only)
+ */
+router.get('/:id/agents', userController.getUserAgents);
+
 module.exports = router;
