@@ -43,7 +43,7 @@ router.get('/conversation/:sessionId/messages', chatController.getMessages);
  * - status === "ai": Forward to RAG bot, save and return bot response
  * - status === "human": Save message, return agent placeholder
  */
-router.post('/chat/message', botLimiter, chatController.sendMessage);
+router.post('/message', botLimiter, chatController.sendMessage);
 
 /**
  * @route   PUT /api/conversation/:conversationId/status
