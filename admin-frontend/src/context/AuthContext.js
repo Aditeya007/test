@@ -62,50 +62,54 @@ export function AuthProvider({ children }) {
 
           // Restore agent session from localStorage
           const storedTenant = localStorage.getItem('agentTenant');
-          if (storedTenant) {
-            try {
-              const tenantData = JSON.parse(storedTenant);
-              const effectiveUserId = decoded.tenantId;
-              
-              // Set agent as the authenticated entity
-              setAgent({
-                id: effectiveUserId,
-                _id: effectiveUserId,
-                username: decoded.username,
-                role: 'agent',
-                agentId: decoded.agentId || null,
-                tenantId: decoded.tenantId || null,
-                name: tenantData.name || decoded.username,
-                email: tenantData.email,
-                databaseUri: tenantData.databaseUri,
-                maxAgents: tenantData.maxAgents
-              });
-              
-              // Also set as user for backward compatibility with existing components
-              setUser({
-                id: effectiveUserId,
-                _id: effectiveUserId,
-                username: decoded.username,
-                role: 'agent',
-                agentId: decoded.agentId || null,
-                tenantId: decoded.tenantId || null,
-                name: tenantData.name || decoded.username,
-                email: tenantData.email,
-                databaseUri: tenantData.databaseUri,
-                maxAgents: tenantData.maxAgents
-              });
-              
+          const storedAgentData = localStorage.getItem('agentData');
+          
+          try {
+            const tenantData = storedTenant ? JSON.parse(storedTenant) : null;
+            const agentData = storedAgentData ? JSON.parse(storedAgentData) : null;
+            const effectiveUserId = decoded.tenantId;
+            
+            // Set agent as the authenticated entity
+            setAgent({
+              id: effectiveUserId,
+              _id: effectiveUserId,
+              username: decoded.username,
+              role: 'agent',
+              agentId: decoded.agentId || null,
+              tenantId: decoded.tenantId || null,
+              name: agentData?.name || tenantData?.name || decoded.username,
+              email: agentData?.email || tenantData?.email || '',
+              databaseUri: tenantData?.databaseUri || null,
+              maxAgents: tenantData?.maxAgents || 0
+            });
+            
+            // Also set as user for backward compatibility with existing components
+            setUser({
+              id: effectiveUserId,
+              _id: effectiveUserId,
+              username: decoded.username,
+              role: 'agent',
+              agentId: decoded.agentId || null,
+              tenantId: decoded.tenantId || null,
+              name: agentData?.name || tenantData?.name || decoded.username,
+              email: agentData?.email || tenantData?.email || '',
+              databaseUri: tenantData?.databaseUri || null,
+              maxAgents: tenantData?.maxAgents || 0
+            });
+            
+            if (tenantData) {
               setActiveTenantState({
                 ...tenantData,
                 id: effectiveUserId,
                 _id: effectiveUserId
               });
-            } catch (parseError) {
-              console.error('Failed to parse tenant data:', parseError);
-              localStorage.removeItem('agentToken');
-              localStorage.removeItem('isAgent');
-              localStorage.removeItem('agentTenant');
             }
+          } catch (parseError) {
+            console.error('Failed to parse agent/tenant data:', parseError);
+            localStorage.removeItem('agentToken');
+            localStorage.removeItem('isAgent');
+            localStorage.removeItem('agentTenant');
+            localStorage.removeItem('agentData');
           }
           
           setLoading(false);

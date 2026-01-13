@@ -91,10 +91,9 @@ function AgentLoginPage() {
           localStorage.setItem('agentTenant', JSON.stringify(response.tenant));
         }
 
-        // Redirect directly to agent panel (not dashboard)
-        startTransition(() => {
-          window.location.href = '/agent';
-        });
+        // Force a page reload to trigger AuthContext session restoration
+        // This ensures the AuthContext properly recognizes the agent session
+        window.location.href = '/agent';
       }
     } catch (error) {
       setServerError(error.message || 'Login failed. Please check your credentials.');

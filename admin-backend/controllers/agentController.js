@@ -1,17 +1,17 @@
 // admin-backend/controllers/agentController.js
 
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const mongoose = require('mongoose');
-const User = require('../models/User');
-const AgentSchema = require('../models/Agent');
-const Bot = require('../models/Bot');
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
+const User = require("../models/User");
+const AgentSchema = require("../models/Agent");
+const Bot = require("../models/Bot");
 
 /**
  * Agent Controller
  * Handles agent authentication and management
- * 
- * IMPORTANT: 
+ *
+ * IMPORTANT:
  * - User models are in the ADMIN database (default mongoose connection)
  * - Agent models are in TENANT databases (separate connections)
  */
@@ -25,7 +25,7 @@ const tenantConnections = new Map();
  */
 const getTenantConnection = async (databaseUri) => {
   if (!databaseUri) {
-    throw new Error('databaseUri is required for tenant database connection');
+    throw new Error("databaseUri is required for tenant database connection");
   }
 
   // Return cached connection if exists
@@ -34,17 +34,19 @@ const getTenantConnection = async (databaseUri) => {
   }
 
   // Create new connection and await it
-  const conn = await mongoose.createConnection(databaseUri, {
-    maxPoolSize: 10,
-    serverSelectionTimeoutMS: 5000,
-  }).asPromise();
+  const conn = await mongoose
+    .createConnection(databaseUri, {
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+    })
+    .asPromise();
 
   console.log(`🔌 New tenant database connection established:`, {
     database: databaseUri,
     readyState: conn.readyState, // 0=disconnected, 1=connected, 2=connecting, 3=disconnecting
     host: conn.host,
     port: conn.port,
-    name: conn.name
+    name: conn.name,
   });
 
   tenantConnections.set(databaseUri, conn);
@@ -56,27 +58,27 @@ const getTenantConnection = async (databaseUri) => {
  */
 const getAgentModel = async (databaseUri) => {
   const tenantDB = await getTenantConnection(databaseUri);
-  
+
   console.log(`📦 Getting Agent model for database:`, {
     database: databaseUri,
     connectionState: tenantDB.readyState,
-    existingModel: !!tenantDB.models.Agent
+    existingModel: !!tenantDB.models.Agent,
   });
-  
+
   // Check if model already exists for this connection
   if (tenantDB.models.Agent) {
     return tenantDB.models.Agent;
   }
-  
+
   // Create model for this tenant's database
-  return tenantDB.model('Agent', AgentSchema);
+  return tenantDB.model("Agent", AgentSchema);
 };
 
 /**
  * POST /api/agent/login
  * Agent login endpoint - validates credentials and returns JWT
  * Searches across all tenants to find agent by username
- * 
+ *
  * Body: { username, password }
  */
 const agentLogin = async (req, res) => {
@@ -86,8 +88,8 @@ const agentLogin = async (req, res) => {
     // Validation
     if (!username || !password) {
       return res.status(400).json({
-        error: 'Missing required fields',
-        message: 'Username and password are required'
+        error: "Missing required fields",
+        message: "Username and password are required",
       });
     }
 
@@ -96,25 +98,25 @@ const agentLogin = async (req, res) => {
 
     // Check JWT_SECRET is configured
     if (!process.env.JWT_SECRET) {
-      console.error('❌ JWT_SECRET is not configured');
+      console.error("❌ JWT_SECRET is not configured");
       return res.status(500).json({
-        error: 'Server configuration error',
-        message: 'Authentication service is not properly configured'
+        error: "Server configuration error",
+        message: "Authentication service is not properly configured",
       });
     }
 
     console.log(`🔍 Agent login attempt for username: "${normalizedUsername}"`);
 
     // Search for agent across all tenants with agents enabled
-    const tenants = await User.find({ maxAgents: { $gt: 0 }, role: 'user' });
-    
+    const tenants = await User.find({ maxAgents: { $gt: 0 }, role: "user" });
+
     console.log(`📋 Found ${tenants.length} tenant(s) with agents enabled`);
 
     if (tenants.length === 0) {
-      console.warn('⚠️  No tenants found with agents enabled');
+      console.warn("⚠️  No tenants found with agents enabled");
       return res.status(401).json({
-        error: 'Invalid credentials',
-        message: 'Username or password is incorrect'
+        error: "Invalid credentials",
+        message: "Username or password is incorrect",
       });
     }
 
@@ -126,12 +128,14 @@ const agentLogin = async (req, res) => {
     // Search each tenant's database for the agent
     for (const tenant of tenants) {
       if (!tenant.databaseUri) {
-        console.warn(`⚠️  Tenant ${tenant._id} (${tenant.username}) has no databaseUri`);
+        console.warn(
+          `⚠️  Tenant ${tenant._id} (${tenant.username}) has no databaseUri`
+        );
         continue;
       }
 
       tenantsWithDbUri++;
-      
+
       try {
         const Agent = await getAgentModel(tenant.databaseUri);
         const agent = await Agent.findOne({ username: normalizedUsername });
@@ -139,51 +143,68 @@ const agentLogin = async (req, res) => {
         tenantsChecked++;
 
         if (agent) {
-          console.log(`✅ Found agent "${normalizedUsername}" in tenant ${tenant._id} (${tenant.username})`);
+          console.log(
+            `✅ Found agent "${normalizedUsername}" in tenant ${tenant._id} (${tenant.username})`
+          );
           foundAgent = agent;
           foundTenant = tenant;
           break;
         }
       } catch (err) {
-        console.error(`❌ Error checking tenant ${tenant._id} (${tenant.username}):`, {
-          error: err.message,
-          stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-        });
+        console.error(
+          `❌ Error checking tenant ${tenant._id} (${tenant.username}):`,
+          {
+            error: err.message,
+            stack:
+              process.env.NODE_ENV === "development" ? err.stack : undefined,
+          }
+        );
         continue;
       }
     }
 
-    console.log(`📊 Search complete: Checked ${tenantsChecked}/${tenantsWithDbUri} tenant databases`);
+    console.log(
+      `📊 Search complete: Checked ${tenantsChecked}/${tenantsWithDbUri} tenant databases`
+    );
 
     if (!foundAgent) {
-      console.warn(`⚠️  Agent "${normalizedUsername}" not found in any tenant database`);
+      console.warn(
+        `⚠️  Agent "${normalizedUsername}" not found in any tenant database`
+      );
       return res.status(401).json({
-        error: 'Invalid credentials',
-        message: 'Username or password is incorrect'
+        error: "Invalid credentials",
+        message: "Username or password is incorrect",
       });
     }
 
     // Check if agent is active
     if (!foundAgent.isActive) {
-      console.warn(`⚠️  Agent "${normalizedUsername}" attempted login but account is disabled`);
+      console.warn(
+        `⚠️  Agent "${normalizedUsername}" attempted login but account is disabled`
+      );
       return res.status(403).json({
-        error: 'Account disabled',
-        message: 'Your agent account has been deactivated'
+        error: "Account disabled",
+        message: "Your agent account has been deactivated",
       });
     }
 
     // Verify password
-    const isPasswordValid = await bcrypt.compare(password, foundAgent.passwordHash);
+    const isPasswordValid = await bcrypt.compare(
+      password,
+      foundAgent.passwordHash
+    );
     if (!isPasswordValid) {
-      console.warn(`⚠️  Agent "${normalizedUsername}" attempted login with incorrect password`);
+      console.warn(
+        `⚠️  Agent "${normalizedUsername}" attempted login with incorrect password`
+      );
       return res.status(401).json({
-        error: 'Invalid credentials',
-        message: 'Username or password is incorrect'
+        error: "Invalid credentials",
+        message: "Username or password is incorrect",
       });
     }
 
     // Mark agent as available
-    foundAgent.status = 'available';
+    foundAgent.status = "available";
     await foundAgent.save();
 
     // Generate JWT token for agent
@@ -191,10 +212,11 @@ const agentLogin = async (req, res) => {
       {
         agentId: foundAgent._id.toString(),
         username: foundAgent.username,
-        tenantId: foundTenant._id.toString()
+        tenantId: foundTenant._id.toString(),
+        role: "agent", // Required for AuthContext to recognize agent token
       },
       process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: "7d" }
     );
 
     // Include tenant data in response
@@ -204,22 +226,22 @@ const agentLogin = async (req, res) => {
     console.log(`✅ Agent "${normalizedUsername}" logged in successfully`);
 
     res.json({
-      message: 'Login successful',
+      message: "Login successful",
       token,
       agent: foundAgent.toPublicProfile(),
       tenant: {
         ...tenantData,
-        id: tenantData._id
-      }
+        id: tenantData._id,
+      },
     });
   } catch (error) {
-    console.error('❌ Agent login error:', {
+    console.error("❌ Agent login error:", {
       message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
     res.status(500).json({
-      error: 'Login failed',
-      message: 'An error occurred during login'
+      error: "Login failed",
+      message: "An error occurred during login",
     });
   }
 };
@@ -228,7 +250,7 @@ const agentLogin = async (req, res) => {
  * POST /api/agent/create
  * Create a new agent for a tenant
  * Requires user authentication (tenant creates their own agents)
- * 
+ *
  * Body: { username, password, name, email, phone }
  */
 const createAgent = async (req, res) => {
@@ -239,8 +261,8 @@ const createAgent = async (req, res) => {
     // Validation
     if (!username || !password || !name || !email) {
       return res.status(400).json({
-        error: 'Missing required fields',
-        message: 'Username, password, name, and email are required'
+        error: "Missing required fields",
+        message: "Username, password, name, and email are required",
       });
     }
 
@@ -248,8 +270,8 @@ const createAgent = async (req, res) => {
     const tenant = await User.findById(tenantId);
     if (!tenant) {
       return res.status(404).json({
-        error: 'Tenant not found',
-        message: 'Invalid tenant'
+        error: "Tenant not found",
+        message: "Invalid tenant",
       });
     }
 
@@ -260,20 +282,21 @@ const createAgent = async (req, res) => {
     // Check if agents are disabled (maxAgents = 0)
     if (tenant.maxAgents === 0) {
       return res.status(403).json({
-        error: 'Agents disabled',
-        message: 'Agent creation is disabled for this account. Please contact your administrator to enable agents.',
+        error: "Agents disabled",
+        message:
+          "Agent creation is disabled for this account. Please contact your administrator to enable agents.",
         currentCount: agentCount,
-        maxAgents: tenant.maxAgents
+        maxAgents: tenant.maxAgents,
       });
     }
 
     // Check if limit reached (only if maxAgents > 0)
     if (agentCount >= tenant.maxAgents) {
       return res.status(403).json({
-        error: 'Agent limit reached',
+        error: "Agent limit reached",
         message: `You have reached the maximum number of agents (${tenant.maxAgents}). Please contact support to increase your limit.`,
         currentCount: agentCount,
-        maxAgents: tenant.maxAgents
+        maxAgents: tenant.maxAgents,
       });
     }
 
@@ -281,8 +304,8 @@ const createAgent = async (req, res) => {
     const existingAgent = await Agent.findOne({ username });
     if (existingAgent) {
       return res.status(409).json({
-        error: 'Username taken',
-        message: 'An agent with this username already exists'
+        error: "Username taken",
+        message: "An agent with this username already exists",
       });
     }
 
@@ -297,18 +320,20 @@ const createAgent = async (req, res) => {
       name,
       email,
       phone: phone || null,
-      isActive: true
+      isActive: true,
     });
 
     // Save to database with explicit error handling
     try {
       const savedAgent = await agent.save();
-      
+
       // Verify it was actually saved by re-querying
       const verifyAgent = await Agent.findById(savedAgent._id);
-      
+
       if (!verifyAgent) {
-        throw new Error('Agent save verification failed - agent not found in database after save');
+        throw new Error(
+          "Agent save verification failed - agent not found in database after save"
+        );
       }
 
       console.log(`✅ Agent created and verified in MongoDB:`, {
@@ -318,37 +343,37 @@ const createAgent = async (req, res) => {
         tenantId: tenantId,
         tenantUsername: tenant.username,
         database: tenant.databaseUri,
-        collection: 'agents',
-        verified: true
+        collection: "agents",
+        verified: true,
       });
 
       res.status(201).json({
-        message: 'Agent created successfully',
-        agent: savedAgent.toPublicProfile()
+        message: "Agent created successfully",
+        agent: savedAgent.toPublicProfile(),
       });
     } catch (saveError) {
-      console.error('❌ Failed to save agent to database:', {
+      console.error("❌ Failed to save agent to database:", {
         error: saveError.message,
         stack: saveError.stack,
         database: tenant.databaseUri,
-        agentData: { username, name, email }
+        agentData: { username, name, email },
       });
       throw saveError; // Re-throw to be caught by outer catch
     }
   } catch (error) {
-    console.error('Create agent error:', error);
-    
+    console.error("Create agent error:", error);
+
     // Handle validation errors
-    if (error.name === 'ValidationError') {
+    if (error.name === "ValidationError") {
       return res.status(400).json({
-        error: 'Validation error',
-        message: error.message
+        error: "Validation error",
+        message: error.message,
       });
     }
 
     res.status(500).json({
-      error: 'Failed to create agent',
-      message: 'An error occurred while creating the agent'
+      error: "Failed to create agent",
+      message: "An error occurred while creating the agent",
     });
   }
 };
@@ -365,8 +390,8 @@ const listAgents = async (req, res) => {
     const tenant = await User.findById(tenantId);
     if (!tenant) {
       return res.status(404).json({
-        error: 'Tenant not found',
-        message: 'Invalid tenant'
+        error: "Tenant not found",
+        message: "Invalid tenant",
       });
     }
 
@@ -378,19 +403,19 @@ const listAgents = async (req, res) => {
       tenantId: tenantId,
       database: tenant.databaseUri,
       agentCount: agents.length,
-      maxAgents: tenant.maxAgents
+      maxAgents: tenant.maxAgents,
     });
 
     res.json({
-      agents: agents.map(agent => agent.toPublicProfile()),
+      agents: agents.map((agent) => agent.toPublicProfile()),
       count: agents.length,
-      maxAgents: tenant.maxAgents
+      maxAgents: tenant.maxAgents,
     });
   } catch (error) {
-    console.error('List agents error:', error);
+    console.error("List agents error:", error);
     res.status(500).json({
-      error: 'Failed to retrieve agents',
-      message: 'An error occurred while fetching agents'
+      error: "Failed to retrieve agents",
+      message: "An error occurred while fetching agents",
     });
   }
 };
@@ -410,8 +435,8 @@ const updateAgent = async (req, res) => {
     const tenant = await User.findById(tenantId);
     if (!tenant) {
       return res.status(404).json({
-        error: 'Tenant not found',
-        message: 'Invalid tenant'
+        error: "Tenant not found",
+        message: "Invalid tenant",
       });
     }
 
@@ -421,8 +446,8 @@ const updateAgent = async (req, res) => {
 
     if (!agent) {
       return res.status(404).json({
-        error: 'Agent not found',
-        message: 'Agent does not exist'
+        error: "Agent not found",
+        message: "Agent does not exist",
       });
     }
 
@@ -435,22 +460,22 @@ const updateAgent = async (req, res) => {
     await agent.save();
 
     res.json({
-      message: 'Agent updated successfully',
-      agent: agent.toPublicProfile()
+      message: "Agent updated successfully",
+      agent: agent.toPublicProfile(),
     });
   } catch (error) {
-    console.error('Update agent error:', error);
-    
-    if (error.name === 'ValidationError') {
+    console.error("Update agent error:", error);
+
+    if (error.name === "ValidationError") {
       return res.status(400).json({
-        error: 'Validation error',
-        message: error.message
+        error: "Validation error",
+        message: error.message,
       });
     }
 
     res.status(500).json({
-      error: 'Failed to update agent',
-      message: 'An error occurred while updating the agent'
+      error: "Failed to update agent",
+      message: "An error occurred while updating the agent",
     });
   }
 };
@@ -469,8 +494,8 @@ const deleteAgent = async (req, res) => {
     const tenant = await User.findById(tenantId);
     if (!tenant) {
       return res.status(404).json({
-        error: 'Tenant not found',
-        message: 'Invalid tenant'
+        error: "Tenant not found",
+        message: "Invalid tenant",
       });
     }
 
@@ -480,20 +505,20 @@ const deleteAgent = async (req, res) => {
 
     if (!agent) {
       return res.status(404).json({
-        error: 'Agent not found',
-        message: 'Agent does not exist'
+        error: "Agent not found",
+        message: "Agent does not exist",
       });
     }
 
     res.json({
-      message: 'Agent deleted successfully',
-      agent: agent.toPublicProfile()
+      message: "Agent deleted successfully",
+      agent: agent.toPublicProfile(),
     });
   } catch (error) {
-    console.error('Delete agent error:', error);
+    console.error("Delete agent error:", error);
     res.status(500).json({
-      error: 'Failed to delete agent',
-      message: 'An error occurred while deleting the agent'
+      error: "Failed to delete agent",
+      message: "An error occurred while deleting the agent",
     });
   }
 };
@@ -516,8 +541,8 @@ const getConversations = async (req, res) => {
     const tenant = await User.findById(tenantId);
     if (!tenant) {
       return res.status(404).json({
-        error: 'Tenant not found',
-        message: 'Invalid tenant'
+        error: "Tenant not found",
+        message: "Invalid tenant",
       });
     }
 
@@ -526,72 +551,102 @@ const getConversations = async (req, res) => {
 
     // Define Conversation schema for tenant DB
     const ConversationSchema = new mongoose.Schema({
-      botId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bot', required: true },
+      botId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Bot",
+        required: true,
+      },
       sessionId: { type: String, required: true },
-      status: { type: String, enum: ['bot', 'waiting', 'active', 'queued', 'assigned', 'closed', 'ai', 'human'], default: 'bot' },
-      assignedAgent: { type: mongoose.Schema.Types.ObjectId, ref: 'Agent', default: null },
-      agentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agent', default: null },
+      status: {
+        type: String,
+        enum: [
+          "bot",
+          "waiting",
+          "active",
+          "queued",
+          "assigned",
+          "closed",
+          "ai",
+          "human",
+        ],
+        default: "bot",
+      },
+      assignedAgent: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Agent",
+        default: null,
+      },
+      agentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Agent",
+        default: null,
+      },
       requestedAt: { type: Date, default: null },
       endedAt: { type: Date, default: null },
       createdAt: { type: Date, default: Date.now },
-      lastActiveAt: { type: Date, default: Date.now }
+      lastActiveAt: { type: Date, default: Date.now },
     });
 
     // Get or create models
-    const Conversation = tenantConnection.models.Conversation || 
-                         tenantConnection.model('Conversation', ConversationSchema);
+    const Conversation =
+      tenantConnection.models.Conversation ||
+      tenantConnection.model("Conversation", ConversationSchema);
 
     // Query conversations: show WAITING chats OR chats assigned to this agent
     // Do NOT show chats taken by other agents
     const agentId = req.agent.agentId;
     const conversations = await Conversation.find({
       $or: [
-        { status: 'waiting' },
-        { status: 'queued' },
+        { status: "waiting" },
+        { status: "queued" },
         { assignedAgent: agentId },
-        { agentId: agentId }
-      ]
+        { agentId: agentId },
+      ],
     })
       .sort({ lastActiveAt: -1 })
       .lean();
 
-    console.log(`📋 Retrieved ${conversations.length} conversations for agent ${agentId}`);
+    console.log(
+      `📋 Retrieved ${conversations.length} conversations for agent ${agentId}`
+    );
 
     // Get bot IDs to fetch bot details from admin DB
-    const botIds = [...new Set(conversations.map(c => c.botId?.toString()))]
+    const botIds = [...new Set(conversations.map((c) => c.botId?.toString()))]
       .filter(Boolean)
-      .map(id => new mongoose.Types.ObjectId(id));
-    const bots = await Bot.find({ _id: { $in: botIds } }).select('_id name scrapedWebsites').lean();
-    const botMap = Object.fromEntries(bots.map(b => [b._id.toString(), b]));
+      .map((id) => new mongoose.Types.ObjectId(id));
+    const bots = await Bot.find({ _id: { $in: botIds } })
+      .select("_id name scrapedWebsites")
+      .lean();
+    const botMap = Object.fromEntries(bots.map((b) => [b._id.toString(), b]));
 
     // Format conversations with details
-    const conversationsWithDetails = conversations.map(conv => {
+    const conversationsWithDetails = conversations.map((conv) => {
       const bot = botMap[conv.botId.toString()];
-      const websiteUrl = bot?.scrapedWebsites?.[0] || 'N/A';
+      const websiteUrl = bot?.scrapedWebsites?.[0] || "N/A";
 
       return {
         _id: conv._id, // Use _id for frontend compatibility
         conversationId: conv._id,
         botId: conv.botId,
-        botName: bot?.name || 'Unknown Bot',
+        botName: bot?.name || "Unknown Bot",
         websiteUrl,
         sessionId: conv.sessionId,
         status: conv.status,
         assignedAgent: conv.assignedAgent,
         lastActiveAt: conv.lastActiveAt,
-        createdAt: conv.createdAt
+        createdAt: conv.createdAt,
       };
     });
 
     res.json({
       conversations: conversationsWithDetails,
-      count: conversationsWithDetails.length
+      count: conversationsWithDetails.length,
     });
   } catch (error) {
-    console.error('Get conversations error:', error);
+    console.error("Get conversations error:", error);
     res.status(500).json({
-      error: 'Failed to retrieve conversations',
-      message: 'An error occurred while fetching conversations'
+      error: "Failed to retrieve conversations",
+      message: "An error occurred while fetching conversations",
     });
   }
 };
@@ -610,8 +665,8 @@ const getMessages = async (req, res) => {
     const tenant = await User.findById(tenantId);
     if (!tenant) {
       return res.status(404).json({
-        error: 'Tenant not found',
-        message: 'Invalid tenant'
+        error: "Tenant not found",
+        message: "Invalid tenant",
       });
     }
 
@@ -620,21 +675,26 @@ const getMessages = async (req, res) => {
 
     // Define Message schema for tenant DB
     const MessageSchema = new mongoose.Schema({
-      conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: true },
-      sender: { type: String, enum: ['user', 'bot', 'agent'], required: true },
+      conversationId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Conversation",
+        required: true,
+      },
+      sender: { type: String, enum: ["user", "bot", "agent"], required: true },
       text: { type: String, required: true },
-      createdAt: { type: Date, default: Date.now }
+      createdAt: { type: Date, default: Date.now },
     });
 
     // Get or create models
-    const Message = tenantConnection.models.Message || 
-                    tenantConnection.model('Message', MessageSchema);
+    const Message =
+      tenantConnection.models.Message ||
+      tenantConnection.model("Message", MessageSchema);
 
     // Validate conversationId
     if (!mongoose.Types.ObjectId.isValid(conversationId)) {
       return res.status(400).json({
-        error: 'Invalid conversation ID',
-        message: 'The provided conversation ID is not valid'
+        error: "Invalid conversation ID",
+        message: "The provided conversation ID is not valid",
       });
     }
 
@@ -643,17 +703,19 @@ const getMessages = async (req, res) => {
       .sort({ createdAt: 1 })
       .lean();
 
-    console.log(`💬 Retrieved ${messages.length} messages for conversation ${conversationId}`);
+    console.log(
+      `💬 Retrieved ${messages.length} messages for conversation ${conversationId}`
+    );
 
     res.json({
       messages: messages,
-      count: messages.length
+      count: messages.length,
     });
   } catch (error) {
-    console.error('Get messages error:', error);
+    console.error("Get messages error:", error);
     res.status(500).json({
-      error: 'Failed to retrieve messages',
-      message: 'An error occurred while fetching messages'
+      error: "Failed to retrieve messages",
+      message: "An error occurred while fetching messages",
     });
   }
 };
@@ -678,8 +740,8 @@ const replyToConversation = async (req, res) => {
     // Validation
     if (!message || !message.trim()) {
       return res.status(400).json({
-        error: 'Message is required',
-        message: 'Please provide a message to send'
+        error: "Message is required",
+        message: "Please provide a message to send",
       });
     }
 
@@ -687,8 +749,8 @@ const replyToConversation = async (req, res) => {
     const tenant = await User.findById(tenantId);
     if (!tenant) {
       return res.status(404).json({
-        error: 'Tenant not found',
-        message: 'Invalid tenant'
+        error: "Tenant not found",
+        message: "Invalid tenant",
       });
     }
 
@@ -697,35 +759,66 @@ const replyToConversation = async (req, res) => {
 
     // Define schemas
     const ConversationSchema = new mongoose.Schema({
-      botId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bot', required: true },
+      botId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Bot",
+        required: true,
+      },
       sessionId: { type: String, required: true },
-      status: { type: String, enum: ['bot', 'waiting', 'active', 'queued', 'assigned', 'closed', 'ai', 'human'], default: 'bot' },
-      assignedAgent: { type: mongoose.Schema.Types.ObjectId, ref: 'Agent', default: null },
-      agentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agent', default: null },
+      status: {
+        type: String,
+        enum: [
+          "bot",
+          "waiting",
+          "active",
+          "queued",
+          "assigned",
+          "closed",
+          "ai",
+          "human",
+        ],
+        default: "bot",
+      },
+      assignedAgent: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Agent",
+        default: null,
+      },
+      agentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Agent",
+        default: null,
+      },
       requestedAt: { type: Date, default: null },
       endedAt: { type: Date, default: null },
       createdAt: { type: Date, default: Date.now },
-      lastActiveAt: { type: Date, default: Date.now }
+      lastActiveAt: { type: Date, default: Date.now },
     });
 
     const MessageSchema = new mongoose.Schema({
-      conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: true },
-      sender: { type: String, enum: ['user', 'bot', 'agent'], required: true },
+      conversationId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Conversation",
+        required: true,
+      },
+      sender: { type: String, enum: ["user", "bot", "agent"], required: true },
       text: { type: String, required: true },
-      createdAt: { type: Date, default: Date.now }
+      createdAt: { type: Date, default: Date.now },
     });
 
-    const Conversation = tenantConnection.models.Conversation || 
-                         tenantConnection.model('Conversation', ConversationSchema);
-    const Message = tenantConnection.models.Message || 
-                    tenantConnection.model('Message', MessageSchema);
+    const Conversation =
+      tenantConnection.models.Conversation ||
+      tenantConnection.model("Conversation", ConversationSchema);
+    const Message =
+      tenantConnection.models.Message ||
+      tenantConnection.model("Message", MessageSchema);
 
     // Find conversation and verify agent is assigned
     const conversation = await Conversation.findById(id);
     if (!conversation) {
       return res.status(404).json({
-        error: 'Conversation not found',
-        message: 'The specified conversation does not exist'
+        error: "Conversation not found",
+        message: "The specified conversation does not exist",
       });
     }
 
@@ -733,17 +826,17 @@ const replyToConversation = async (req, res) => {
     const assignedAgentId = conversation.assignedAgent || conversation.agentId;
     if (!assignedAgentId || assignedAgentId.toString() !== agentId.toString()) {
       return res.status(403).json({
-        error: 'Unauthorized',
-        message: 'You are not assigned to this conversation'
+        error: "Unauthorized",
+        message: "You are not assigned to this conversation",
       });
     }
 
     // Create and save message with sender='agent'
     const newMessage = new Message({
       conversationId: conversation._id,
-      sender: 'agent',
+      sender: "agent",
       text: message.trim(),
-      createdAt: new Date()
+      createdAt: new Date(),
     });
 
     await newMessage.save();
@@ -758,31 +851,33 @@ const replyToConversation = async (req, res) => {
     // Access io from the Express app via req.app.locals
     const io = req.app.locals.io;
     if (io) {
-      io.to(`conversation:${conversation._id}`).emit('message:new', {
+      io.to(`conversation:${conversation._id}`).emit("message:new", {
         _id: newMessage._id,
         conversationId: conversation._id,
-        sender: 'agent',
+        sender: "agent",
         text: newMessage.text,
-        createdAt: newMessage.createdAt
+        createdAt: newMessage.createdAt,
       });
-      console.log(`📡 Emitted agent message to conversation:${conversation._id}`);
+      console.log(
+        `📡 Emitted agent message to conversation:${conversation._id}`
+      );
     }
 
     res.json({
-      message: 'Message sent successfully',
+      message: "Message sent successfully",
       data: {
         _id: newMessage._id,
         conversationId: newMessage.conversationId,
         sender: newMessage.sender,
         text: newMessage.text,
-        createdAt: newMessage.createdAt
-      }
+        createdAt: newMessage.createdAt,
+      },
     });
   } catch (error) {
-    console.error('Reply to conversation error:', error);
+    console.error("Reply to conversation error:", error);
     res.status(500).json({
-      error: 'Failed to send message',
-      message: 'An error occurred while sending your message'
+      error: "Failed to send message",
+      message: "An error occurred while sending your message",
     });
   }
 };
@@ -801,36 +896,36 @@ const agentLogout = async (req, res) => {
     const tenant = await User.findById(tenantId);
     if (!tenant) {
       return res.status(404).json({
-        error: 'Tenant not found',
-        message: 'Invalid tenant'
+        error: "Tenant not found",
+        message: "Invalid tenant",
       });
     }
 
     // Get Agent model and update status
     const Agent = await getAgentModel(tenant.databaseUri);
     const agent = await Agent.findById(agentId);
-    
+
     if (!agent) {
       return res.status(404).json({
-        error: 'Agent not found',
-        message: 'Agent does not exist'
+        error: "Agent not found",
+        message: "Agent does not exist",
       });
     }
 
-    agent.status = 'offline';
+    agent.status = "offline";
     await agent.save();
 
     console.log(`🚪 Agent ${agent.username} logged out and marked offline`);
 
     res.json({
-      message: 'Logout successful',
-      status: 'offline'
+      message: "Logout successful",
+      status: "offline",
     });
   } catch (error) {
-    console.error('Agent logout error:', error);
+    console.error("Agent logout error:", error);
     res.status(500).json({
-      error: 'Logout failed',
-      message: 'An error occurred during logout'
+      error: "Logout failed",
+      message: "An error occurred during logout",
     });
   }
 };
@@ -851,8 +946,8 @@ const acceptConversation = async (req, res) => {
     const tenant = await User.findById(tenantId);
     if (!tenant) {
       return res.status(404).json({
-        error: 'Tenant not found',
-        message: 'Invalid tenant'
+        error: "Tenant not found",
+        message: "Invalid tenant",
       });
     }
 
@@ -861,37 +956,63 @@ const acceptConversation = async (req, res) => {
 
     // Define Conversation schema
     const ConversationSchema = new mongoose.Schema({
-      botId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bot', required: true },
+      botId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Bot",
+        required: true,
+      },
       sessionId: { type: String, required: true },
-      status: { type: String, enum: ['bot', 'waiting', 'active', 'queued', 'assigned', 'closed', 'ai', 'human'], default: 'bot' },
-      assignedAgent: { type: mongoose.Schema.Types.ObjectId, ref: 'Agent', default: null },
-      agentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agent', default: null },
+      status: {
+        type: String,
+        enum: [
+          "bot",
+          "waiting",
+          "active",
+          "queued",
+          "assigned",
+          "closed",
+          "ai",
+          "human",
+        ],
+        default: "bot",
+      },
+      assignedAgent: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Agent",
+        default: null,
+      },
+      agentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Agent",
+        default: null,
+      },
       requestedAt: { type: Date, default: null },
       endedAt: { type: Date, default: null },
       createdAt: { type: Date, default: Date.now },
-      lastActiveAt: { type: Date, default: Date.now }
+      lastActiveAt: { type: Date, default: Date.now },
     });
 
-    const Conversation = tenantConnection.models.Conversation || 
-                         tenantConnection.model('Conversation', ConversationSchema);
+    const Conversation =
+      tenantConnection.models.Conversation ||
+      tenantConnection.model("Conversation", ConversationSchema);
 
     // Atomically find and update conversation if it's in waiting/queued status
     // This prevents race conditions when multiple agents try to accept at the same time
     const conversation = await Conversation.findOneAndUpdate(
       {
         _id: id,
-        $or: [{ status: 'waiting' }, { status: 'queued' }]
+        $or: [{ status: "waiting" }, { status: "queued" }],
       },
       {
         $set: {
-          status: 'active',
+          status: "active",
           agentId: agentId,
           assignedAgent: agentId,
-          lastActiveAt: new Date()
-        }
+          lastActiveAt: new Date(),
+        },
       },
       {
-        new: true // Return the updated document
+        new: true, // Return the updated document
       }
     );
 
@@ -900,15 +1021,16 @@ const acceptConversation = async (req, res) => {
       const checkConv = await Conversation.findById(id);
       if (!checkConv) {
         return res.status(404).json({
-          error: 'Conversation not found',
-          message: 'The specified conversation does not exist'
+          error: "Conversation not found",
+          message: "The specified conversation does not exist",
         });
       }
-      
+
       return res.status(409).json({
-        error: 'Conversation not available',
-        message: 'This conversation has already been accepted by another agent or is not in waiting status',
-        currentStatus: checkConv.status
+        error: "Conversation not available",
+        message:
+          "This conversation has already been accepted by another agent or is not in waiting status",
+        currentStatus: checkConv.status,
       });
     }
 
@@ -916,26 +1038,26 @@ const acceptConversation = async (req, res) => {
     const Agent = await getAgentModel(tenant.databaseUri);
     const agent = await Agent.findById(agentId);
     if (agent) {
-      agent.status = 'busy';
+      agent.status = "busy";
       await agent.save();
     }
 
     console.log(`✅ Agent ${agentId} accepted conversation ${id}`);
 
     res.json({
-      message: 'Conversation accepted',
+      message: "Conversation accepted",
       conversation: {
         _id: conversation._id,
         status: conversation.status,
         agentId: conversation.agentId,
-        assignedAgent: conversation.assignedAgent
-      }
+        assignedAgent: conversation.assignedAgent,
+      },
     });
   } catch (error) {
-    console.error('Accept conversation error:', error);
+    console.error("Accept conversation error:", error);
     res.status(500).json({
-      error: 'Failed to accept conversation',
-      message: 'An error occurred while accepting the conversation'
+      error: "Failed to accept conversation",
+      message: "An error occurred while accepting the conversation",
     });
   }
 };
@@ -959,15 +1081,15 @@ const closeConversation = async (req, res) => {
       // Need to find tenant from conversation - get botId first
       // For now, require agent auth
       return res.status(401).json({
-        error: 'Authentication required',
-        message: 'Agent authentication is required to close conversations'
+        error: "Authentication required",
+        message: "Agent authentication is required to close conversations",
       });
     }
 
     if (!tenant) {
       return res.status(404).json({
-        error: 'Tenant not found',
-        message: 'Invalid tenant'
+        error: "Tenant not found",
+        message: "Invalid tenant",
       });
     }
 
@@ -976,26 +1098,52 @@ const closeConversation = async (req, res) => {
 
     // Define Conversation schema
     const ConversationSchema = new mongoose.Schema({
-      botId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bot', required: true },
+      botId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Bot",
+        required: true,
+      },
       sessionId: { type: String, required: true },
-      status: { type: String, enum: ['bot', 'waiting', 'active', 'queued', 'assigned', 'closed', 'ai', 'human'], default: 'bot' },
-      assignedAgent: { type: mongoose.Schema.Types.ObjectId, ref: 'Agent', default: null },
-      agentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agent', default: null },
+      status: {
+        type: String,
+        enum: [
+          "bot",
+          "waiting",
+          "active",
+          "queued",
+          "assigned",
+          "closed",
+          "ai",
+          "human",
+        ],
+        default: "bot",
+      },
+      assignedAgent: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Agent",
+        default: null,
+      },
+      agentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Agent",
+        default: null,
+      },
       requestedAt: { type: Date, default: null },
       endedAt: { type: Date, default: null },
       createdAt: { type: Date, default: Date.now },
-      lastActiveAt: { type: Date, default: Date.now }
+      lastActiveAt: { type: Date, default: Date.now },
     });
 
-    const Conversation = tenantConnection.models.Conversation || 
-                         tenantConnection.model('Conversation', ConversationSchema);
+    const Conversation =
+      tenantConnection.models.Conversation ||
+      tenantConnection.model("Conversation", ConversationSchema);
 
     // Find conversation
     const conversation = await Conversation.findById(id);
     if (!conversation) {
       return res.status(404).json({
-        error: 'Conversation not found',
-        message: 'The specified conversation does not exist'
+        error: "Conversation not found",
+        message: "The specified conversation does not exist",
       });
     }
 
@@ -1004,7 +1152,7 @@ const closeConversation = async (req, res) => {
 
     // Close conversation and return to bot mode
     // Set status to 'bot' so LLM becomes active again
-    conversation.status = 'bot';
+    conversation.status = "bot";
     conversation.assignedAgent = null;
     conversation.agentId = null;
     conversation.lastActiveAt = new Date();
@@ -1015,27 +1163,29 @@ const closeConversation = async (req, res) => {
     if (assignedAgentId) {
       const Agent = await getAgentModel(tenant.databaseUri);
       const agent = await Agent.findById(assignedAgentId);
-      if (agent && agent.status === 'busy') {
-        agent.status = 'available';
+      if (agent && agent.status === "busy") {
+        agent.status = "available";
         await agent.save();
-        console.log(`🟢 Agent ${assignedAgentId} marked as available after closing conversation ${id}`);
+        console.log(
+          `🟢 Agent ${assignedAgentId} marked as available after closing conversation ${id}`
+        );
       }
     }
 
     console.log(`🔒 Conversation ${id} closed`);
 
     res.json({
-      message: 'Conversation closed',
+      message: "Conversation closed",
       conversation: {
         _id: conversation._id,
-        status: conversation.status
-      }
+        status: conversation.status,
+      },
     });
   } catch (error) {
-    console.error('Close conversation error:', error);
+    console.error("Close conversation error:", error);
     res.status(500).json({
-      error: 'Failed to close conversation',
-      message: 'An error occurred while closing the conversation'
+      error: "Failed to close conversation",
+      message: "An error occurred while closing the conversation",
     });
   }
 };
@@ -1051,5 +1201,5 @@ module.exports = {
   getMessages,
   replyToConversation,
   acceptConversation,
-  closeConversation
+  closeConversation,
 };
