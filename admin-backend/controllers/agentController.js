@@ -851,7 +851,7 @@ const replyToConversation = async (req, res) => {
     // Access io from the Express app via req.app.locals
     const io = req.app.locals.io;
     if (io) {
-      io.to(`conversation:${conversation._id}`).emit("message:new", {
+      io.to(conversation._id).emit("message:new", {
         _id: newMessage._id,
         conversationId: conversation._id,
         sender: "agent",

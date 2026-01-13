@@ -256,18 +256,16 @@ io.on('connection', (socket) => {
       return;
     }
     
-    const roomName = `conversation:${conversationId}`;
-    socket.join(roomName);
-    console.log(`📥 Socket ${socket.id} joined room: ${roomName}`);
+    socket.join(conversationId);
+    console.log(`📥 Socket ${socket.id} joined room: ${conversationId}`);
   });
 
   // Handle leaving a conversation room
   socket.on('leave:conversation', (conversationId) => {
     if (!conversationId) return;
     
-    const roomName = `conversation:${conversationId}`;
-    socket.leave(roomName);
-    console.log(`📤 Socket ${socket.id} left room: ${roomName}`);
+    socket.leave(conversationId);
+    console.log(`📤 Socket ${socket.id} left room: ${conversationId}`);
   });
 
   socket.on('disconnect', () => {

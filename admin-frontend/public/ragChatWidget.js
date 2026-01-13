@@ -289,16 +289,23 @@
         console.log('RAG Widget: Received conversation._id:', conversationId);
         state.conversationId = conversationId;
         
-        // Join Socket.IO room immediately (socket is guaranteed to be connected now)
-        if (socket && socket.connected) {
-          console.log('RAG Widget: Joining room with conversationId:', conversationId);
-          joinConversationRoom(state.conversationId);
-          
-          // Wait briefly to ensure room join is processed by server
-          await new Promise(resolve => setTimeout(resolve, 150));
-        } else {
-          console.warn('RAG Widget: Socket not connected, cannot join room');
+        // CRITICAL: Ensure socket is connected before joining room
+        if (!socket || !socket.connected) {
+          console.log('RAG Widget: Socket not yet connected, waiting for connection...');
+          const connected = await waitForSocketConnection(5000);
+          if (!connected) {
+            console.warn('RAG Widget: Socket connection timeout, will join room on next reconnect');
+            // Socket will join the room automatically on connect (see initSocketConnection)
+            return true;
+          }
         }
+        
+        // Join Socket.IO room with the conversation ID
+        console.log('RAG Widget: Joining room with conversationId:', conversationId);
+        joinConversationRoom(state.conversationId);
+        
+        // Wait briefly to ensure room join is processed by server
+        await new Promise(resolve => setTimeout(resolve, 150));
         
         return true;
       }

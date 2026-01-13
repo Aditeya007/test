@@ -436,7 +436,7 @@ exports.sendMessage = async (req, res) => {
     // Emit real-time message to all clients in this conversation room
     const io = req.app.locals.io;
     if (io) {
-      io.to(`conversation:${conversation._id}`).emit('message:new', {
+      io.to(conversation._id).emit('message:new', {
         _id: userMessage._id,
         conversationId: conversation._id,
         sender: 'user',
@@ -482,7 +482,7 @@ exports.sendMessage = async (req, res) => {
       // Emit real-time placeholder message to all clients in this conversation room
       const io = req.app.locals.io;
       if (io) {
-        io.to(`conversation:${conversation._id}`).emit('message:new', {
+        io.to(conversation._id).emit('message:new', {
           _id: placeholderMessage._id,
           conversationId: conversation._id,
           sender: 'agent',
@@ -560,7 +560,7 @@ exports.sendMessage = async (req, res) => {
       // Emit real-time bot message to all clients in this conversation room
       const io = req.app.locals.io;
       if (io) {
-        io.to(`conversation:${conversation._id}`).emit('message:new', {
+        io.to(conversation._id).emit('message:new', {
           _id: botMessage._id,
           conversationId: conversation._id,
           sender: 'bot',
@@ -605,7 +605,7 @@ exports.sendMessage = async (req, res) => {
       // Emit error message to conversation room
       const io = req.app.locals.io;
       if (io) {
-        io.to(`conversation:${conversation._id}`).emit('message:new', {
+        io.to(conversation._id).emit('message:new', {
           _id: errorMsg._id,
           conversationId: conversation._id,
           sender: 'bot',

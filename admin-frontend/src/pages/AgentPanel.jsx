@@ -386,10 +386,18 @@ function AgentPanel() {
       // Refresh conversations to update the list
       await fetchConversations();
       
-      // If this conversation is selected, refresh its messages
-      if (selectedConversationId === conversationId) {
-        await fetchMessages(conversationId);
+      // CRITICAL: Join the Socket.IO room immediately for this conversation
+      // This ensures the agent receives real-time messages without page refresh
+      if (socketRef.current && socketRef.current.connected) {
+        console.log('Agent Panel: Joining Socket.IO room after accepting conversation:', conversationId);
+        joinConversationRoom(conversationId);
+      } else {
+        console.warn('Agent Panel: Socket not connected after accepting, will join when clicking conversation');
       }
+      
+      // Automatically select and load the accepted conversation
+      setSelectedConversationId(conversationId);
+      await fetchMessages(conversationId);
     } catch (error) {
       console.error('Failed to accept chat:', error);
       alert('Failed to accept chat: ' + (error.message || 'Unknown error'));
