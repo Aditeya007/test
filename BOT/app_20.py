@@ -1339,98 +1339,82 @@ ANSWER (be concise and factual):"""
             # deterministic URL-level rerank and return a single page (title + URL).
             if self.is_location_query(question):
                 try:
-                    # Semantic page-level URL resolver (single deterministic resolver)
-                    # 1) Compute question embedding using same embedding model used elsewhere
-                    qa = self.analyze_question_semantically(question)
-                    q_emb = qa.get('question_embedding')
-
-                    # 2) Query Chroma for 50 relevant chunks using the question embedding
+                    # LLM-based page selector: collect unique pages from Chroma metadata (no embedding similarity)
                     try:
-                        results_quick = self.collection.query(query_embeddings=[q_emb.tolist()], n_results=50)
-                    except Exception:
                         results_quick = self.collection.query(query_texts=[question], n_results=50)
+                    except Exception:
+                        results_quick = {'documents': [[]], 'metadatas': [[]]}
 
                     docs = results_quick.get('documents', [[]])[0]
                     metadatas = results_quick.get('metadatas', [[]])[0]
 
-                    # 3) Group results by page-level URL and combine their chunks into a single page document
                     pages = {}
-                    for doc, md in zip(docs, metadatas):
+                    for md in metadatas:
                         if not md or not isinstance(md, dict):
                             continue
                         url = md.get('url') or md.get('filePath') or md.get('webpage') or md.get('source')
+                        title = md.get('page_title') or md.get('title') or md.get('page') or md.get('domain') or url
                         if not url or not isinstance(url, str):
                             continue
                         url = url.strip()
                         if not url:
                             continue
                         if url not in pages:
-                            # Prefer explicit page title metadata when available
-                            title = md.get('page_title') or md.get('title') or md.get('page') or md.get('domain') or url
-                            pages[url] = {'title': str(title).strip() if title else url, 'chunks': []}
-
-                        # Only include the chunk text for page-level document (no keyword heuristics)
-                        if isinstance(doc, str) and doc.strip():
-                            pages[url]['chunks'].append(doc.strip())
+                            pages[url] = str(title).strip() if title else url
 
                     if not pages:
                         print("⚠️ No URL candidates found for location query")
                         return "I couldn't find a relevant page for that request."
 
-                    # 4) For each page, build the page document and compute embedding + cosine similarity
-                    import math
+                    # Build prompt listing pages (title — url) and ask Gemini to return ONLY the URL
+                    prompt_lines = ["Here is a list of pages on a website:", ""]
+                    for t_url, t_title in pages.items():
+                        prompt_lines.append(f"{t_title} — {t_url}")
+                    prompt_lines.append("")
+                    prompt_lines.append(f"User request: '{question}'")
+                    prompt_lines.append("")
+                    prompt_lines.append("Which single page best matches this request? Return ONLY the URL.")
+                    prompt = "\n".join(prompt_lines)
 
-                    def cosine_sim(a, b):
-                        try:
-                            ax = list(a)
-                            bx = list(b)
-                        except Exception:
-                            return -1.0
-                        if not ax or not bx:
-                            return -1.0
-                        dot = sum(x * y for x, y in zip(ax, bx))
-                        norm_a = math.sqrt(sum(x * x for x in ax))
-                        norm_b = math.sqrt(sum(y * y for y in bx))
-                        if norm_a == 0 or norm_b == 0:
-                            return -1.0
-                        return dot / (norm_a * norm_b)
+                    # Query Gemini (genai) deterministically
+                    try:
+                        generation_config = genai.types.GenerationConfig(
+                            temperature=0.0,
+                            top_p=0.1,
+                            top_k=40
+                        )
+                        response = self.model.generate_content(prompt, generation_config=generation_config)
+                        chosen = (response.text or "").strip() if response else ""
+                    except Exception as e:
+                        print(f"⚠️ Gemini selection failed: {e}")
+                        chosen = ""
 
-                    best = None
-                    best_score = -1.0
+                    # Extract URL from LLM output and map back to title
+                    chosen_url = None
+                    if chosen:
+                        m = re.search(r'(https?://[^\s\n,;]+)', chosen)
+                        if m:
+                            chosen_url = m.group(1).strip()
+                        else:
+                            candidate = chosen.strip()
+                            if candidate in pages:
+                                chosen_url = candidate
+                            else:
+                                for u in pages.keys():
+                                    if u.endswith(candidate) or u.rstrip('/').endswith(candidate.rstrip('/')):
+                                        chosen_url = u
+                                        break
 
-                    for url, info in pages.items():
-                        # combine chunks into a single page-level document
-                        page_text = "\n\n".join(info['chunks']) if info['chunks'] else ''
-                        if not page_text:
-                            continue
-
-                        # Compute page embedding using same embedding model used by Chroma
-                        try:
-                            p_emb = self.embedding_model.encode(page_text)
-                        except Exception:
-                            # If encoding full page fails, encode the concatenation of the first few chunks
-                            sample = ' '.join(info['chunks'][:3])
-                            p_emb = self.embedding_model.encode(sample)
-
-                        sim = cosine_sim(q_emb, p_emb)
-
-                        # Deterministic selection: prefer higher similarity; tie-breaker is lexicographic URL
-                        if sim > best_score or (abs(sim - best_score) < 1e-12 and (best is None or url < best['url'])):
-                            best_score = sim
-                            best = {'url': url, 'title': info['title'], 'score': sim}
-
-                    # 5) Enforce a reasonable threshold for "strong semantic match"
-                    PAGE_SIMILARITY_THRESHOLD = 0.70
-                    if best is None or best_score < PAGE_SIMILARITY_THRESHOLD:
-                        print(f"🔎 Best page similarity {best_score} below threshold {PAGE_SIMILARITY_THRESHOLD}")
+                    if not chosen_url:
+                        print(f"🔎 LLM did not return a known URL: '{chosen}'")
                         return "I couldn't find a relevant page for that request."
 
-                    # 6) Return exactly 'Page Title\nhttps://page-url'
-                    formatted = f"{best['title']}\n{best['url']}"
-                    print(f"✅ Location resolver selected: {best['url']} (score={best['score']})")
+                    chosen_title = pages.get(chosen_url, chosen_url)
+                    formatted = f"{chosen_title}\n{chosen_url}"
+                    print(f"✅ LLM Location resolver selected: {chosen_url}")
                     return formatted
                 except Exception as e:
-                    print(f"⚠️ Location resolver failed: {e}; falling back to normal flow")
+                    print(f"⚠️ LLM-based location resolver failed: {e}; falling back to normal flow")
 
             # ============================================================================
             # PRIORITY 1: Name collection (separate flow)
