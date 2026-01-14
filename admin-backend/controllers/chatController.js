@@ -789,6 +789,25 @@ exports.requestAgentByConversationId = async (req, res) => {
 
     console.log(`📞 Conversation ${id} queued for human agent`);
 
+    // =========================================================================
+    // EMIT conversation:queued EVENT TO ALL AGENTS IN TENANT
+    // =========================================================================
+    const io = req.app.locals.io;
+    if (io) {
+      const agentRoomName = `agents:${bot.userId}`;  // tenantId is bot.userId
+      const lightweightSummary = {
+        _id: conversation._id,
+        conversationId: conversation._id,
+        botId: conversation.botId,
+        sessionId: conversation.sessionId,
+        status: conversation.status,
+        createdAt: conversation.createdAt
+      };
+      
+      io.to(agentRoomName).emit('conversation:queued', lightweightSummary);
+      console.log(`📡 Emitted conversation:queued to ${agentRoomName}:`, lightweightSummary);
+    }
+
     res.json({
       success: true,
       message: 'Your request has been queued. An agent will be with you shortly.',
@@ -889,6 +908,26 @@ exports.requestAgent = async (req, res) => {
     await conversation.save();
 
     console.log(`📞 Agent requested for conversation ${conversation._id} (session: ${sessionId})`);
+
+    // =========================================================================
+    // EMIT conversation:queued EVENT TO ALL AGENTS IN TENANT
+    // =========================================================================
+    const io = req.app.locals.io;
+    if (io) {
+      const agentRoomName = `agents:${bot.userId}`;  // tenantId is bot.userId
+      const lightweightSummary = {
+        _id: conversation._id,
+        conversationId: conversation._id,
+        botId: conversation.botId,
+        sessionId: conversation.sessionId,
+        status: conversation.status,
+        createdAt: conversation.createdAt,
+        requestedAt: conversation.requestedAt
+      };
+      
+      io.to(agentRoomName).emit('conversation:queued', lightweightSummary);
+      console.log(`📡 Emitted conversation:queued to ${agentRoomName}:`, lightweightSummary);
+    }
 
     // If all agents are busy
     if (availableCount === 0 && busyCount > 0) {
@@ -992,3 +1031,7 @@ exports.endSession = async (req, res) => {
   }
 };
 
+// Export tenant connection helpers for use in other modules (e.g., server.js Socket.IO handlers)
+// These are exported in addition to the main route handlers
+exports.getTenantConnection = getTenantConnection;
+exports.getTenantModels = getTenantModels;

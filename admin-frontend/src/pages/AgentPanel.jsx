@@ -46,6 +46,8 @@ function AgentPanel() {
   
   // Conversations state
   const [conversations, setConversations] = useState([]);
+  const [queuedConversations, setQueuedConversations] = useState([]);
+  const [completedConversations, setCompletedConversations] = useState([]);
   const [conversationsLoading, setConversationsLoading] = useState(true);
   const [conversationsError, setConversationsError] = useState('');
   
@@ -200,6 +202,100 @@ function AgentPanel() {
               ? { ...conv, lastActiveAt: message.createdAt }
               : conv
           ));
+        });
+
+        // =====================================================================
+        // AGENT QUEUE & LIFECYCLE EVENTS
+        // =====================================================================
+
+        // Listen for conversation:queued - new incoming request from widget
+        socketRef.current.on('conversation:queued', (conversation) => {
+          console.log('Agent Panel: Received conversation:queued:', conversation);
+          
+          // Add to queued conversations instantly
+          setQueuedConversations(prev => {
+            // Check if already exists
+            const exists = prev.some(c => c._id === conversation._id || c.conversationId === conversation._id);
+            if (exists) {
+              return prev;
+            }
+            return [...prev, conversation];
+          });
+        });
+
+        // Listen for conversation:claimed - another agent accepted
+        socketRef.current.on('conversation:claimed', (data) => {
+          console.log('Agent Panel: Received conversation:claimed:', data);
+          const conversationId = data.conversationId;
+          
+          // Remove from queued conversations
+          setQueuedConversations(prev => 
+            prev.filter(c => c._id !== conversationId && c.conversationId !== conversationId)
+          );
+          
+          // If this conversation was selected, deselect it
+          if (selectedConversationRef.current === conversationId) {
+            setSelectedConversationId(null);
+            setMessages([]);
+          }
+        });
+
+        // Listen for conversation:assigned - I was the one who accepted
+        socketRef.current.on('conversation:assigned', (conversation) => {
+          console.log('Agent Panel: Received conversation:assigned:', conversation);
+          const conversationId = conversation._id || conversation.conversationId;
+          
+          // Add to regular conversations (My Chats)
+          setConversations(prev => {
+            const exists = prev.some(c => c._id === conversationId);
+            if (exists) {
+              return prev;
+            }
+            return [...prev, conversation];
+          });
+          
+          // Remove from queued if it was there
+          setQueuedConversations(prev => 
+            prev.filter(c => c._id !== conversationId && c.conversationId !== conversationId)
+          );
+          
+          // Auto-join the conversation room
+          if (socketRef.current && socketRef.current.connected) {
+            console.log('Agent Panel: Auto-joining conversation room after assignment:', conversationId);
+            joinConversationRoom(conversationId);
+          }
+        });
+
+        // Listen for conversation:closed - conversation was closed
+        socketRef.current.on('conversation:closed', (data) => {
+          console.log('Agent Panel: Received conversation:closed:', data);
+          const conversationId = data.conversationId;
+          
+          // Move from My Chats to Completed Chats
+          setConversations(prev => {
+            const conversation = prev.find(c => c._id === conversationId);
+            if (conversation) {
+              setCompletedConversations(prevCompleted => {
+                const exists = prevCompleted.some(c => c._id === conversationId);
+                if (exists) {
+                  return prevCompleted;
+                }
+                return [...prevCompleted, { ...conversation, status: 'closed' }];
+              });
+            }
+            return prev.filter(c => c._id !== conversationId);
+          });
+          
+          // Remove from queued if it was there
+          setQueuedConversations(prev => 
+            prev.filter(c => c._id !== conversationId)
+          );
+          
+          // If this conversation was selected, deselect it
+          if (selectedConversationRef.current === conversationId) {
+            setSelectedConversationId(null);
+            setMessages([]);
+          }
         });
 
         socketRef.current.on('connect_error', (error) => {
@@ -496,10 +592,13 @@ function AgentPanel() {
   // Filter conversations based on status
   const filteredConversations = conversations.filter(conv => {
     if (filterStatus === 'all') return true;
-    if (filterStatus === 'queued') return conv.status === 'queued' || conv.status === 'waiting';
+    if (filterStatus === 'queued') return false; // Queued handled separately
     if (filterStatus === 'assigned') return (conv.status === 'assigned' || conv.status === 'active') && (conv.assignedAgent === agentId || conv.agentId === agentId);
     return true;
   });
+
+  // Get queued conversations for queue tab
+  const queuedList = filterStatus === 'queued' ? queuedConversations : [];
 
   const getStatusBadge = (status) => {
     const badges = {
@@ -533,8 +632,8 @@ function AgentPanel() {
             <span className="nav-icon">💬</span>
             <span className="nav-text">Chat</span>
           </div>
-          <div className="nav-subitem" onClick={() => fetchConversations()}>My Open Chats</div>
-          <div className="nav-subitem" onClick={() => alert('Completed Chats not implemented yet')}>Completed Chats</div>
+          <div className="nav-subitem" onClick={() => setFilterStatus('assigned')}>My Open Chats</div>
+          <div className="nav-subitem" onClick={() => setFilterStatus('completed')}>Completed Chats</div>
           <div className="nav-item" onClick={() => alert('Users navigation not implemented yet')}>
             <span className="nav-icon">👥</span>
             <span className="nav-text">Users</span>
@@ -572,19 +671,25 @@ function AgentPanel() {
             className={`filter-tab ${filterStatus === 'all' ? 'active' : ''}`}
             onClick={() => setFilterStatus('all')}
           >
-            All ({conversations.length})
+            All ({conversations.length + queuedConversations.length})
           </button>
           <button 
             className={`filter-tab ${filterStatus === 'queued' ? 'active' : ''}`}
             onClick={() => setFilterStatus('queued')}
           >
-            Queued ({conversations.filter(c => c.status === 'queued' || c.status === 'waiting').length})
+            Queue ({queuedConversations.length})
           </button>
           <button 
             className={`filter-tab ${filterStatus === 'assigned' ? 'active' : ''}`}
             onClick={() => setFilterStatus('assigned')}
           >
             My Chats ({conversations.filter(c => (c.status === 'assigned' || c.status === 'active') && (c.assignedAgent === agentId || c.agentId === agentId)).length})
+          </button>
+          <button 
+            className={`filter-tab ${filterStatus === 'completed' ? 'active' : ''}`}
+            onClick={() => setFilterStatus('completed')}
+          >
+            Completed ({completedConversations.length})
           </button>
         </div>
 
@@ -603,36 +708,94 @@ function AgentPanel() {
 
         {!conversationsLoading && !conversationsError && (
           <div className="chat-list-scroll">
-            {filteredConversations.length === 0 ? (
-              <div className="chat-list-empty">
-                <p>No conversations matching filter</p>
-              </div>
-            ) : (
-              filteredConversations.map((conv) => (
-                <div
-                  key={conv._id}
-                  className={`chat-list-item ${selectedConversationId === conv._id ? 'active' : ''}`}
-                  onClick={() => handleConversationClick(conv._id)}
-                >
-                  <div className="chat-list-item-main">
-                    <span className="chat-visitor-icon">👤</span>
-                    <div className="chat-list-item-content">
-                      <div className="chat-list-visitor">{getVisitorName(conv)}</div>
-                      <div className="chat-list-bot">{getBotName(conv.botId)}</div>
-                      <div className="chat-list-status">{getStatusBadge(conv.status)}</div>
-                    </div>
-                    {(conv.status === 'queued' || conv.status === 'waiting') && (
+            {filterStatus === 'queued' ? (
+              // Queue Tab
+              queuedConversations.length === 0 ? (
+                <div className="chat-list-empty">
+                  <p>No conversations in queue</p>
+                </div>
+              ) : (
+                queuedConversations.map((conv) => (
+                  <div
+                    key={conv._id || conv.conversationId}
+                    className={`chat-list-item ${selectedConversationId === (conv._id || conv.conversationId) ? 'active' : ''}`}
+                    onClick={() => handleConversationClick(conv._id || conv.conversationId)}
+                  >
+                    <div className="chat-list-item-main">
+                      <span className="chat-visitor-icon">👤</span>
+                      <div className="chat-list-item-content">
+                        <div className="chat-list-visitor">{getVisitorName(conv)}</div>
+                        <div className="chat-list-bot">{getBotName(conv.botId)}</div>
+                        <div className="chat-list-status">{getStatusBadge(conv.status)}</div>
+                      </div>
                       <button 
                         className="accept-chat-btn"
-                        onClick={(e) => handleAcceptChat(conv._id, e)}
+                        onClick={(e) => handleAcceptChat(conv._id || conv.conversationId, e)}
                         title="Accept this chat"
                       >
                         Accept
                       </button>
-                    )}
+                    </div>
                   </div>
+                ))
+              )
+            ) : filterStatus === 'completed' ? (
+              // Completed Chats Tab
+              completedConversations.length === 0 ? (
+                <div className="chat-list-empty">
+                  <p>No completed conversations</p>
                 </div>
-              ))
+              ) : (
+                completedConversations.map((conv) => (
+                  <div
+                    key={conv._id}
+                    className={`chat-list-item ${selectedConversationId === conv._id ? 'active' : ''}`}
+                    onClick={() => handleConversationClick(conv._id)}
+                  >
+                    <div className="chat-list-item-main">
+                      <span className="chat-visitor-icon">👤</span>
+                      <div className="chat-list-item-content">
+                        <div className="chat-list-visitor">{getVisitorName(conv)}</div>
+                        <div className="chat-list-bot">{getBotName(conv.botId)}</div>
+                        <div className="chat-list-status">{getStatusBadge(conv.status)}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )
+            ) : (
+              // All / My Chats Tab
+              filteredConversations.length === 0 ? (
+                <div className="chat-list-empty">
+                  <p>No conversations matching filter</p>
+                </div>
+              ) : (
+                filteredConversations.map((conv) => (
+                  <div
+                    key={conv._id}
+                    className={`chat-list-item ${selectedConversationId === conv._id ? 'active' : ''}`}
+                    onClick={() => handleConversationClick(conv._id)}
+                  >
+                    <div className="chat-list-item-main">
+                      <span className="chat-visitor-icon">👤</span>
+                      <div className="chat-list-item-content">
+                        <div className="chat-list-visitor">{getVisitorName(conv)}</div>
+                        <div className="chat-list-bot">{getBotName(conv.botId)}</div>
+                        <div className="chat-list-status">{getStatusBadge(conv.status)}</div>
+                      </div>
+                      {(conv.status === 'queued' || conv.status === 'waiting') && (
+                        <button 
+                          className="accept-chat-btn"
+                          onClick={(e) => handleAcceptChat(conv._id, e)}
+                          title="Accept this chat"
+                        >
+                          Accept
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )
             )}
           </div>
         )}
@@ -700,39 +863,41 @@ function AgentPanel() {
                     </div>
                   ) : (
                     <>
-                      {messages.map((msg) => {
+                      {messages.map((msg, index) => {
                         const isAgent = msg.sender === 'agent';
                         const isUser = msg.sender === 'user';
                         const senderName = isAgent ? agentUsername : (isUser ? getVisitorName(selectedConversation) : 'Bot');
                         
+                        // Show conversation started timestamp only above FIRST agent message
+                        const isFirstAgentMessage = isAgent && messages.slice(0, index).every(m => m.sender !== 'agent');
+                        
                         return (
-                          <div
-                            key={msg._id || msg.id}
-                            className={`message-row ${isAgent ? 'message-right' : 'message-left'}`}
-                          >
-                            <div className="message-avatar-circle">
-                              {isAgent ? '👨‍💼' : '👤'}
-                            </div>
-                            <div className="message-content-wrapper">
-                              <div className="message-sender-label">{senderName}</div>
-                              <div className="message-text-bubble">
-                                {msg.content || msg.text || '(empty message)'}
+                          <div key={msg._id || msg.id}>
+                            {isFirstAgentMessage && (
+                              <div className="conversation-started-timestamp">
+                                <span>Conversation Started</span>
+                                <span>{formatTime(selectedConversation?.createdAt)}</span>
                               </div>
-                              <div className="message-time-label">
-                                {formatTime(msg.createdAt || msg.timestamp)}
+                            )}
+                            <div
+                              className={`message-row ${isAgent ? 'message-right' : 'message-left'}`}
+                            >
+                              <div className="message-avatar-circle">
+                                {isAgent ? '👨‍💼' : '👤'}
+                              </div>
+                              <div className="message-content-wrapper">
+                                <div className="message-sender-label">{senderName}</div>
+                                <div className="message-text-bubble">
+                                  {msg.content || msg.text || '(empty message)'}
+                                </div>
+                                <div className="message-time-label">
+                                  {formatTime(msg.createdAt || msg.timestamp)}
+                                </div>
                               </div>
                             </div>
                           </div>
                         );
                       })}
-                      
-                      {/* Conversation Status */}
-                      {selectedConversation && (
-                        <div className="conversation-end-status">
-                          <p>Conversation Started</p>
-                          <p>At {formatTime(selectedConversation.createdAt)}</p>
-                        </div>
-                      )}
                     </>
                   )}
                 </div>

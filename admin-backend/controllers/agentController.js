@@ -1051,6 +1051,44 @@ const acceptConversation = async (req, res) => {
 
     console.log(`✅ Agent ${agentId} accepted conversation ${id}`);
 
+    // =========================================================================
+    // EMIT conversation:claimed AND conversation:assigned SOCKET EVENTS
+    // =========================================================================
+    const io = req.app.locals.io;
+    const getAgentSocket = req.app.locals.getAgentSocket;
+    
+    if (io) {
+      const agentRoomName = `agents:${tenantId}`;
+      
+      // 1. Emit conversation:claimed to ALL agents in tenant room
+      // This tells all agents to remove this conversation from their queue
+      io.to(agentRoomName).emit('conversation:claimed', {
+        conversationId: conversation._id,
+        agentId: agentId
+      });
+      console.log(`📡 Emitted conversation:claimed to ${agentRoomName} for conversation ${conversation._id}`);
+      
+      // 2. Emit conversation:assigned to ONLY the accepting agent
+      // This tells the agent to add it to My Chats and join the conversation room
+      if (getAgentSocket) {
+        const agentSocketInfo = getAgentSocket(agentId);
+        if (agentSocketInfo) {
+          io.to(agentSocketInfo.socketId).emit('conversation:assigned', {
+            _id: conversation._id,
+            conversationId: conversation._id,
+            botId: conversation.botId,
+            sessionId: conversation.sessionId,
+            status: conversation.status,
+            agentId: conversation.agentId,
+            assignedAgent: conversation.assignedAgent,
+            createdAt: conversation.createdAt,
+            lastActiveAt: conversation.lastActiveAt
+          });
+          console.log(`📡 Emitted conversation:assigned to agent ${agentId} (socket: ${agentSocketInfo.socketId})`);
+        }
+      }
+    }
+
     res.json({
       message: "Conversation accepted",
       conversation: {
@@ -1158,8 +1196,8 @@ const closeConversation = async (req, res) => {
     const assignedAgentId = conversation.assignedAgent;
 
     // Close conversation and return to bot mode
-    // Set status to 'bot' so LLM becomes active again
-    conversation.status = "bot";
+    // Set status to 'closed' instead of 'bot' to preserve the closed state for agent view
+    conversation.status = "closed";
     conversation.assignedAgent = null;
     conversation.agentId = null;
     conversation.lastActiveAt = new Date();
@@ -1180,6 +1218,28 @@ const closeConversation = async (req, res) => {
     }
 
     console.log(`🔒 Conversation ${id} closed`);
+
+    // =========================================================================
+    // EMIT conversation:closed SOCKET EVENT
+    // =========================================================================
+    const io = req.app.locals.io;
+    
+    if (io) {
+      // 1. Emit to agents:{tenantId} room so all agents remove from their lists
+      const agentRoomName = `agents:${tenantId}`;
+      io.to(agentRoomName).emit('conversation:closed', {
+        conversationId: conversation._id,
+        agentId: assignedAgentId
+      });
+      console.log(`📡 Emitted conversation:closed to ${agentRoomName}`);
+      
+      // 2. Emit to conversation room (so widget knows chat is closed)
+      io.to(conversation._id).emit('conversation:closed', {
+        conversationId: conversation._id,
+        status: 'closed'
+      });
+      console.log(`📡 Emitted conversation:closed to conversation room`);
+    }
 
     res.json({
       message: "Conversation closed",

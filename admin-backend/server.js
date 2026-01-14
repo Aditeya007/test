@@ -289,123 +289,36 @@ app.use((err, req, res, next) => {
 const Bot = require('./models/Bot');
 const { getUserTenantContext } = require('./services/userContextService');
 const botJob = require('./jobs/botJob');
-
-// Import tenant models helper
-async function getTenantConnection(databaseUri) {
-  if (!databaseUri) {
-    throw new Error('databaseUri is required for tenant database connection');
-  }
-
-  // Create new connection
-  const conn = await mongoose.createConnection(databaseUri, {
-    maxPoolSize: 10,
-    serverSelectionTimeoutMS: 5000,
-  }).asPromise();
-
-  return conn;
-}
-
-async function getTenantModels(databaseUri) {
-  const connection = await getTenantConnection(databaseUri);
-
-  // Load Conversation schema
-  const ConversationSchema = new mongoose.Schema(
-    {
-      botId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Bot',
-        required: true,
-        index: true
-      },
-      sessionId: {
-        type: String,
-        required: true,
-        index: true,
-        trim: true
-      },
-      status: {
-        type: String,
-        enum: ['bot', 'waiting', 'active', 'queued', 'assigned', 'closed', 'ai', 'human'],
-        default: 'bot',
-        required: true
-      },
-      assignedAgent: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Agent',
-        default: null
-      },
-      agentId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Agent',
-        default: null
-      },
-      lastActiveAt: {
-        type: Date,
-        default: Date.now
-      }
-    },
-    { timestamps: true }
-  );
-
-  // Load Message schema
-  const MessageSchema = new mongoose.Schema(
-    {
-      conversationId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Conversation',
-        required: true,
-        index: true
-      },
-      sender: {
-        type: String,
-        enum: ['user', 'bot', 'agent'],
-        required: true
-      },
-      text: {
-        type: String,
-        required: true
-      },
-      sources: [{ type: String }],
-      metadata: {
-        type: mongoose.Schema.Types.Mixed,
-        default: {}
-      }
-    },
-    { timestamps: true }
-  );
-
-  // Add method to create message
-  MessageSchema.statics.createMessage = async function(conversationId, sender, text, options = {}) {
-    const message = new this({
-      conversationId,
-      sender,
-      text,
-      sources: options.sources || [],
-      metadata: options.metadata || {},
-      createdAt: options.createdAt || new Date()
-    });
-    await message.save();
-    return message;
-  };
-
-  // Add method to update activity
-  ConversationSchema.methods.updateActivity = async function() {
-    this.lastActiveAt = new Date();
-    await this.save();
-  };
-
-  const Conversation =
-    connection.models.Conversation ||
-    connection.model('Conversation', ConversationSchema);
-  const Message =
-    connection.models.Message ||
-    connection.model('Message', MessageSchema);
-
-  return { Conversation, Message };
-}
+const { getTenantConnection, getTenantModels } = require('./controllers/chatController');
 
 io.on('connection', (socket) => {
   console.log(`🔌 Socket connected: ${socket.id}`);
+
+  // =========================================================================
+  // AGENT ROOM JOINING & SOCKET TRACKING
+  // =========================================================================
+  // When an agent authenticates, they must join the agents:{tenantId} room
+  // to receive real-time queue notifications (conversation:queued events)
+  if (socket.user && socket.user.role === 'agent' && socket.user.tenantId) {
+    const agentRoomName = `agents:${socket.user.tenantId}`;
+    socket.join(agentRoomName);
+    console.log(`👤 Agent ${socket.user.agentId} (${socket.user.username}) joined room: ${agentRoomName}`);
+    
+    // Track this socket for the agent (for targeted messaging on accept/assign)
+    const trackAgentSocket = app.locals.trackAgentSocket;
+    if (trackAgentSocket) {
+      trackAgentSocket(socket, socket.user.agentId, socket.user.tenantId);
+    }
+  }
+
+  // Handle socket disconnect - untrack agent sockets
+  socket.on('disconnect', () => {
+    console.log(`🔌 Socket disconnected: ${socket.id}`);
+    const untrackAgentSocket = app.locals.untrackAgentSocket;
+    if (untrackAgentSocket) {
+      untrackAgentSocket(socket.id);
+    }
+  });
 
   // Handle joining a conversation room
   socket.on('join:conversation', (conversationId) => {
@@ -639,14 +552,47 @@ io.on('connection', (socket) => {
       });
     }
   });
-
-  socket.on('disconnect', () => {
-    console.log(`🔌 Socket disconnected: ${socket.id}`);
-  });
 });
 
-// Export io instance for use in controllers
+// Map to track agent socket connections for targeted messaging
+// Structure: { agentId: [{ socketId, tenantId }, ...] }
+const agentSockets = new Map();
+
+// Add helper to track agent socket connections
+const trackAgentSocket = (socket, agentId, tenantId) => {
+  if (!agentSockets.has(agentId)) {
+    agentSockets.set(agentId, []);
+  }
+  const socketInfo = { socketId: socket.id, tenantId };
+  agentSockets.get(agentId).push(socketInfo);
+  console.log(`✅ Tracked socket ${socket.id} for agent ${agentId}`);
+};
+
+const untrackAgentSocket = (socketId) => {
+  for (const [agentId, sockets] of agentSockets.entries()) {
+    const index = sockets.findIndex(s => s.socketId === socketId);
+    if (index !== -1) {
+      sockets.splice(index, 1);
+      console.log(`✅ Untracked socket ${socketId} for agent ${agentId}`);
+      if (sockets.length === 0) {
+        agentSockets.delete(agentId);
+      }
+      break;
+    }
+  }
+};
+
+const getAgentSocket = (agentId) => {
+  const sockets = agentSockets.get(agentId);
+  return sockets && sockets.length > 0 ? sockets[0] : null;  // Return first socket
+};
+
+// Export io and helpers for use in controllers
 app.locals.io = io;
+app.locals.agentSockets = agentSockets;
+app.locals.getAgentSocket = getAgentSocket;
+app.locals.trackAgentSocket = trackAgentSocket;
+app.locals.untrackAgentSocket = untrackAgentSocket;
 
 // =============================================================================
 // SERVER STARTUP - Single server for Express + Socket.IO
