@@ -11,7 +11,8 @@
   justify-content: center;
   padding: 2em 1em;
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: linear-gradient(135deg, #0f1419 0%, #1a2332 50%, #0f1419 100%);
   background-attachment: fixed;
 }
@@ -565,14 +566,39 @@
    RESPONSIVE DESIGN
    ============================================ */
 
+/* Override global overflow settings for auth pages */
+/* Use :has() selector for modern browsers */
+body:has(.auth-page),
+#root:has(.auth-page) {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  height: auto !important;
+  min-height: 100vh;
+}
+
+/* Fallback for browsers that don't support :has() */
+body.auth-page-active,
+#root.auth-page-active {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  height: auto !important;
+  min-height: 100vh;
+}
+
 @media (max-width: 768px) {
   .auth-page {
     padding: 1em;
+    min-height: 100vh;
+    align-items: flex-start;
+    padding-top: 2em;
+    padding-bottom: 2em;
   }
 
   .auth-container-modern {
     padding: 2.5em 2em;
     border-radius: 24px;
+    margin: 0 auto;
+    max-width: 100%;
   }
 
   .auth-title-modern {
@@ -620,8 +646,16 @@
 }
 
 @media (max-width: 480px) {
+  .auth-page {
+    padding: 0.5em;
+    padding-top: 1.5em;
+    padding-bottom: 1.5em;
+  }
+
   .auth-container-modern {
     padding: 2em 1.5em;
+    margin: 0;
+    width: 100%;
   }
 
   .auth-title-modern {

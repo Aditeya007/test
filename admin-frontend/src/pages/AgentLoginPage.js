@@ -30,6 +30,17 @@ function AgentLoginPage() {
     }
   }, [authLoading, isAuthenticated, user, navigate]);
 
+  // Enable scrolling on auth pages
+  useEffect(() => {
+    document.body.classList.add('auth-page-active');
+    document.getElementById('root')?.classList.add('auth-page-active');
+    
+    return () => {
+      document.body.classList.remove('auth-page-active');
+      document.getElementById('root')?.classList.remove('auth-page-active');
+    };
+  }, []);
+
   // Validate form before submission
   function validateForm() {
     const newErrors = {};
