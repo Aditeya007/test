@@ -834,40 +834,57 @@ function DashboardPage() {
           {/* User View - Full Bot Management */}
           {(isUser || isAgent) && (
             <section className="dashboard-info">
-              <h3>Your Chatbots</h3>
-              <p className="dashboard-subtitle">
-                Manage your chatbot websites and configurations.
-              </p>
-
-              {/* Capacity Display */}
+              {/* Statistics Cards */}
               <div
-                style={{
-                  padding: "1rem 1.5rem",
-                  background: "#eff6ff",
-                  border: "2px solid #3b82f6",
-                  borderRadius: "8px",
-                  marginBottom: "1.5rem",
-                  fontSize: "1rem",
-                  width: "100%",
-                  boxSizing: "border-box",
-                  color: "#1e40af",
-                  lineHeight: "1.5",
-                  overflow: "visible",
-                  whiteSpace: "normal",
-                  minWidth: 0,
-                }}
+                className="dashboard-stats-grid"
+                style={{ marginBottom: "2.5rem" }}
               >
-                <span style={{ display: "block", width: "100%" }}>
-                  <strong style={{ color: "#1e40af", fontWeight: "600" }}>
-                    You can create up to {tenantDetails?.maxBots} chatbot
-                    {tenantDetails?.maxBots > 1 ? "s" : ""}
-                  </strong>
-                  {deferredBots.length > 0 && (
-                    <span style={{ marginLeft: "0.5rem", color: "#1e40af" }}>
-                      ({deferredBots.length} / {tenantDetails?.maxBots} created)
-                    </span>
-                  )}
-                </span>
+                {/* Chatbot Capacity Card */}
+                <div className="stat-card stat-card--primary">
+                  <div className="stat-icon">🤖</div>
+                  <div className="stat-content">
+                    <h4 className="stat-label">Chatbot Capacity</h4>
+                    <p className="stat-value">
+                      {deferredBots.length} / {tenantDetails?.maxBots || 0}
+                    </p>
+                    <p className="stat-hint">
+                      {tenantDetails?.maxBots &&
+                      deferredBots.length < tenantDetails.maxBots
+                        ? `${
+                            tenantDetails.maxBots - deferredBots.length
+                          } available`
+                        : "At capacity"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Human Agents Card */}
+                {tenantDetails?.maxAgents > 0 && (
+                  <div className="stat-card stat-card--success">
+                    <div className="stat-icon">👥</div>
+                    <div className="stat-content">
+                      <h4 className="stat-label">Human Agents</h4>
+                      <p className="stat-value">
+                        {agents.length} / {tenantDetails.maxAgents}
+                      </p>
+                      <p className="stat-hint">
+                        {agents.filter((a) => a.isActive).length} active
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Active Websites Card */}
+                <div className="stat-card stat-card--info">
+                  <div className="stat-icon">🌐</div>
+                  <div className="stat-content">
+                    <h4 className="stat-label">Active Websites</h4>
+                    <p className="stat-value">{deferredBots.length}</p>
+                    <p className="stat-hint">
+                      {deferredBots.filter((b) => b.botReady).length} ready
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {botsLoading && (
@@ -889,208 +906,110 @@ function DashboardPage() {
                 </div>
               )}
 
-              {!botsLoading && !botsError && (
-                <>
-                  {/* Action Buttons */}
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "1rem",
-                      marginBottom: "1rem",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    {/* Add Website Button */}
-                    {(() => {
-                      // Show button if tenantDetails exists and we're under the limit (or maxBots not loaded yet)
-                      if (!tenantDetails) return false;
+              {/* Action Buttons Section */}
+              <div className="dashboard-actions-section">
+                <h3 className="dashboard-section-title">Quick Actions</h3>
+                <div className="dashboard-actions">
+                  {/* Add Website Button */}
+                  {(() => {
+                    if (!tenantDetails) return false;
+                    if (
+                      tenantDetails.maxBots === undefined ||
+                      tenantDetails.maxBots === null
+                    ) {
+                      return true;
+                    }
+                    return (
+                      tenantDetails.maxBots > 0 &&
+                      deferredBots.length < tenantDetails.maxBots
+                    );
+                  })() && (
+                    <button
+                      className="dashboard-action-btn dashboard-action-btn--primary"
+                      onClick={() => setAddWebsiteModalOpen(true)}
+                    >
+                      <span className="btn-icon">➕</span>
+                      <span className="btn-text">Add Website</span>
+                    </button>
+                  )}
 
-                      // If maxBots is not loaded yet, show optimistically (backend will enforce limit)
-                      if (
-                        tenantDetails.maxBots === undefined ||
-                        tenantDetails.maxBots === null
-                      ) {
-                        return true; // Show while loading - backend will handle limit
-                      }
-
-                      // If maxBots is set, check if we're under the limit
-                      return (
-                        tenantDetails.maxBots > 0 &&
-                        deferredBots.length < tenantDetails.maxBots
-                      );
-                    })() && (
+                  {/* Add Agent Button - Only for Users, not Agents */}
+                  {isUser &&
+                    tenantDetails &&
+                    (tenantDetails.maxAgents === undefined ||
+                      tenantDetails.maxAgents === null ||
+                      (tenantDetails.maxAgents > 0 &&
+                        agents.length < tenantDetails.maxAgents)) && (
                       <button
-                        className="dashboard-action-btn"
-                        onClick={() => setAddWebsiteModalOpen(true)}
-                        style={{
-                          padding: "0.75rem 1.5rem",
-                          fontSize: "1rem",
-                          flex: "1",
-                          minWidth: "200px",
-                        }}
+                        className="dashboard-action-btn dashboard-action-btn--success"
+                        onClick={() => setAddAgentModalOpen(true)}
                       >
-                        ➕ Add Website
+                        <span className="btn-icon">👤</span>
+                        <span className="btn-text">Add Agent</span>
                       </button>
                     )}
+                </div>
+              </div>
 
-                    {/* Add Agent Button - Only for Users, not Agents */}
-                    {isUser &&
-                      tenantDetails &&
-                      // Show if maxAgents not loaded yet (optimistic) or if under the limit
-                      (tenantDetails.maxAgents === undefined ||
-                        tenantDetails.maxAgents === null ||
-                        (tenantDetails.maxAgents > 0 &&
-                          agents.length < tenantDetails.maxAgents)) && (
-                        <button
-                          className="dashboard-action-btn"
-                          onClick={() => setAddAgentModalOpen(true)}
-                          style={{
-                            padding: "0.75rem 1.5rem",
-                            fontSize: "1rem",
-                            flex: "1",
-                            minWidth: "200px",
-                            background: "#10b981",
-                            borderColor: "#10b981",
-                          }}
-                        >
-                          👤 Add Agent
-                        </button>
-                      )}
-                  </div>
+              {botsLoading && (
+                <Loader message="Loading websites..." size="small" />
+              )}
 
-                  {/* Agent Status Display */}
-                  {tenantDetails?.maxAgents > 0 && (
-                    <div
-                      style={{
-                        padding: "0.75rem 1rem",
-                        background: "#f0fdf4",
-                        border: "1px solid #10b981",
-                        borderRadius: "6px",
-                        marginBottom: "1rem",
-                        fontSize: "0.875rem",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        color: "#065f46",
-                        width: "100%",
-                        boxSizing: "border-box",
-                        minWidth: 0,
-                        overflow: "visible",
-                        whiteSpace: "normal",
-                      }}
-                    >
-                      <span
-                        style={{
-                          flex: "1 1 auto",
-                          minWidth: 0,
-                          marginRight: "1rem",
-                        }}
-                      >
-                        <strong style={{ fontWeight: "600" }}>
-                          Human Agents:
-                        </strong>{" "}
-                        {agents.length} / {tenantDetails.maxAgents}
-                      </span>
-                      {agents.length > 0 && (
-                        <span
-                          style={{
-                            color: "#059669",
-                            fontSize: "0.75rem",
-                            flexShrink: 0,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {agents.filter((a) => a.isActive).length} active
-                        </span>
-                      )}
-                    </div>
-                  )}
+              {botsError && bots.length > 0 && (
+                <div className="dashboard-alert dashboard-alert--error">
+                  {botsError}
+                </div>
+              )}
 
-                  {addAgentSuccess && (
-                    <div
-                      style={{
-                        padding: "0.75rem 1rem",
-                        background: "#d1fae5",
-                        border: "1px solid #10b981",
-                        borderRadius: "6px",
-                        color: "#065f46",
-                        marginBottom: "1rem",
-                        fontSize: "0.875rem",
-                      }}
-                    >
-                      {addAgentSuccess}
-                    </div>
-                  )}
+              {addAgentSuccess && (
+                <div className="dashboard-alert dashboard-alert--success">
+                  {addAgentSuccess}
+                </div>
+              )}
 
-                  {/* Website List */}
-                  {deferredBots.length === 0 ? (
-                    <div
-                      style={{
-                        padding: "2rem",
-                        background: "#f9fafb",
-                        border: "1px solid #e5e7eb",
-                        borderRadius: "8px",
-                        textAlign: "center",
-                        color: "#6b7280",
-                      }}
-                    >
-                      <p
-                        style={{ fontSize: "1.125rem", marginBottom: "0.5rem" }}
-                      >
-                        No websites added yet
-                      </p>
-                      <p style={{ fontSize: "0.875rem", fontStyle: "italic" }}>
-                        Click "Add Website" to create your first chatbot
+              {!botsLoading && !botsError && (
+                <>
+                  {/* Websites Section */}
+                  <div className="dashboard-websites-section">
+                    <div className="dashboard-section-header">
+                      <h3 className="dashboard-section-title">Your Websites</h3>
+                      <p className="dashboard-section-subtitle">
+                        Manage your chatbot websites and configurations
                       </p>
                     </div>
-                  ) : (
-                    <div>
-                      <h4
-                        style={{
-                          margin: "0 0 0.75rem 0",
-                          fontSize: "0.875rem",
-                          color: "#6b7280",
-                          fontWeight: "500",
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        Your Websites
-                      </h4>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "0.75rem",
-                          marginBottom: "1.5rem",
-                        }}
-                      >
+
+                    {/* Website List */}
+                    {deferredBots.length === 0 ? (
+                      <div className="dashboard-empty-state">
+                        <div className="empty-icon">🌐</div>
+                        <h3>No websites added yet</h3>
+                        <p>Click "Add Website" to create your first chatbot</p>
+                      </div>
+                    ) : (
+                      <div className="websites-grid">
                         {deferredBots.map((bot) => (
                           <div
                             key={bot._id || bot.id}
+                            className={`website-card ${
+                              selectedBot &&
+                              (selectedBot._id || selectedBot.id) ===
+                                (bot._id || bot.id)
+                                ? "website-card--active"
+                                : ""
+                            }`}
                             onClick={() => handleBotSelect(bot)}
-                            style={{
-                              padding: "1rem 1.25rem",
-                              background:
-                                selectedBot &&
-                                (selectedBot._id || selectedBot.id) ===
-                                  (bot._id || bot.id)
-                                  ? "#eff6ff"
-                                  : "white",
-                              border:
-                                selectedBot &&
-                                (selectedBot._id || selectedBot.id) ===
-                                  (bot._id || bot.id)
-                                  ? "2px solid #3b82f6"
-                                  : "1px solid #e5e7eb",
-                              borderRadius: "8px",
-                              cursor: "pointer",
-                              transition: "all 0.2s",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                            }}
                           >
-                            <div style={{ flex: 1 }}>
+                            <div className="website-card-header">
+                              <div className="website-icon">🌐</div>
+                              {selectedBot &&
+                                (selectedBot._id || selectedBot.id) ===
+                                  (bot._id || bot.id) && (
+                                  <div className="website-selected-badge">
+                                    ✓ Selected
+                                  </div>
+                                )}
+                            </div>
+                            <div className="website-card-content">
                               {bot.scrapedWebsites &&
                               bot.scrapedWebsites.length > 0 &&
                               bot.scrapedWebsites[0] ? (
@@ -1099,51 +1018,32 @@ function DashboardPage() {
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   onClick={(e) => e.stopPropagation()}
-                                  style={{
-                                    fontSize: "1rem",
-                                    color:
-                                      selectedBot &&
-                                      (selectedBot._id || selectedBot.id) ===
-                                        (bot._id || bot.id)
-                                        ? "#1e40af"
-                                        : "#3b82f6",
-                                    textDecoration: "none",
-                                    fontWeight: "500",
-                                    wordBreak: "break-all",
-                                  }}
+                                  className="website-url"
                                 >
                                   {bot.scrapedWebsites[0]}
                                 </a>
                               ) : (
-                                <span
-                                  style={{
-                                    fontSize: "1rem",
-                                    color: "#9ca3af",
-                                    fontStyle: "italic",
-                                  }}
-                                >
+                                <span className="website-url-placeholder">
                                   No website configured
                                 </span>
                               )}
-                            </div>
-                            {selectedBot &&
-                              (selectedBot._id || selectedBot.id) ===
-                                (bot._id || bot.id) && (
+                              <div className="website-status">
                                 <span
-                                  style={{
-                                    marginLeft: "1rem",
-                                    color: "#3b82f6",
-                                    fontSize: "1.25rem",
-                                  }}
+                                  className={`status-badge ${
+                                    bot.botReady
+                                      ? "status-badge--ready"
+                                      : "status-badge--pending"
+                                  }`}
                                 >
-                                  ✓
+                                  {bot.botReady ? "✓ Ready" : "⏳ Pending"}
                                 </span>
-                              )}
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
                   {/* Actions - Only show when panel is explicitly shown and a website is selected */}
                   {showWebsiteActionsPanel && selectedBot && (

@@ -48,11 +48,18 @@
   flex: 1;
   padding: 1.5em 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 0;
+  align-items: stretch;
 }
 
 .nav-item {
   width: 100%;
+  max-width: 100%;
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 1em;
   padding: 1em 1.5em;
@@ -66,6 +73,9 @@
   text-align: left;
   border-left: 4px solid transparent;
   position: relative;
+  flex-shrink: 0;
+  flex-grow: 0;
+  box-sizing: border-box;
 }
 
 .nav-item:hover {
@@ -161,21 +171,28 @@
   position: sticky;
   top: 0;
   z-index: 1002;
+  overflow: visible;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 1.5em;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .sidebar-toggle {
   background: rgba(255, 131, 7, 0.1);
   border: 2px solid rgba(255, 131, 7, 0.3);
   color: #FF8307;
-  padding: 0.6em 1em;
-  border-radius: 10px;
-  font-size: 1.2rem;
+  padding: 0.5em 0.8em;
+  border-radius: 8px;
+  font-size: 1rem;
   cursor: pointer;
   transition: all 0.3s;
   font-weight: 700;
@@ -183,6 +200,11 @@
   position: relative;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  min-width: 36px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .sidebar-toggle:hover {
@@ -208,12 +230,21 @@
   display: flex;
   align-items: center;
   gap: 1.5em;
+  flex: 1 1 auto;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: visible;
+  justify-content: flex-end;
 }
 
 .user-info {
   display: flex;
   align-items: center;
   gap: 1em;
+  flex-shrink: 0;
+  min-width: 0;
+  overflow: visible;
+  flex-wrap: nowrap;
 }
 
 .user-name {
@@ -295,10 +326,87 @@
 /* Mobile Overlay */
 .sidebar-overlay {
   display: none;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
-/* Responsive Design */
+/* Responsive Design - Tablet */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .admin-header {
+    padding: 1.2em 1.5em;
+    flex-wrap: nowrap;
+    gap: 1em;
+  }
+
+  .header-left {
+    flex: 0 0 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 1em;
+  }
+
+  .sidebar-toggle {
+    flex-shrink: 0;
+    padding: 0.45em 0.7em;
+    font-size: 0.95rem;
+    min-width: 34px;
+    min-height: 34px;
+  }
+
+  .page-title {
+    display: none;
+  }
+
+  .header-right {
+    flex: 1 1 auto;
+    flex-shrink: 1;
+    min-width: 0;
+    display: flex !important;
+    justify-content: flex-end;
+    align-items: center;
+    overflow: visible;
+  }
+
+  .user-info {
+    display: flex !important;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.7em;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    min-width: 0;
+    overflow: visible;
+  }
+
+  .user-name {
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .user-badge {
+    font-size: 0.75rem;
+    padding: 0.3em 0.7em;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .profile-icon-btn {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+  }
+
+  .profile-icon {
+    font-size: 1.1rem;
+  }
+}
+
+/* Responsive Design - Mobile */
 @media (max-width: 768px) {
   .sidebar-overlay {
     display: block;
@@ -309,8 +417,16 @@
     bottom: 0;
     background: rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(4px);
-    z-index: 1000;
-    animation: fadeIn 0.3s ease;
+    z-index: 999;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+  }
+
+  .sidebar-overlay.active {
+    opacity: 1;
+    visibility: visible;
     pointer-events: auto;
   }
 
@@ -318,6 +434,11 @@
     width: 280px;
     max-width: 85vw;
     z-index: 1001;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    transform: translateX(-100%);
   }
 
   .admin-sidebar:not(.open) {
@@ -330,80 +451,94 @@
 
   .admin-main {
     margin-left: 0 !important;
-    width: 100%;
+    width: 100% !important;
+    position: relative;
   }
 
   .admin-main.sidebar-open {
     margin-left: 0 !important;
+    width: 100% !important;
   }
 
   .admin-header {
-    padding: 1em 1.2em;
-    flex-wrap: wrap;
-    gap: 1em;
+    padding: 0.9em 1em;
+    flex-wrap: nowrap;
+    gap: 0.8em;
     z-index: 1002;
     position: relative;
+    min-height: 60px;
   }
 
   .header-left {
-    flex: 1;
+    flex: 0 0 auto;
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 1em;
+    gap: 0.8em;
   }
 
   .sidebar-toggle {
     flex-shrink: 0;
-    padding: 0.5em 0.8em;
-    font-size: 1.1rem;
-    min-width: 44px;
-    min-height: 44px;
+    padding: 0.4em 0.6em;
+    font-size: 0.9rem;
+    min-width: 32px;
+    min-height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
   .page-title {
-    font-size: 1.2rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex: 1;
-    min-width: 0;
+    display: none;
   }
 
   .header-right {
-    flex-shrink: 0;
+    flex: 1 1 auto;
+    flex-shrink: 1;
+    min-width: 0;
+    display: flex !important;
+    justify-content: flex-end;
+    align-items: center;
+    overflow: visible;
   }
 
   .user-info {
+    display: flex !important;
     flex-direction: row;
     align-items: center;
-    gap: 0.8em;
-    flex-wrap: wrap;
+    gap: 0.6em;
+    flex-wrap: nowrap;
+    width: 100%;
+    justify-content: flex-end;
+    min-width: 0;
+    overflow: visible;
   }
 
   .user-name {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 120px;
-  }
-
-  .profile-icon-btn {
-    width: 36px;
-    height: 36px;
-  }
-
-  .profile-icon {
-    font-size: 1.1rem;
+    max-width: 100px;
+    flex-shrink: 1;
+    min-width: 0;
   }
 
   .user-badge {
-    font-size: 0.75rem;
-    padding: 0.3em 0.8em;
+    font-size: 0.7rem;
+    padding: 0.25em 0.6em;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .profile-icon-btn {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+  }
+
+  .profile-icon {
+    font-size: 1rem;
   }
 
   .admin-content {
@@ -418,24 +553,55 @@
     font-size: 1.3rem;
   }
 
+  .sidebar-nav {
+    display: flex !important;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    gap: 0;
+    padding: 1em 0;
+    align-items: stretch;
+  }
+
   .nav-item {
     padding: 0.9em 1.2em;
     font-size: 0.95rem;
+    width: 100% !important;
+    max-width: 100% !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center;
+    flex-wrap: nowrap !important;
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+    min-height: 48px;
+    box-sizing: border-box;
+    margin: 0;
+    float: none;
   }
 
   .nav-icon {
     font-size: 1.1rem;
     width: 20px;
+    flex-shrink: 0;
+  }
+
+  .nav-label {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
 @media (max-width: 480px) {
   .admin-header {
-    padding: 0.8em 1em;
+    padding: 0.8em 0.9em;
+    gap: 0.6em;
+    min-height: 56px;
   }
 
   .page-title {
-    font-size: 1.1rem;
+    display: none;
   }
 
   .admin-content {
@@ -455,23 +621,88 @@
     font-size: 1.2rem;
   }
 
+  .sidebar-nav {
+    padding: 0.8em 0;
+    display: flex !important;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    align-items: stretch;
+  }
+
   .nav-item {
     padding: 0.8em 1em;
     font-size: 0.9rem;
+    width: 100% !important;
+    max-width: 100% !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center;
+    flex-wrap: nowrap !important;
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+    min-height: 44px;
+    box-sizing: border-box;
+    margin: 0;
+    float: none;
+  }
+
+  .nav-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .header-left {
+    gap: 0.6em;
+    flex: 0 0 auto;
+  }
+
+  .sidebar-toggle {
+    min-width: 30px;
+    min-height: 30px;
+    padding: 0.35em 0.5em;
+    font-size: 0.85rem;
+  }
+
+  .header-right {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex !important;
+    justify-content: flex-end;
+  }
+
+  .user-info {
+    display: flex !important;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5em;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    min-width: 0;
   }
 
   .user-name {
-    max-width: 100px;
-    font-size: 0.85rem;
+    max-width: 80px;
+    font-size: 0.8rem;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .user-badge {
+    font-size: 0.65rem;
+    padding: 0.2em 0.5em;
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 
   .profile-icon-btn {
     width: 32px;
     height: 32px;
+    flex-shrink: 0;
   }
 
   .profile-icon {
-    font-size: 1rem;
+    font-size: 0.95rem;
   }
 }
 

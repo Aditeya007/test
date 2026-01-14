@@ -61,6 +61,29 @@ function AdminLayout({ children }) {
     }
   }, [location.pathname, dispatch]);
 
+  // Prevent body scroll when sidebar is open on mobile
+  React.useEffect(() => {
+    const isMobile = window.innerWidth <= 768;
+    if (isMobile && sidebarOpen) {
+      // Prevent body scroll
+      document.body.style.overflow = "hidden";
+      document.body.style.position = "fixed";
+      document.body.style.width = "100%";
+    } else {
+      // Restore body scroll
+      document.body.style.overflow = "";
+      document.body.style.position = "";
+      document.body.style.width = "";
+    }
+
+    // Cleanup on unmount
+    return () => {
+      document.body.style.overflow = "";
+      document.body.style.position = "";
+      document.body.style.width = "";
+    };
+  }, [sidebarOpen]);
+
   // Close sidebar when clicking outside on mobile
   const handleOverlayClick = () => {
     if (window.innerWidth <= 768) {
@@ -121,13 +144,11 @@ function AdminLayout({ children }) {
   return (
     <div className="admin-layout">
       {/* Mobile Overlay */}
-      {sidebarOpen && (
-        <div
-          className="sidebar-overlay"
-          onClick={handleOverlayClick}
-          aria-hidden="true"
-        />
-      )}
+      <div
+        className={`sidebar-overlay ${sidebarOpen ? "active" : ""}`}
+        onClick={handleOverlayClick}
+        aria-hidden="true"
+      />
 
       {/* Sidebar */}
       <aside className={`admin-sidebar ${sidebarOpen ? "open" : ""}`}>
@@ -179,7 +200,7 @@ function AdminLayout({ children }) {
               type="button"
               aria-label="Toggle sidebar menu"
             >
-              ☰
+              {sidebarOpen ? "✕" : "☰"}
             </button>
           </div>
           <div className="header-right">
