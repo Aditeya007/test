@@ -1089,6 +1089,7 @@ class SemanticIntelligentRAG:
         return any(keyword in question.lower() for keyword in pricing_keywords)
 
     def synthesize_comprehensive_answer(self, question_analysis: Dict, docs: List[str], is_follow_up: bool = False) -> str:
+        # If no docs available, return early
         if not docs:
             return "I couldn't find relevant information to answer your question."
 
@@ -1096,30 +1097,38 @@ class SemanticIntelligentRAG:
             # Use top 12 documents for better context
             combined_context = "\n".join(docs[:12])
 
+            # Strong instruction: NEVER include URLs or source links unless the user explicitly
+            # asked for page locations / links. When the user asks for links, only use URLs
+            # present in the provided metadata and do NOT invent or hallucinate URLs.
+            # When links are required, format each as:
+            # Page title
+            # https://page-url
+            # Otherwise, do NOT include any source or URL information in your answer.
 
-            # Improved universal prompt
             prompt = f"""You are a helpful assistant that answers questions accurately using the provided context.
 
 CONTEXT:
 {combined_context}
 
 INSTRUCTIONS:
-1. Read ALL context passages carefully, even if formatting appears unclear
-2. Extract relevant information from the context to answer the question
-3. Combine information from multiple passages when needed to form complete answers
-4. Handle text that may lack proper punctuation or spacing by identifying key information patterns
-5. Provide clear, factual answers in 2-3 sentences
-6. If the context contains relevant information but it's poorly formatted, interpret it logically
-7. Only respond with "I don't have that information in my knowledge base" if NO relevant information exists in the context
+1. Read ALL context passages carefully, even if formatting appears unclear.
+2. Extract relevant information from the context to answer the question.
+3. Combine information from multiple passages when needed to form complete answers.
+4. Provide clear, factual answers in 2-3 sentences.
+5. IMPORTANT: Do NOT include any source attributions, page titles, URLs, or links unless the user explicitly asked for page locations or links (for example: "where is this", "which page", "source", "link", "URL", "where did you get this", "about page", or similar).
+6. If the user explicitly asked for links, ONLY provide links and titles that appear in the provided context metadata — DO NOT invent URLs or sources.
+7. When providing links, format each entry exactly as:
+   Page title
+   https://page-url
+8. If you were not explicitly asked for links, do NOT include any URLs, source lines, or link-like text in your reply.
 
 QUESTION: {question_analysis['original_question']}
 
 ANSWER (be concise and factual):"""
 
-
             # Use low temperature for consistency
             generation_config = genai.types.GenerationConfig(
-                temperature=0.3,  # Balanced for natural conversation while maintaining accuracy
+                temperature=0.3,
                 top_p=0.8,
                 top_k=50
             )
@@ -1129,11 +1138,29 @@ ANSWER (be concise and factual):"""
                 generation_config=generation_config
             )
 
-            answer = response.text.strip() if response and response.text else \
-                    "I found some information but couldn't generate a proper response."
+            answer = response.text.strip() if response and response.text else "I found some information but couldn't generate a proper response."
+
+            # Ensure we do not leak URLs when question did not explicitly request them.
+            # Higher-level code calls this method without an explicit include_urls flag;
+            # rely on the prompt and additionally strip any accidental URLs to be safe.
+            try:
+                q = question_analysis.get('original_question', '')
+                if not self.is_location_query(q):
+                    # Remove explicit URLs from the generated answer as a safety net
+                    import re
+                    cleaned = re.sub(r'https?://\S+', '', answer)
+                    # Also remove obvious 'Source:' or 'Sources:' lines
+                    cleaned = '\n'.join([ln for ln in cleaned.splitlines() if not ln.strip().lower().startswith(('source:', 'sources:'))])
+                    cleaned = cleaned.strip()
+                    if cleaned:
+                        answer = cleaned
+                    else:
+                        # Fallback to original answer if cleaning removed too much
+                        answer = answer
+            except Exception:
+                pass
 
             print(f"✅ Generated answer (length: {len(answer)} characters)")
-
             return answer
 
         except Exception as e:
@@ -1272,6 +1299,57 @@ ANSWER (be concise and factual):"""
         stored = self.last_sources_by_session.get(session_id, [])
         return stored[:limit]
 
+    def is_location_query(self, question: str) -> bool:
+        """Return True if the user's question explicitly asks for page locations/links."""
+        if not question or not isinstance(question, str):
+            return False
+        q = question.lower()
+        triggers = [
+            "where is this",
+            "which page",
+            "source",
+            "link",
+            "url",
+            "where did you get this",
+            "about page",
+            "where can i find",
+            "what page",
+            "page located",
+        ]
+        for t in triggers:
+            if t in q:
+                return True
+        # Also check for short explicit tokens
+        words = q.split()
+        for w in ["source", "link", "url"]:
+            if w in words:
+                return True
+        return False
+
+    def _format_links(self, metadatas: List[dict]) -> str:
+        """Format a list of metadata dicts into 'Page title\nhttps://page-url' blocks.
+
+        Uses metadata fields preferentially: 'page_title', 'title', 'domain'.
+        Falls back to raw URL if no title is present.
+        """
+        if not metadatas:
+            return ""
+        seen = set()
+        lines = []
+        for md in metadatas:
+            if not md or not isinstance(md, dict):
+                continue
+            url = md.get('url') or md.get('filePath') or md.get('webpage') or md.get('source')
+            if not url:
+                continue
+            if url in seen:
+                continue
+            seen.add(url)
+            title = md.get('page_title') or md.get('title') or md.get('page') or md.get('domain') or url
+            title = title.strip() if isinstance(title, str) else str(title)
+            lines.append(f"{title}\n{url}")
+        return "\n\n".join(lines)
+
     def chat(self, question: str, session_id: str = "default") -> str:
         print(f"\n{'='*90}")
         print(f"CHAT: {question[:50]}... | Session: {session_id}")
@@ -1385,6 +1463,26 @@ ANSWER (be concise and factual):"""
                     return "Before we continue, may I have your name please?"
 
             # Analyze question semantically ONCE and reuse throughout
+            # Fast-path: if user explicitly asks for page location/links, return stored URLs quickly
+            if self.is_location_query(question):
+                try:
+                    print("🔍 Location query detected — performing quick metadata lookup...")
+                    # Use a lightweight text query to get metadatas from Chroma
+                    try:
+                        results_quick = self.collection.query(query_texts=[question], n_results=10)
+                    except Exception:
+                        # Fall back to embedding-based query if text query path fails
+                        qa = self.analyze_question_semantically(question)
+                        results_quick = self.collection.query(query_embeddings=[qa['question_embedding'].tolist()], n_results=10)
+
+                    metadatas = results_quick.get('metadatas', [[]])[0]
+                    formatted = self._format_links(metadatas)
+                    if formatted:
+                        print("✅ Returning URLs directly for location query")
+                        return formatted
+                except Exception as e:
+                    print(f"⚠️ Location quick-search failed: {e}")
+
             print("🔍 DEBUG - Analyzing question semantically...")
             question_analysis = self.analyze_question_semantically(question)
             print(f"🔍 DEBUG - Question analysis completed")
