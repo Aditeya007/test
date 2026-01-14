@@ -616,40 +616,80 @@ function AgentPanel() {
   };
 
   return (
-    <div className="agent-panel-3col">
-      {/* LEFT COLUMN: Dark Sidebar with Navigation */}
-      <div className="dark-sidebar">
-        <div className="sidebar-brand">
-          <span className="brand-icon">📋</span>
-          <span className="brand-text">Agent Panel</span>
+    <div className="agent-panel-layout">
+      {/* Sidebar */}
+      <aside className="agent-sidebar">
+        <div className="sidebar-header">
+          <h2 className="sidebar-logo">Agent Panel</h2>
         </div>
 
         <nav className="sidebar-nav">
-          <div className="nav-item active">
+          <button className="nav-item" onClick={() => alert('Dashboard navigation not implemented yet')}>
+            <span className="nav-icon">📊</span>
+            <span className="nav-label">Dashboard</span>
+          </button>
+          <button className="nav-item active">
             <span className="nav-icon">💬</span>
-            <span className="nav-text">Chat</span>
-          </div>
-          <div className="nav-subitem" onClick={() => setFilterStatus('assigned')}>My Open Chats</div>
-          <div className="nav-subitem" onClick={() => setFilterStatus('completed')}>Completed Chats</div>
+            <span className="nav-label">Chat</span>
+          </button>
+          <button className="nav-item" onClick={() => alert('Users navigation not implemented yet')}>
+            <span className="nav-icon">👥</span>
+            <span className="nav-label">Users</span>
+          </button>
+          <button className="nav-item" onClick={() => alert('Site Settings navigation not implemented yet')}>
+            <span className="nav-icon">⚙️</span>
+            <span className="nav-label">Site Settings</span>
+          </button>
+          <button className="nav-item" onClick={() => alert('View Logs navigation not implemented yet')}>
+            <span className="nav-icon">📜</span>
+            <span className="nav-label">View Logs</span>
+          </button>
         </nav>
 
         <div className="sidebar-footer">
-          <div className="user-info">
-            <span className="user-name">{agentUsername}</span>
-          </div>
-          <button onClick={logout} className="sidebar-logout-btn">Logout</button>
-        </div>
-      </div>
-
-      {/* CENTER COLUMN: Chat List Panel */}
-      <div className="chat-list-panel">
-        <div className="chat-list-header">
-          <h2>Ongoing Chats</h2>
-          <button onClick={fetchConversations} className="refresh-icon-btn" disabled={conversationsLoading} title="Refresh">
-            ↻
+          <button className="nav-item logout-btn" onClick={logout}>
+            <span className="nav-icon">🚪</span>
+            <span className="nav-label">Logout</span>
           </button>
         </div>
+      </aside>
 
+      {/* Main Content */}
+      <div className="agent-main">
+        {/* Top Header */}
+        <header className="agent-header">
+          <div className="header-left">
+            <h2 className="page-title">Ongoing Chats</h2>
+          </div>
+          <div className="header-right">
+            <button 
+              onClick={fetchConversations} 
+              className="refresh-icon-btn" 
+              disabled={conversationsLoading} 
+              title="Refresh"
+            >
+              ↻
+            </button>
+            <div className="user-info">
+              <span className="user-name">{agentUsername}</span>
+              <span className="user-badge badge-agent">AGENT</span>
+              <button
+                className="profile-icon-btn"
+                onClick={() => alert('Profile not implemented yet')}
+                title="View Profile"
+                aria-label="View Profile"
+              >
+                <span className="profile-icon">👤</span>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Page Content - Chat List and Chat Window */}
+        <main className="agent-content">
+          <div className="agent-panel-3col">
+            {/* CENTER COLUMN: Chat List Panel */}
+            <div className="chat-list-panel">
         {/* Filter Tabs */}
         <div className="chat-filter-tabs">
           <button 
@@ -911,6 +951,9 @@ function AgentPanel() {
             </div>
           </>
         )}
+            </div>
+          </div>
+        </main>
       </div>
     </div>
   );
