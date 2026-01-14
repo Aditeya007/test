@@ -69,6 +69,8 @@ function AgentPanel() {
 
   // Socket.IO ref
   const socketRef = useRef(null);
+  // Hold agent conversation handlers for cleanup
+  const agentHandlersRef = useRef(null);
   
   // Ref to track the current conversation ID for socket event handlers
   const selectedConversationRef = useRef(null);
@@ -128,6 +130,9 @@ function AgentPanel() {
         socketRef.current.on('connect', () => {
           console.log('Agent socket connected:', socketRef.current.id);
           
+          // Tell server this is an agent socket - it will join agents:{tenantId} room
+          socketRef.current.emit('agent:ready');
+          
           // Rejoin current conversation room if viewing one
           // Use ref to get the current value
           const currentConversationId = selectedConversationRef.current;
@@ -143,6 +148,9 @@ function AgentPanel() {
 
         socketRef.current.on('reconnect', (attemptNumber) => {
           console.log('Agent socket reconnected after', attemptNumber, 'attempts');
+          
+          // Tell server this is an agent socket - it will join agents:{tenantId} room
+          socketRef.current.emit('agent:ready');
           
           // Rejoin conversation room after reconnection
           // Use ref to get the current value
@@ -218,6 +226,79 @@ function AgentPanel() {
           setSendingMessage(false);
         });
 
+        // =====================================================================
+        // AGENT QUEUE & LIFECYCLE EVENTS - Attach once after socket creation
+        // =====================================================================
+        const handleConversationQueued = (conversation) => {
+          console.log('Agent Panel: Received conversation:queued:', conversation);
+          setQueuedConversations(prev => {
+            const exists = prev.some(c => c._id === conversation._id || c.conversationId === conversation._id);
+            if (exists) return prev;
+            return [...prev, conversation];
+          });
+        };
+
+        const handleConversationClaimed = (data) => {
+          console.log('Agent Panel: Received conversation:claimed:', data);
+          const conversationId = data.conversationId;
+          setQueuedConversations(prev => prev.filter(c => c._id !== conversationId && c.conversationId !== conversationId));
+          if (selectedConversationRef.current === conversationId) {
+            setSelectedConversationId(null);
+            setMessages([]);
+          }
+        };
+
+        const handleConversationAssigned = (conversation) => {
+          console.log('Agent Panel: Received conversation:assigned:', conversation);
+          const conversationId = conversation._id || conversation.conversationId;
+          setConversations(prev => {
+            const exists = prev.some(c => c._id === conversationId);
+            if (exists) return prev;
+            return [...prev, conversation];
+          });
+          setQueuedConversations(prev => prev.filter(c => c._id !== conversationId && c.conversationId !== conversationId));
+          if (socketRef.current && socketRef.current.connected) {
+            console.log('Agent Panel: Auto-joining conversation room after assignment:', conversationId);
+            joinConversationRoom(conversationId);
+          }
+        };
+
+        const handleConversationClosed = (data) => {
+          console.log('Agent Panel: Received conversation:closed:', data);
+          const conversationId = data.conversationId;
+          setConversations(prev => {
+            const conversation = prev.find(c => c._id === conversationId);
+            if (conversation) {
+              setCompletedConversations(prevCompleted => {
+                const exists = prevCompleted.some(c => c._id === conversationId);
+                if (exists) return prevCompleted;
+                return [...prevCompleted, { ...conversation, status: 'closed' }];
+              });
+            }
+            return prev.filter(c => c._id !== conversationId);
+          });
+          setQueuedConversations(prev => prev.filter(c => c._id !== conversationId));
+          if (selectedConversationRef.current === conversationId) {
+            setSelectedConversationId(null);
+            setMessages([]);
+          }
+        };
+
+        // Attach handlers and store references for cleanup
+        if (!agentHandlersRef.current) {
+          agentHandlersRef.current = {
+            handleConversationQueued,
+            handleConversationClaimed,
+            handleConversationAssigned,
+            handleConversationClosed
+          };
+
+          socketRef.current.on('conversation:queued', handleConversationQueued);
+          socketRef.current.on('conversation:claimed', handleConversationClaimed);
+          socketRef.current.on('conversation:assigned', handleConversationAssigned);
+          socketRef.current.on('conversation:closed', handleConversationClosed);
+        }
+
       } catch (error) {
         console.error('Agent Panel: Failed to initialize Socket.IO:', error);
       }
@@ -228,7 +309,20 @@ function AgentPanel() {
     // Cleanup on unmount
     return () => {
       if (socketRef.current) {
-        console.log('Agent Panel: Disconnecting Socket.IO');
+        console.log('Agent Panel: Removing agent queue listeners and disconnecting Socket.IO');
+        // Remove attached conversation listeners if we stored them
+        if (agentHandlersRef.current) {
+          const h = agentHandlersRef.current;
+          try {
+            socketRef.current.off('conversation:queued', h.handleConversationQueued);
+            socketRef.current.off('conversation:claimed', h.handleConversationClaimed);
+            socketRef.current.off('conversation:assigned', h.handleConversationAssigned);
+            socketRef.current.off('conversation:closed', h.handleConversationClosed);
+          } catch (e) {
+            console.warn('Agent Panel: Error removing handlers during cleanup', e);
+          }
+        }
+
         socketRef.current.disconnect();
         socketRef.current = null;
       }
@@ -284,121 +378,7 @@ function AgentPanel() {
     fetchConversations();
   }, []);
 
-  // Attach agent queue event listeners with reconnect safety
-  // This runs whenever socketRef.current changes (after socket init)
-  useEffect(() => {
-    if (!socketRef.current) return;
-
-    // =====================================================================
-    // AGENT QUEUE & LIFECYCLE EVENTS - Reconnect Safe
-    // =====================================================================
-
-    // Listen for conversation:queued - new incoming request from widget
-    const handleConversationQueued = (conversation) => {
-      console.log('Agent Panel: Received conversation:queued:', conversation);
-      
-      // Add to queued conversations instantly
-      setQueuedConversations(prev => {
-        // Check if already exists
-        const exists = prev.some(c => c._id === conversation._id || c.conversationId === conversation._id);
-        if (exists) {
-          return prev;
-        }
-        return [...prev, conversation];
-      });
-    };
-
-    // Listen for conversation:claimed - another agent accepted
-    const handleConversationClaimed = (data) => {
-      console.log('Agent Panel: Received conversation:claimed:', data);
-      const conversationId = data.conversationId;
-      
-      // Remove from queued conversations
-      setQueuedConversations(prev => 
-        prev.filter(c => c._id !== conversationId && c.conversationId !== conversationId)
-      );
-      
-      // If this conversation was selected, deselect it
-      if (selectedConversationRef.current === conversationId) {
-        setSelectedConversationId(null);
-        setMessages([]);
-      }
-    };
-
-    // Listen for conversation:assigned - I was the one who accepted
-    const handleConversationAssigned = (conversation) => {
-      console.log('Agent Panel: Received conversation:assigned:', conversation);
-      const conversationId = conversation._id || conversation.conversationId;
-      
-      // Add to regular conversations (My Chats)
-      setConversations(prev => {
-        const exists = prev.some(c => c._id === conversationId);
-        if (exists) {
-          return prev;
-        }
-        return [...prev, conversation];
-      });
-      
-      // Remove from queued if it was there
-      setQueuedConversations(prev => 
-        prev.filter(c => c._id !== conversationId && c.conversationId !== conversationId)
-      );
-      
-      // Auto-join the conversation room
-      if (socketRef.current && socketRef.current.connected) {
-        console.log('Agent Panel: Auto-joining conversation room after assignment:', conversationId);
-        joinConversationRoom(conversationId);
-      }
-    };
-
-    // Listen for conversation:closed - conversation was closed
-    const handleConversationClosed = (data) => {
-      console.log('Agent Panel: Received conversation:closed:', data);
-      const conversationId = data.conversationId;
-      
-      // Move from My Chats to Completed Chats
-      setConversations(prev => {
-        const conversation = prev.find(c => c._id === conversationId);
-        if (conversation) {
-          setCompletedConversations(prevCompleted => {
-            const exists = prevCompleted.some(c => c._id === conversationId);
-            if (exists) {
-              return prevCompleted;
-            }
-            return [...prevCompleted, { ...conversation, status: 'closed' }];
-          });
-        }
-        return prev.filter(c => c._id !== conversationId);
-      });
-      
-      // Remove from queued if it was there
-      setQueuedConversations(prev => 
-        prev.filter(c => c._id !== conversationId)
-      );
-      
-      // If this conversation was selected, deselect it
-      if (selectedConversationRef.current === conversationId) {
-        setSelectedConversationId(null);
-        setMessages([]);
-      }
-    };
-
-    // Attach listeners
-    socketRef.current.on('conversation:queued', handleConversationQueued);
-    socketRef.current.on('conversation:claimed', handleConversationClaimed);
-    socketRef.current.on('conversation:assigned', handleConversationAssigned);
-    socketRef.current.on('conversation:closed', handleConversationClosed);
-
-    // Cleanup: Remove listeners on unmount or when socket changes
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.off('conversation:queued', handleConversationQueued);
-        socketRef.current.off('conversation:claimed', handleConversationClaimed);
-        socketRef.current.off('conversation:assigned', handleConversationAssigned);
-        socketRef.current.off('conversation:closed', handleConversationClosed);
-      }
-    };
-  }, [socketRef]); // Re-run when socket is initialized
+  // Agent queue listeners are attached on socket initialization above
 
   const fetchConversations = useCallback(async () => {
     setConversationsLoading(true);

@@ -311,6 +311,21 @@ io.on('connection', (socket) => {
     }
   }
 
+  // Handle agent:ready event - agents must join their tenant room for queue events
+  socket.on('agent:ready', () => {
+    if (socket.user && socket.user.role === 'agent' && socket.user.tenantId) {
+      const agentRoomName = `agents:${socket.user.tenantId}`;
+      socket.join(agentRoomName);
+      console.log(`Agent joined room: ${agentRoomName}`);
+      
+      // Track this socket for the agent
+      const trackAgentSocket = app.locals.trackAgentSocket;
+      if (trackAgentSocket) {
+        trackAgentSocket(socket, socket.user.agentId, socket.user.tenantId);
+      }
+    }
+  });
+
   // Handle socket disconnect - untrack agent sockets
   socket.on('disconnect', () => {
     console.log(`🔌 Socket disconnected: ${socket.id}`);
