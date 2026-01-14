@@ -12,8 +12,10 @@ EnvironmentFile=/var/www/rag-chatbot/.env
 # Run the bot using the auto-restart wrapper
 # This ensures the bot automatically restarts after scrapes complete
 ExecStart=/var/www/rag-chatbot/venv/bin/python run_bot_with_autorestart.py
-StandardOutput=append:/var/log/rag-bot/output.log
-StandardError=append:/var/log/rag-bot/error.log
+# Route all stdout and stderr to a single append-only log for the RAG bot
+# This keeps the process start unchanged while ensuring backend logs are persisted
+StandardOutput=append:/var/www/rag-chatbot/rag.log
+StandardError=append:/var/www/rag-chatbot/rag.log
 Restart=always
 RestartSec=10
 
