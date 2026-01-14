@@ -366,6 +366,8 @@
             autocomplete="off"
           />
           <button id="rag-widget-send" class="rag-widget-send-btn">Send</button>
+        </div>
+        <div class="rag-widget-request-row">
           <button id="rag-widget-request-agent" class="rag-widget-request-agent-btn">Live Agent</button>
         </div>
       </div>
@@ -590,8 +592,17 @@
         cursor: not-allowed;
       }
 
-      .rag-widget-request-agent-btn {
-        padding: 0.5em 0.9em;
+      /* Request row button - full width under input */
+      .rag-widget-request-row {
+        padding: 0.75em 1em;
+        background: transparent;
+        border-top: 1px solid rgba(255, 131, 7, 0.02);
+      }
+
+      .rag-widget-request-row .rag-widget-request-agent-btn {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.8em 1.5em; /* match send button height */
         background: #FF8307; /* match widget primary button color */
         color: white;
         border: none;
@@ -599,16 +610,15 @@
         font-weight: 600;
         cursor: pointer;
         transition: all 0.15s ease;
-        white-space: nowrap;
+        white-space: normal;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        max-width: 120px;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        text-align: center;
+        overflow: visible;
       }
 
-      .rag-widget-request-agent-btn:hover:not(:disabled) {
+      .rag-widget-request-row .rag-widget-request-agent-btn:hover:not(:disabled) {
         background: #e67506;
         transform: translateY(-1px);
       }
