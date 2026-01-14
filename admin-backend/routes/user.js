@@ -30,4 +30,21 @@ router.put('/me', auth, userLimiter, validateProfileUpdate, userController.updat
  */
 router.get('/api-token', auth, userLimiter, userController.getApiToken);
 
+/**
+ * @route   GET /api/user/conversations
+ * @desc    Get all conversations for the current user's tenant (read-only supervisor view)
+ * @access  Protected (requires JWT)
+ * @returns { success: boolean, conversations: Array }
+ */
+router.get('/conversations', auth, userLimiter, userController.getConversations);
+
+/**
+ * @route   GET /api/user/conversations/:conversationId/messages
+ * @desc    Get all messages for a specific conversation (read-only supervisor view)
+ * @access  Protected (requires JWT)
+ * @param   conversationId - The conversation ID
+ * @returns { success: boolean, messages: Array }
+ */
+router.get('/conversations/:conversationId/messages', auth, userLimiter, userController.getConversationMessages);
+
 module.exports = router;

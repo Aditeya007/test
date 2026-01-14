@@ -56,6 +56,8 @@ function AdminLayout({ children }) {
       dispatch(setActiveMenuItem("users"));
     } else if (path === "/agents" || path.startsWith("/agents/")) {
       dispatch(setActiveMenuItem("agents"));
+    } else if (path === "/chats" || path.startsWith("/chats/")) {
+      dispatch(setActiveMenuItem("chats"));
     } else if (path.startsWith("/bot/")) {
       dispatch(setActiveMenuItem("dashboard"));
     }
@@ -92,6 +94,13 @@ function AdminLayout({ children }) {
       label: "Agents",
       icon: "👤",
       path: "/agents",
+      userOnly: true, // Only show for regular users, not admins
+    },
+    {
+      id: "chats",
+      label: "Chats",
+      icon: "💬",
+      path: "/chats",
       userOnly: true, // Only show for regular users, not admins
     },
   ];

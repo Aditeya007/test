@@ -444,6 +444,16 @@ exports.sendMessage = async (req, res) => {
         createdAt: userMessage.createdAt
       });
       console.log(`📡 Emitted user message to conversation:${conversation._id}`);
+
+      // Also broadcast to tenant-wide room for supervisor view
+      io.to(`tenant:${bot.userId}`).emit('message:new', {
+        _id: userMessage._id,
+        conversationId: conversation._id,
+        sender: 'user',
+        text: sanitizedMessage,
+        createdAt: userMessage.createdAt
+      });
+      console.log(`📡 Emitted user message to tenant:${bot.userId}`);
     }
 
     // CHECK FOR ACTIVE AGENT TAKEOVER - Disable LLM completely
@@ -490,6 +500,16 @@ exports.sendMessage = async (req, res) => {
           createdAt: placeholderMessage.createdAt
         });
         console.log(`📡 Emitted placeholder message to conversation:${conversation._id}`);
+
+        // Also broadcast to tenant-wide room for supervisor view
+        io.to(`tenant:${bot.userId}`).emit('message:new', {
+          _id: placeholderMessage._id,
+          conversationId: conversation._id,
+          sender: 'agent',
+          text: agentMessage,
+          createdAt: placeholderMessage.createdAt
+        });
+        console.log(`📡 Emitted placeholder message to tenant:${bot.userId}`);
       }
 
       return res.json({
@@ -569,6 +589,17 @@ exports.sendMessage = async (req, res) => {
           sources: botResult.sources
         });
         console.log(`📡 Emitted bot message to conversation:${conversation._id}`);
+
+        // Also broadcast to tenant-wide room for supervisor view
+        io.to(`tenant:${bot.userId}`).emit('message:new', {
+          _id: botMessage._id,
+          conversationId: conversation._id,
+          sender: 'bot',
+          text: botResult.answer,
+          createdAt: botMessage.createdAt,
+          sources: botResult.sources
+        });
+        console.log(`📡 Emitted bot message to tenant:${bot.userId}`);
       }
 
       return res.json({
@@ -614,6 +645,17 @@ exports.sendMessage = async (req, res) => {
           isError: true
         });
         console.log(`📡 Emitted error message to conversation:${conversation._id}`);
+
+        // Also broadcast to tenant-wide room for supervisor view
+        io.to(`tenant:${bot.userId}`).emit('message:new', {
+          _id: errorMsg._id,
+          conversationId: conversation._id,
+          sender: 'bot',
+          text: errorMessage,
+          createdAt: errorMsg.createdAt,
+          isError: true
+        });
+        console.log(`📡 Emitted error message to tenant:${bot.userId}`);
       }
 
       // Determine appropriate status and error message

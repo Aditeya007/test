@@ -21,6 +21,7 @@ import BotPage from './pages/BotPage';
 import HealthPage from './pages/HealthPage';
 import AgentPanel from './pages/AgentPanel';
 import AgentsPage from './pages/AgentsPage';
+import ChatsPage from './pages/ChatsPage';
 import ChatWidgetWrapper from './components/ChatWidget/ChatWidgetWrapper';
 
 import './styles/index.css';
@@ -123,6 +124,16 @@ function AppContent() {
             <ProtectedRoute>
               <AdminLayout>
                 {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <AgentsPage />}
+              </AdminLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/chats"
+          element={
+            <ProtectedRoute>
+              <AdminLayout>
+                {user?.role === 'agent' ? <Navigate to="/agent" replace /> : <ChatsPage />}
               </AdminLayout>
             </ProtectedRoute>
           }

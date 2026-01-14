@@ -868,6 +868,16 @@ const replyToConversation = async (req, res) => {
       console.log(
         `📡 Emitted agent message to conversation:${conversation._id}`
       );
+
+      // Also broadcast to tenant room for supervisor view
+      io.to(`tenant:${tenantId}`).emit("message:new", {
+        _id: newMessage._id,
+        conversationId: conversation._id,
+        sender: "agent",
+        text: newMessage.text,
+        createdAt: newMessage.createdAt,
+      });
+      console.log(`📡 Emitted agent message to tenant:${tenantId}`);
     }
 
     res.json({
@@ -1239,6 +1249,13 @@ const closeConversation = async (req, res) => {
         status: 'closed'
       });
       console.log(`📡 Emitted conversation:closed to conversation room`);
+
+      // 3. Emit to tenant room for supervisor view
+      io.to(`tenant:${tenantId}`).emit('conversation:closed', {
+        conversationId: conversation._id,
+        status: 'closed'
+      });
+      console.log(`📡 Emitted conversation:closed to tenant:${tenantId}`);
     }
 
     res.json({

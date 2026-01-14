@@ -311,6 +311,15 @@ io.on('connection', (socket) => {
     }
   }
 
+  // USER TENANT ROOM JOINING
+  // =========================================================================
+  // When a user authenticates, join the tenant:{userId} room for supervisor view
+  if (socket.user && socket.user.role !== 'agent' && socket.user.role !== 'widget' && socket.user._id) {
+    const tenantRoomName = `tenant:${socket.user._id}`;
+    socket.join(tenantRoomName);
+    console.log(`👥 User ${socket.user.username} joined room: ${tenantRoomName}`);
+  }
+
   // Handle agent:ready event - agents must join their tenant room for queue events
   socket.on('agent:ready', () => {
     if (socket.user && socket.user.role === 'agent' && socket.user.tenantId) {
@@ -323,6 +332,23 @@ io.on('connection', (socket) => {
       if (trackAgentSocket) {
         trackAgentSocket(socket, socket.user.agentId, socket.user.tenantId);
       }
+    }
+  });
+
+  // Handle join:tenant event - for users to explicitly join their tenant room
+  socket.on('join:tenant', (tenantId) => {
+    if (!tenantId) {
+      console.warn(`⚠️  Socket ${socket.id} attempted to join tenant without tenantId`);
+      return;
+    }
+
+    // Verify the user is joining their own tenant
+    if (socket.user && (socket.user._id === tenantId || socket.user.userId === tenantId)) {
+      const tenantRoomName = `tenant:${tenantId}`;
+      socket.join(tenantRoomName);
+      console.log(`📥 Socket ${socket.id} joined room: ${tenantRoomName}`);
+    } else {
+      console.warn(`⚠️  Socket ${socket.id} attempted to join unauthorized tenant`);
     }
   });
 
@@ -446,6 +472,17 @@ io.on('connection', (socket) => {
 
       console.log(`📡 Emitted ${sender} message to conversation:${conversationId}`);
 
+      // Also broadcast to tenant-wide room for supervisor view
+      io.to(`tenant:${bot.userId}`).emit('message:new', {
+        _id: savedMessage._id,
+        conversationId: conversationId,
+        sender: sender,
+        text: sanitizedMessage,
+        createdAt: savedMessage.createdAt
+      });
+
+      console.log(`📡 Emitted ${sender} message to tenant:${bot.userId}`);
+
       // Handle bot response for user messages
       if (sender === 'user') {
         // Check if agent is actively handling this conversation
@@ -477,6 +514,17 @@ io.on('connection', (socket) => {
           });
 
           console.log(`📡 Emitted placeholder message to conversation:${conversationId}`);
+
+          // Also broadcast to tenant-wide room
+          io.to(`tenant:${bot.userId}`).emit('message:new', {
+            _id: placeholderMessage._id,
+            conversationId: conversationId,
+            sender: 'agent',
+            text: agentMessage,
+            createdAt: placeholderMessage.createdAt
+          });
+
+          console.log(`📡 Emitted placeholder message to tenant:${bot.userId}`);
           return;
         }
 
@@ -532,6 +580,18 @@ io.on('connection', (socket) => {
 
           console.log(`📡 Emitted bot message to conversation:${conversationId}`);
 
+          // Also broadcast to tenant-wide room
+          io.to(`tenant:${bot.userId}`).emit('message:new', {
+            _id: botMessage._id,
+            conversationId: conversationId,
+            sender: 'bot',
+            text: botResult.answer,
+            createdAt: botMessage.createdAt,
+            sources: botResult.sources
+          });
+
+          console.log(`📡 Emitted bot message to tenant:${bot.userId}`);
+
         } catch (botError) {
           console.error(`❌ Bot error for conversation ${conversationId}:`, botError.message);
 
@@ -556,6 +616,18 @@ io.on('connection', (socket) => {
           });
 
           console.log(`📡 Emitted error message to conversation:${conversationId}`);
+
+          // Also broadcast to tenant-wide room
+          io.to(`tenant:${bot.userId}`).emit('message:new', {
+            _id: errorMsg._id,
+            conversationId: conversationId,
+            sender: 'bot',
+            text: errorMessage,
+            createdAt: errorMsg.createdAt,
+            isError: true
+          });
+
+          console.log(`📡 Emitted error message to tenant:${bot.userId}`);
         }
       }
 

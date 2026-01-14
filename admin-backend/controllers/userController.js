@@ -956,3 +956,215 @@ exports.getUserAgents = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch user agents" });
   }
 };
+/**
+ * Get all conversations for the current user's tenant
+ * Used by the ChatsPage for supervisor view
+ * @route   GET /api/user/conversations
+ * @access  Protected (requires JWT)
+ * @returns {Object} { conversations: Array<Conversation> }
+ */
+exports.getConversations = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Get tenant context
+    const tenantContext = await getUserTenantContext(userId);
+    if (!tenantContext.databaseUri) {
+      return res.status(503).json({
+        success: false,
+        error: "Tenant database not provisioned"
+      });
+    }
+
+    // Get tenant connection and models
+    const mongoose = require("mongoose");
+    const tenantConn = await getTenantConnection(tenantContext.databaseUri);
+
+    // Load Conversation model
+    const ConversationSchema = new mongoose.Schema({
+      botId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Bot',
+        required: true,
+        index: true
+      },
+      sessionId: {
+        type: String,
+        required: true,
+        index: true,
+        trim: true
+      },
+      status: {
+        type: String,
+        enum: ['bot', 'waiting', 'active', 'queued', 'assigned', 'closed', 'ai', 'human'],
+        default: 'bot',
+        required: true
+      },
+      assignedAgent: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Agent',
+        default: null
+      },
+      agentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Agent',
+        default: null
+      },
+      requestedAt: {
+        type: Date,
+        default: null
+      },
+      endedAt: {
+        type: Date,
+        default: null
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now,
+        index: true
+      },
+      lastActiveAt: {
+        type: Date,
+        default: Date.now,
+        index: true
+      }
+    });
+
+    const Conversation = tenantConn.models.Conversation || 
+      tenantConn.model('Conversation', ConversationSchema);
+
+    // Fetch all conversations for this tenant, sorted by most recent first
+    const conversations = await Conversation.find({})
+      .sort({ lastActiveAt: -1 })
+      .lean();
+
+    console.log(`✅ Retrieved ${conversations.length} conversations for user ${userId}`);
+
+    res.json({
+      success: true,
+      conversations: conversations.map(conv => ({
+        _id: conv._id,
+        botId: conv.botId,
+        sessionId: conv.sessionId,
+        status: conv.status,
+        assignedAgent: conv.assignedAgent,
+        agentId: conv.agentId,
+        requestedAt: conv.requestedAt,
+        endedAt: conv.endedAt,
+        createdAt: conv.createdAt,
+        lastActiveAt: conv.lastActiveAt
+      }))
+    });
+  } catch (err) {
+    console.error("❌ Error fetching conversations:", {
+      message: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    });
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch conversations",
+      details: process.env.NODE_ENV === "development" ? err.message : undefined
+    });
+  }
+};
+
+/**
+ * Get messages for a specific conversation (read-only for supervisors)
+ * @route   GET /api/user/conversations/:conversationId/messages
+ * @access  Protected (requires JWT)
+ * @param   conversationId - The conversation ID
+ * @returns {Object} { messages: Array<Message> }
+ */
+exports.getConversationMessages = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { conversationId } = req.params;
+
+    if (!conversationId) {
+      return res.status(400).json({
+        success: false,
+        error: "conversationId is required"
+      });
+    }
+
+    // Get tenant context
+    const tenantContext = await getUserTenantContext(userId);
+    if (!tenantContext.databaseUri) {
+      return res.status(503).json({
+        success: false,
+        error: "Tenant database not provisioned"
+      });
+    }
+
+    // Get tenant connection and models
+    const mongoose = require("mongoose");
+    const tenantConn = await getTenantConnection(tenantContext.databaseUri);
+
+    // Load Message model
+    const MessageSchema = new mongoose.Schema({
+      conversationId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Conversation',
+        required: true,
+        index: true
+      },
+      sender: {
+        type: String,
+        enum: ['user', 'bot', 'agent'],
+        required: true
+      },
+      text: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 10000
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now,
+        index: true
+      },
+      sources: {
+        type: [String],
+        default: undefined
+      },
+      metadata: {
+        type: mongoose.Schema.Types.Mixed,
+        default: undefined
+      }
+    });
+
+    const Message = tenantConn.models.Message || 
+      tenantConn.model('Message', MessageSchema);
+
+    // Fetch messages for this conversation
+    const messages = await Message.find({ conversationId })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    console.log(`✅ Retrieved ${messages.length} messages for conversation ${conversationId}`);
+
+    res.json({
+      success: true,
+      messages: messages.map(msg => ({
+        _id: msg._id,
+        conversationId: msg.conversationId,
+        sender: msg.sender,
+        text: msg.text,
+        createdAt: msg.createdAt,
+        sources: msg.sources,
+        metadata: msg.metadata
+      }))
+    });
+  } catch (err) {
+    console.error("❌ Error fetching conversation messages:", {
+      message: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    });
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch messages",
+      details: process.env.NODE_ENV === "development" ? err.message : undefined
+    });
+  }
+};
