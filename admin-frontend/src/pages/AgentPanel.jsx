@@ -1,6 +1,7 @@
 // src/pages/AgentPanel.jsx
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../api';
 import Loader from '../components/Loader';
@@ -26,6 +27,7 @@ function decodeToken(token) {
 
 function AgentPanel() {
   const { user, logout: authLogout } = useAuth();
+  const navigate = useNavigate();
   // Read agent token from localStorage (stored by AgentLoginPage)
   const agentToken = localStorage.getItem('agentToken');
   
@@ -66,6 +68,11 @@ function AgentPanel() {
 
   // Filter state
   const [filterStatus, setFilterStatus] = useState('queued'); // 'queued', 'assigned', 'completed'
+
+  // Sidebar menu state
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const menuRef = useRef(null);
 
   // Socket.IO ref
   const socketRef = useRef(null);
@@ -378,6 +385,23 @@ function AgentPanel() {
     fetchConversations();
   }, []);
 
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setMenuOpen(false);
+      }
+    };
+
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [menuOpen]);
+
   // Agent queue listeners are attached on socket initialization above
 
   const fetchConversations = useCallback(async () => {
@@ -633,9 +657,51 @@ function AgentPanel() {
   return (
     <div className="agent-panel-layout">
       {/* Sidebar */}
-      <aside className="agent-sidebar">
+      <aside className={`agent-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
           <h2 className="sidebar-logo">Agent Panel</h2>
+          <div className="sidebar-header-actions">
+            <div className="sidebar-menu-container" ref={menuRef}>
+              <button
+                className="sidebar-menu-btn"
+                onClick={() => setMenuOpen(!menuOpen)}
+                title="Menu"
+                aria-label="Menu"
+              >
+                <span className="menu-dots">⋯</span>
+              </button>
+              {menuOpen && (
+                <div className="sidebar-menu-dropdown">
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      fetchConversations();
+                    }}
+                  >
+                    ↻ Refresh
+                  </button>
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      alert('Help not implemented yet');
+                    }}
+                  >
+                    ❓ Help
+                  </button>
+                </div>
+              )}
+            </div>
+            <button
+              className="sidebar-close-btn"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <nav className="sidebar-nav">
@@ -674,7 +740,7 @@ function AgentPanel() {
               <span className="user-badge badge-agent">AGENT</span>
               <button
                 className="profile-icon-btn"
-                onClick={() => alert('Profile not implemented yet')}
+                onClick={() => navigate("/profile")}
                 title="View Profile"
                 aria-label="View Profile"
               >
@@ -711,6 +777,12 @@ function AgentPanel() {
           </button>
         </div>
         
+        {conversationsLoading && (
+          <div className="chat-list-loading">
+            <Loader message="Loading conversations..." />
+          </div>
+        )}
+
         {conversationsError && (
           <div className="chat-list-error">
             <p>{conversationsError}</p>
@@ -724,7 +796,9 @@ function AgentPanel() {
               // Queue Tab
               queuedConversations.length === 0 ? (
                 <div className="chat-list-empty">
+                  <div className="empty-state-icon">💬</div>
                   <p>No conversations in queue</p>
+                  <span className="empty-state-subtitle">New conversations will appear here</span>
                 </div>
               ) : (
                 queuedConversations.map((conv) => (
@@ -755,7 +829,9 @@ function AgentPanel() {
               // Completed Chats Tab
               completedConversations.length === 0 ? (
                 <div className="chat-list-empty">
+                  <div className="empty-state-icon">✅</div>
                   <p>No completed conversations</p>
+                  <span className="empty-state-subtitle">Completed chats will appear here</span>
                 </div>
               ) : (
                 completedConversations.map((conv) => (
@@ -779,7 +855,9 @@ function AgentPanel() {
               // All / My Chats Tab
               filteredConversations.length === 0 ? (
                 <div className="chat-list-empty">
-                  <p>No conversations matching filter</p>
+                  <div className="empty-state-icon">💬</div>
+                  <p>No active conversations</p>
+                  <span className="empty-state-subtitle">Your assigned chats will appear here</span>
                 </div>
               ) : (
                 filteredConversations.map((conv) => (
