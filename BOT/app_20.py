@@ -1326,30 +1326,6 @@ ANSWER (be concise and factual):"""
                 return True
         return False
 
-    def _format_links(self, metadatas: List[dict]) -> str:
-        """Format a list of metadata dicts into 'Page title\nhttps://page-url' blocks.
-
-        Uses metadata fields preferentially: 'page_title', 'title', 'domain'.
-        Falls back to raw URL if no title is present.
-        """
-        if not metadatas:
-            return ""
-        seen = set()
-        lines = []
-        for md in metadatas:
-            if not md or not isinstance(md, dict):
-                continue
-            url = md.get('url') or md.get('filePath') or md.get('webpage') or md.get('source')
-            if not url:
-                continue
-            if url in seen:
-                continue
-            seen.add(url)
-            title = md.get('page_title') or md.get('title') or md.get('page') or md.get('domain') or url
-            title = title.strip() if isinstance(title, str) else str(title)
-            lines.append(f"{title}\n{url}")
-        return "\n\n".join(lines)
-
     def chat(self, question: str, session_id: str = "default") -> str:
         print(f"\n{'='*90}")
         print(f"CHAT: {question[:50]}... | Session: {session_id}")
@@ -1363,56 +1339,48 @@ ANSWER (be concise and factual):"""
             # deterministic URL-level rerank and return a single page (title + URL).
             if self.is_location_query(question):
                 try:
-                    print("🔍 Location query detected — running semantic page-level URL resolver (fast path)...")
-
-                    # 1) Compute question embedding using the same embedding model
+                    # Semantic page-level URL resolver (single deterministic resolver)
+                    # 1) Compute question embedding using same embedding model used elsewhere
                     qa = self.analyze_question_semantically(question)
                     q_emb = qa.get('question_embedding')
 
-                    # 2) Query Chroma for 40-50 relevant chunks using the question embedding
+                    # 2) Query Chroma for 50 relevant chunks using the question embedding
                     try:
                         results_quick = self.collection.query(query_embeddings=[q_emb.tolist()], n_results=50)
                     except Exception:
-                        # Fallback to a text query if embedding-driven query fails
                         results_quick = self.collection.query(query_texts=[question], n_results=50)
 
                     docs = results_quick.get('documents', [[]])[0]
                     metadatas = results_quick.get('metadatas', [[]])[0]
 
-                    # 3) Group chunks by page-level URL and combine into a single page document
+                    # 3) Group results by page-level URL and combine their chunks into a single page document
                     pages = {}
                     for doc, md in zip(docs, metadatas):
                         if not md or not isinstance(md, dict):
                             continue
                         url = md.get('url') or md.get('filePath') or md.get('webpage') or md.get('source')
-                        if not url:
+                        if not url or not isinstance(url, str):
                             continue
                         url = url.strip()
                         if not url:
                             continue
-                        title = md.get('page_title') or md.get('title') or md.get('page') or md.get('domain') or url
-                        entry = pages.get(url)
-                        if entry is None:
-                            pages[url] = {'title': title, 'chunks': []}
-                            entry = pages[url]
+                        if url not in pages:
+                            # Prefer explicit page title metadata when available
+                            title = md.get('page_title') or md.get('title') or md.get('page') or md.get('domain') or url
+                            pages[url] = {'title': str(title).strip() if title else url, 'chunks': []}
 
-                        # Add chunk text and title metadata to the page document
+                        # Only include the chunk text for page-level document (no keyword heuristics)
                         if isinstance(doc, str) and doc.strip():
-                            entry['chunks'].append(doc.strip())
-                        if md.get('page_title'):
-                            entry['chunks'].append(str(md.get('page_title')).strip())
-                        if md.get('title'):
-                            entry['chunks'].append(str(md.get('title')).strip())
+                            pages[url]['chunks'].append(doc.strip())
 
                     if not pages:
                         print("⚠️ No URL candidates found for location query")
                         return "I couldn't find a relevant page for that request."
 
-                    # 4) For each page, compute a page-level embedding and cosine similarity to the question
+                    # 4) For each page, build the page document and compute embedding + cosine similarity
                     import math
 
                     def cosine_sim(a, b):
-                        # ensure iterable
                         try:
                             ax = list(a)
                             bx = list(b)
@@ -1431,30 +1399,35 @@ ANSWER (be concise and factual):"""
                     best_score = -1.0
 
                     for url, info in pages.items():
-                        page_text = " \n ".join(info['chunks'])
-                        # Compute page embedding using the same embedding model
+                        # combine chunks into a single page-level document
+                        page_text = "\n\n".join(info['chunks']) if info['chunks'] else ''
+                        if not page_text:
+                            continue
+
+                        # Compute page embedding using same embedding model used by Chroma
                         try:
                             p_emb = self.embedding_model.encode(page_text)
                         except Exception:
-                            # Fallback to encoding first chunk if full page encoding fails
-                            first_chunk = info['chunks'][0] if info['chunks'] else page_text
-                            p_emb = self.embedding_model.encode(first_chunk)
+                            # If encoding full page fails, encode the concatenation of the first few chunks
+                            sample = ' '.join(info['chunks'][:3])
+                            p_emb = self.embedding_model.encode(sample)
 
                         sim = cosine_sim(q_emb, p_emb)
 
-                        # Deterministic tie-breaker: higher similarity, then lexicographically smaller URL
+                        # Deterministic selection: prefer higher similarity; tie-breaker is lexicographic URL
                         if sim > best_score or (abs(sim - best_score) < 1e-12 and (best is None or url < best['url'])):
                             best_score = sim
                             best = {'url': url, 'title': info['title'], 'score': sim}
 
-                    # 5) Require a reasonably strong semantic match to return a page
+                    # 5) Enforce a reasonable threshold for "strong semantic match"
                     PAGE_SIMILARITY_THRESHOLD = 0.70
                     if best is None or best_score < PAGE_SIMILARITY_THRESHOLD:
                         print(f"🔎 Best page similarity {best_score} below threshold {PAGE_SIMILARITY_THRESHOLD}")
                         return "I couldn't find a relevant page for that request."
 
+                    # 6) Return exactly 'Page Title\nhttps://page-url'
                     formatted = f"{best['title']}\n{best['url']}"
-                    print(f"✅ Location fast-path selected: {best['url']} (score={best['score']})")
+                    print(f"✅ Location resolver selected: {best['url']} (score={best['score']})")
                     return formatted
                 except Exception as e:
                     print(f"⚠️ Location resolver failed: {e}; falling back to normal flow")
