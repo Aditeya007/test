@@ -1359,6 +1359,71 @@ ANSWER (be concise and factual):"""
         self.last_sources_by_session.pop(session_id, None)
 
         try:
+            # Fast-path: If user explicitly asks for a page location/link, run a short,
+            # deterministic URL-level rerank and return a single page (title + URL).
+            if self.is_location_query(question):
+                try:
+                    print("🔍 Location query detected — running URL-level rerank (fast path)...")
+                    # Query Chroma for up to 50 candidate chunks
+                    try:
+                        results_quick = self.collection.query(query_texts=[question], n_results=50)
+                    except Exception:
+                        qa = self.analyze_question_semantically(question)
+                        results_quick = self.collection.query(query_embeddings=[qa['question_embedding'].tolist()], n_results=50)
+
+                    docs = results_quick.get('documents', [[]])[0]
+                    metadatas = results_quick.get('metadatas', [[]])[0]
+
+                    # Group by URL and score each URL based on chunk content and URL patterns
+                    url_scores = {}
+                    for doc, md in zip(docs, metadatas):
+                        if not md or not isinstance(md, dict):
+                            continue
+                        url = md.get('url') or md.get('filePath') or md.get('webpage') or md.get('source')
+                        if not url:
+                            continue
+                        url = url.strip()
+                        entry = url_scores.get(url)
+                        if entry is None:
+                            title = md.get('page_title') or md.get('title') or md.get('page') or md.get('domain') or url
+                            entry = {'score': 0, 'title': title, 'url': url}
+                            url_scores[url] = entry
+
+                        # Prepare text to check for positive signals
+                        check_text_parts = []
+                        if isinstance(doc, str):
+                            check_text_parts.append(doc.lower())
+                        if md.get('page_title'):
+                            check_text_parts.append(str(md.get('page_title')).lower())
+                        if md.get('title'):
+                            check_text_parts.append(str(md.get('title')).lower())
+                        check_text = " ".join(check_text_parts)
+
+                        # Positive signals
+                        for term in ["about", "who we are", "company", "our story", "mission"]:
+                            if term in check_text:
+                                entry['score'] += 2
+
+                        # Negative signals based on URL path
+                        low_url = url.lower()
+                        if '/blog' in low_url:
+                            entry['score'] -= 5
+                        if '/category' in low_url:
+                            entry['score'] -= 5
+                        if '/tag' in low_url:
+                            entry['score'] -= 5
+
+                    if url_scores:
+                        # Deterministic selection: highest score, tie-breaker by URL string
+                        best_url, best_entry = sorted(url_scores.items(), key=lambda kv: (-kv[1]['score'], kv[0]))[0]
+                        formatted = f"{best_entry.get('title')}\n{best_entry.get('url')}"
+                        print(f"✅ Location fast-path selected: {best_entry.get('url')} (score={best_entry.get('score')})")
+                        return formatted
+                    else:
+                        print("⚠️ Location fast-path found no URL candidates; falling back to normal flow")
+                except Exception as e:
+                    print(f"⚠️ Location rerank failed: {e}; falling back to normal flow")
+
             # ============================================================================
             # PRIORITY 1: Name collection (separate flow)
             # ============================================================================
@@ -1463,26 +1528,6 @@ ANSWER (be concise and factual):"""
                     return "Before we continue, may I have your name please?"
 
             # Analyze question semantically ONCE and reuse throughout
-            # Fast-path: if user explicitly asks for page location/links, return stored URLs quickly
-            if self.is_location_query(question):
-                try:
-                    print("🔍 Location query detected — performing quick metadata lookup...")
-                    # Use a lightweight text query to get metadatas from Chroma
-                    try:
-                        results_quick = self.collection.query(query_texts=[question], n_results=10)
-                    except Exception:
-                        # Fall back to embedding-based query if text query path fails
-                        qa = self.analyze_question_semantically(question)
-                        results_quick = self.collection.query(query_embeddings=[qa['question_embedding'].tolist()], n_results=10)
-
-                    metadatas = results_quick.get('metadatas', [[]])[0]
-                    formatted = self._format_links(metadatas)
-                    if formatted:
-                        print("✅ Returning URLs directly for location query")
-                        return formatted
-                except Exception as e:
-                    print(f"⚠️ Location quick-search failed: {e}")
-
             print("🔍 DEBUG - Analyzing question semantically...")
             question_analysis = self.analyze_question_semantically(question)
             print(f"🔍 DEBUG - Question analysis completed")
