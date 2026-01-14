@@ -1,16 +1,31 @@
 // src/pages/DashboardPage.js
 
-import React, { useEffect, useMemo, useState, useCallback, useTransition, useDeferredValue, Suspense } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { useChatWidget } from '../context/ChatWidgetContext';
-import { apiRequest, getUserBots, getUserOwnBots, createBot, startBotScheduler, stopBotScheduler } from '../api';
-import Loader from '../components/Loader';
-import WidgetInstaller from '../components/WidgetInstaller';
-import BotCard from '../components/BotCard';
-import AgentForm from '../components/AgentForm';
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+  useTransition,
+  useDeferredValue,
+  Suspense,
+} from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { useChatWidget } from "../context/ChatWidgetContext";
+import {
+  apiRequest,
+  getUserBots,
+  getUserOwnBots,
+  createBot,
+  startBotScheduler,
+  stopBotScheduler,
+} from "../api";
+import Loader from "../components/Loader";
+import WidgetInstaller from "../components/WidgetInstaller";
+import BotCard from "../components/BotCard";
+import AgentForm from "../components/AgentForm";
 
-import '../styles/index.css';
+import "../styles/index.css";
 
 function DashboardPage() {
   const { user, token, logout, activeTenant, setActiveTenant } = useAuth();
@@ -19,67 +34,67 @@ function DashboardPage() {
 
   const [tenantDetails, setTenantDetails] = useState(activeTenant);
   const [tenantLoading, setTenantLoading] = useState(false);
-  const [tenantError, setTenantError] = useState('');
-  const [createSuccess, setCreateSuccess] = useState('');
+  const [tenantError, setTenantError] = useState("");
+  const [createSuccess, setCreateSuccess] = useState("");
   const [isWidgetInstallerOpen, setWidgetInstallerOpen] = useState(false);
-  
+
   // Website Actions panel state - separate from chatbot visibility
   const [showWebsiteActionsPanel, setShowWebsiteActionsPanel] = useState(false);
 
   // Bots state
   const [bots, setBots] = useState([]);
   const [botsLoading, setBotsLoading] = useState(false);
-  const [botsError, setBotsError] = useState('');
-  
+  const [botsError, setBotsError] = useState("");
+
   // React 19: useDeferredValue for performance optimization
   const deferredBots = useDeferredValue(bots);
-  
+
   // Derive selectedBot from context - SINGLE SOURCE OF TRUTH
   // Using deferred value for better performance
   const selectedBot = useMemo(() => {
-    return deferredBots.find(b => (b._id || b.id) === selectedBotId) || null;
+    return deferredBots.find((b) => (b._id || b.id) === selectedBotId) || null;
   }, [deferredBots, selectedBotId]);
-  
+
   // Add website modal state
   const [addWebsiteModalOpen, setAddWebsiteModalOpen] = useState(false);
-  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState("");
   const [addWebsiteLoading, setAddWebsiteLoading] = useState(false);
-  const [addWebsiteError, setAddWebsiteError] = useState('');
-  
+  const [addWebsiteError, setAddWebsiteError] = useState("");
+
   // Add knowledge modal state
   const [addKnowledgeModalOpen, setAddKnowledgeModalOpen] = useState(false);
-  const [knowledgeContent, setKnowledgeContent] = useState('');
+  const [knowledgeContent, setKnowledgeContent] = useState("");
   const [addKnowledgeLoading, setAddKnowledgeLoading] = useState(false);
-  const [addKnowledgeError, setAddKnowledgeError] = useState('');
-  const [addKnowledgeSuccess, setAddKnowledgeSuccess] = useState('');
-  
+  const [addKnowledgeError, setAddKnowledgeError] = useState("");
+  const [addKnowledgeSuccess, setAddKnowledgeSuccess] = useState("");
+
   // Agent management state
   const [agents, setAgents] = useState([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
-  const [agentsError, setAgentsError] = useState('');
+  const [agentsError, setAgentsError] = useState("");
   const [addAgentModalOpen, setAddAgentModalOpen] = useState(false);
   const [addAgentLoading, setAddAgentLoading] = useState(false);
-  const [addAgentError, setAddAgentError] = useState('');
-  const [addAgentSuccess, setAddAgentSuccess] = useState('');
-  
+  const [addAgentError, setAddAgentError] = useState("");
+  const [addAgentSuccess, setAddAgentSuccess] = useState("");
+
   // Run crawl state
   const [scrapeLoading, setScrapeLoading] = useState(false);
-  const [scrapeError, setScrapeError] = useState('');
-  const [scrapeSuccess, setScrapeSuccess] = useState('');
-  
+  const [scrapeError, setScrapeError] = useState("");
+  const [scrapeSuccess, setScrapeSuccess] = useState("");
+
   // Crawl history state
   const [scrapeHistory, setScrapeHistory] = useState([]);
   const [scrapeHistoryLoading, setScrapeHistoryLoading] = useState(false);
-  
+
   // Polling state for crawl completion tracking
   const [pollingIntervalId, setPollingIntervalId] = useState(null);
-  
+
   // Scheduler state (UI only - NO source of truth state)
   const [schedulerLoading, setSchedulerLoading] = useState(false);
-  const [schedulerError, setSchedulerError] = useState('');
-  
+  const [schedulerError, setSchedulerError] = useState("");
+
   // Derive scheduler state from selectedBot - SINGLE SOURCE OF TRUTH
-  const schedulerStatus = selectedBot?.schedulerStatus ?? 'inactive';
+  const schedulerStatus = selectedBot?.schedulerStatus ?? "inactive";
   const schedulerConfig = selectedBot?.schedulerConfig ?? null;
 
   const activeTenantId = useMemo(() => {
@@ -89,41 +104,60 @@ function DashboardPage() {
     return activeTenant.id || activeTenant._id || null;
   }, [activeTenant]);
 
-  // Auto-set activeTenant for regular users and agents on login
+  // Auto-set activeTenant and tenantDetails for regular users on login (runs immediately on mount)
   useEffect(() => {
-    if (user && (user.role === 'user' || user.role === 'agent') && !activeTenant) {
-      // Regular users and agents should have their tenant as the active tenant
-      setActiveTenant(user);
+    if (user && user.role === "user") {
+      // Set tenantDetails immediately with user data (even if maxBots not loaded yet)
+      // This ensures buttons show on first render
+      if (!activeTenant) {
+        setActiveTenant(user);
+      }
       setTenantDetails(user);
+      // Don't set loading to false yet - let the main useEffect fetch full data if needed
     }
+    // For agents, activeTenant is set by AuthContext with tenant data, so we use it directly
   }, [user, activeTenant, setActiveTenant]);
 
   // Keep tenantDetails in sync with activeTenant (important when admin switches tenants)
+  // This ensures agents get tenant data from AuthContext immediately when it becomes available
   useEffect(() => {
     if (activeTenant) {
-      setTenantDetails(activeTenant);
+      // For agents, if activeTenant has maxBots, use it immediately
+      if (user?.role === "agent") {
+        if (activeTenant.maxBots !== undefined) {
+          // activeTenant has tenant data with maxBots - use it immediately
+          setTenantDetails(activeTenant);
+          setTenantLoading(false);
+        } else {
+          // activeTenant exists but doesn't have maxBots yet - set it anyway and let main useEffect fetch
+          setTenantDetails(activeTenant);
+        }
+      } else if (user?.role !== "agent") {
+        // For non-agents, sync normally
+        setTenantDetails(activeTenant);
+      }
     }
-  }, [activeTenant]);
+  }, [activeTenant, user]);
 
   // Fetch bots for the current tenant
   const fetchBots = useCallback(async () => {
     // Only fetch bots for authenticated users with valid tenant details
     if (!token || !user || !tenantDetails) return;
-    
+
     // For regular users and agents, ensure tenantDetails matches the logged-in user
-    if (user.role === 'user' || user.role === 'agent') {
+    if (user.role === "user" || user.role === "agent") {
       const userId = user.id || user._id;
       const tenantId = tenantDetails.id || tenantDetails._id;
       if (userId !== tenantId) return; // Not ready yet
     }
-    
+
     setBotsLoading(true);
-    setBotsError('');
-    
+    setBotsError("");
+
     try {
       let response;
-      
-      if (user.role === 'user' || user.role === 'agent') {
+
+      if (user.role === "user" || user.role === "agent") {
         // Regular users and agents: Use /api/bot endpoint (no userId needed)
         response = await getUserOwnBots(token);
       } else {
@@ -131,13 +165,13 @@ function DashboardPage() {
         const tenantUserId = tenantDetails.id || tenantDetails._id;
         response = await getUserBots(tenantUserId, token);
       }
-      
+
       if (response.bots) {
         setBots(response.bots);
       }
     } catch (err) {
-      console.error('Failed to fetch bots:', err);
-      setBotsError(err.message || 'Failed to load bots');
+      console.error("Failed to fetch bots:", err);
+      setBotsError(err.message || "Failed to load bots");
     } finally {
       setBotsLoading(false);
     }
@@ -146,22 +180,22 @@ function DashboardPage() {
   // Fetch agents for the current tenant
   const fetchAgents = useCallback(async () => {
     if (!token || !user || !tenantDetails) return;
-    
+
     setAgentsLoading(true);
-    setAgentsError('');
-    
+    setAgentsError("");
+
     try {
-      const response = await apiRequest('/agent/list', {
-        method: 'GET',
-        token
+      const response = await apiRequest("/agent/list", {
+        method: "GET",
+        token,
       });
-      
+
       if (response.agents) {
         setAgents(response.agents);
       }
     } catch (err) {
-      console.error('Failed to fetch agents:', err);
-      setAgentsError(err.message || 'Failed to load agents');
+      console.error("Failed to fetch agents:", err);
+      setAgentsError(err.message || "Failed to load agents");
     } finally {
       setAgentsLoading(false);
     }
@@ -175,7 +209,7 @@ function DashboardPage() {
       fetchAgents();
     }
   }, [fetchBots, fetchAgents, user, tenantDetails]);
-  
+
   // Cleanup polling interval on unmount or when selected bot changes
   useEffect(() => {
     // Clear interval when bot changes
@@ -183,7 +217,7 @@ function DashboardPage() {
       clearInterval(pollingIntervalId);
       setPollingIntervalId(null);
     }
-    
+
     // Cleanup on unmount
     return () => {
       if (pollingIntervalId) {
@@ -195,21 +229,116 @@ function DashboardPage() {
   useEffect(() => {
     if (!token) {
       setTenantDetails(null);
-      setTenantError('');
+      setTenantError("");
       return;
     }
 
-    // For regular users and agents, use their own data from context
-    if (user && (user.role === 'user' || user.role === 'agent')) {
-      setTenantDetails(user);
-      setTenantLoading(false);
+    // For regular users, fetch their full user data to get maxBots/maxAgents
+    if (user && user.role === "user") {
+      // If user already has maxBots, use it immediately
+      if (user.maxBots !== undefined || user.maxAgents !== undefined) {
+        setTenantDetails(user);
+        setTenantLoading(false);
+        return;
+      }
+
+      // Otherwise, fetch user data to get maxBots/maxAgents
+      let isCancelled = false;
+
+      async function fetchUserData() {
+        setTenantLoading(true);
+        setTenantError("");
+        try {
+          // Use /api/user/me endpoint (not /auth/me)
+          const response = await apiRequest("/user/me", {
+            method: "GET",
+            token,
+          });
+          if (!isCancelled) {
+            // The response is the user object directly, not wrapped in { user }
+            setTenantDetails(response);
+            setActiveTenant(response);
+          }
+        } catch (err) {
+          if (!isCancelled) {
+            // Fallback to user object if fetch fails
+            setTenantDetails(user);
+            setTenantError(err.message || "Unable to load user details.");
+          }
+        } finally {
+          if (!isCancelled) {
+            setTenantLoading(false);
+          }
+        }
+      }
+
+      fetchUserData();
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    // For agents, check if activeTenant (from AuthContext) already has tenant data with maxBots
+    if (user && user.role === "agent") {
+      // If activeTenant has maxBots, it means it has tenant data - use it immediately
+      // Check for maxBots directly, don't rely on ID comparison
+      if (activeTenant && activeTenant.maxBots !== undefined) {
+        setTenantDetails(activeTenant);
+        setTenantLoading(false);
+        return;
+      }
+
+      // Otherwise, fetch tenant details using tenantId immediately
+      const agentTenantId = user.tenantId;
+      if (agentTenantId) {
+        let isCancelled = false;
+
+        async function fetchAgentTenant() {
+          // Don't set loading to true if we already have activeTenant (even without maxBots)
+          // This prevents flickering
+          if (!activeTenant) {
+            setTenantLoading(true);
+          }
+          setTenantError("");
+          try {
+            const response = await apiRequest(`/users/${agentTenantId}`, {
+              method: "GET",
+              token,
+            });
+            if (!isCancelled) {
+              setTenantDetails(response.user);
+              setActiveTenant(response.user);
+            }
+          } catch (err) {
+            if (!isCancelled) {
+              // Fallback to activeTenant if available, otherwise user
+              setTenantDetails(activeTenant || user);
+              setTenantError(err.message || "Unable to load tenant details.");
+            }
+          } finally {
+            if (!isCancelled) {
+              setTenantLoading(false);
+            }
+          }
+        }
+
+        // Fetch immediately
+        fetchAgentTenant();
+        return () => {
+          isCancelled = true;
+        };
+      } else {
+        // If no tenantId, use activeTenant if available, otherwise user
+        setTenantDetails(activeTenant || user);
+        setTenantLoading(false);
+      }
       return;
     }
 
     // For admins, fetch the selected user's data
     if (!activeTenantId) {
       setTenantDetails(null);
-      setTenantError('');
+      setTenantError("");
       return;
     }
 
@@ -217,11 +346,11 @@ function DashboardPage() {
 
     async function fetchTenant() {
       setTenantLoading(true);
-      setTenantError('');
+      setTenantError("");
       try {
         const response = await apiRequest(`/users/${activeTenantId}`, {
-          method: 'GET',
-          token
+          method: "GET",
+          token,
         });
         if (!isCancelled) {
           setTenantDetails(response.user);
@@ -230,7 +359,7 @@ function DashboardPage() {
       } catch (err) {
         if (!isCancelled) {
           setTenantDetails(null);
-          setTenantError(err.message || 'Unable to load the selected user.');
+          setTenantError(err.message || "Unable to load the selected user.");
           setActiveTenant(null);
         }
       } finally {
@@ -251,21 +380,22 @@ function DashboardPage() {
     if (!createSuccess) {
       return undefined;
     }
-    const timeout = window.setTimeout(() => setCreateSuccess(''), 3000);
+    const timeout = window.setTimeout(() => setCreateSuccess(""), 3000);
     return () => window.clearTimeout(timeout);
   }, [createSuccess]);
 
   function handleLogout() {
     logout();
-    navigate('/login');
+    navigate("/login");
   }
-
 
   function handleBotUpdate(updatedBot) {
     // Update the bot in the local state
-    setBots(prevBots =>
-      prevBots.map(bot =>
-        (bot._id || bot.id) === (updatedBot._id || updatedBot.id) ? updatedBot : bot
+    setBots((prevBots) =>
+      prevBots.map((bot) =>
+        (bot._id || bot.id) === (updatedBot._id || updatedBot.id)
+          ? updatedBot
+          : bot
       )
     );
   }
@@ -284,7 +414,7 @@ function DashboardPage() {
 
   async function handleAddWebsite() {
     if (!websiteUrl.trim()) {
-      setAddWebsiteError('Please enter a website URL');
+      setAddWebsiteError("Please enter a website URL");
       return;
     }
 
@@ -292,26 +422,30 @@ function DashboardPage() {
     try {
       new URL(websiteUrl.trim());
     } catch {
-      setAddWebsiteError('Please enter a valid URL (e.g., https://example.com)');
+      setAddWebsiteError(
+        "Please enter a valid URL (e.g., https://example.com)"
+      );
       return;
     }
 
     setAddWebsiteLoading(true);
-    setAddWebsiteError('');
+    setAddWebsiteError("");
 
     try {
       const response = await createBot(
         { scrapedWebsites: [websiteUrl.trim()] },
         token
       );
-      
-      setCreateSuccess('Website added successfully! You can now configure crawling.');
+
+      setCreateSuccess(
+        "Website added successfully! You can now configure crawling."
+      );
       setAddWebsiteModalOpen(false);
-      setWebsiteUrl('');
-      
+      setWebsiteUrl("");
+
       // Refetch bots from backend to get authoritative list
       await fetchBots();
-      
+
       // Select the newly created bot and show Website Actions panel
       if (response.bot) {
         const botId = response.bot._id || response.bot.id;
@@ -321,7 +455,7 @@ function DashboardPage() {
         }
       }
     } catch (err) {
-      setAddWebsiteError(err.message || 'Failed to add website');
+      setAddWebsiteError(err.message || "Failed to add website");
     } finally {
       setAddWebsiteLoading(false);
     }
@@ -329,133 +463,132 @@ function DashboardPage() {
 
   async function handleCreateAgent(formData) {
     setAddAgentLoading(true);
-    setAddAgentError('');
-    setAddAgentSuccess('');
+    setAddAgentError("");
+    setAddAgentSuccess("");
 
     try {
-      await apiRequest('/agent/create', {
-        method: 'POST',
+      await apiRequest("/agent/create", {
+        method: "POST",
         token,
-        data: formData
+        data: formData,
       });
-      
-      setAddAgentSuccess('Agent created successfully!');
+
+      setAddAgentSuccess("Agent created successfully!");
       setAddAgentModalOpen(false);
-      
+
       // Refetch agents
       await fetchAgents();
-      
+
       // Clear success message after 3 seconds
-      setTimeout(() => setAddAgentSuccess(''), 3000);
+      setTimeout(() => setAddAgentSuccess(""), 3000);
     } catch (err) {
-      setAddAgentError(err.message || 'Failed to create agent');
+      setAddAgentError(err.message || "Failed to create agent");
     } finally {
       setAddAgentLoading(false);
     }
   }
 
-
   async function handleRunScrape() {
     if (!selectedBot || !token) return;
-    
+
     setScrapeLoading(true);
-    setScrapeError('');
-    setScrapeSuccess('');
-    
+    setScrapeError("");
+    setScrapeSuccess("");
+
     const botId = selectedBot._id || selectedBot.id;
-    
+
     try {
       await apiRequest(`/bot/${botId}/scrape`, {
-        method: 'POST',
-        token
+        method: "POST",
+        token,
       });
-      setScrapeSuccess('Crawl job started successfully!');
-      
+      setScrapeSuccess("Crawl job started successfully!");
+
       // Refetch all bots from backend to get updated status
       await fetchBots();
-      
+
       // Clear success message after a delay
-      setTimeout(() => setScrapeSuccess(''), 3000);
-      
+      setTimeout(() => setScrapeSuccess(""), 3000);
+
       // Start polling only if scrape is confirmed to be running
       // Wait a moment for bot state to update, then check status
       setTimeout(() => {
-        const updatedBot = bots.find(b => (b._id || b.id) === botId);
-        if (updatedBot?.schedulerConfig?.status === 'running') {
+        const updatedBot = bots.find((b) => (b._id || b.id) === botId);
+        if (updatedBot?.schedulerConfig?.status === "running") {
           startPollingForScrapeCompletion(botId);
         }
       }, 1000);
     } catch (err) {
-      setScrapeError(err.message || 'Failed to start crawl');
-      setTimeout(() => setScrapeError(''), 5000);
+      setScrapeError(err.message || "Failed to start crawl");
+      setTimeout(() => setScrapeError(""), 5000);
     } finally {
       setScrapeLoading(false);
     }
   }
-  
+
   async function handleAddKnowledge() {
     if (!selectedBot || !token) return;
-    
+
     const trimmedContent = knowledgeContent.trim();
-    
+
     if (!trimmedContent) {
-      setAddKnowledgeError('Please enter some content');
+      setAddKnowledgeError("Please enter some content");
       return;
     }
-    
+
     setAddKnowledgeLoading(true);
-    setAddKnowledgeError('');
-    setAddKnowledgeSuccess('');
-    
+    setAddKnowledgeError("");
+    setAddKnowledgeSuccess("");
+
     const botId = selectedBot._id || selectedBot.id;
-    
+
     try {
       await apiRequest(`/bot/${botId}/manual-knowledge`, {
-        method: 'POST',
+        method: "POST",
         token,
-        data: { content: trimmedContent }
+        data: { content: trimmedContent },
       });
-      
-      setAddKnowledgeSuccess('Knowledge added successfully!');
-      
+
+      setAddKnowledgeSuccess("Knowledge added successfully!");
+
       // Clear form and close modal after a short delay
       setTimeout(() => {
-        setKnowledgeContent('');
+        setKnowledgeContent("");
         setAddKnowledgeModalOpen(false);
-        setAddKnowledgeSuccess('');
+        setAddKnowledgeSuccess("");
       }, 1500);
     } catch (err) {
-      setAddKnowledgeError(err.message || 'Failed to add knowledge');
+      setAddKnowledgeError(err.message || "Failed to add knowledge");
     } finally {
       setAddKnowledgeLoading(false);
     }
   }
-  
+
   function startPollingForScrapeCompletion(botId) {
     // Clear any existing polling interval
     if (pollingIntervalId) {
       clearInterval(pollingIntervalId);
       setPollingIntervalId(null);
     }
-    
+
     // Poll every 15 seconds with lightweight status check
     const intervalId = setInterval(async () => {
       try {
         // Lightweight check: only fetch scrape status for this specific bot
         const response = await apiRequest(`/bot/${botId}/scrape/status`, {
-          method: 'GET',
-          token
+          method: "GET",
+          token,
         });
-        
+
         if (response.success) {
           const status = response.status;
-          
+
           // If scrape completed or failed, stop polling and refresh full data
-          if (status === 'completed' || status === 'failed') {
+          if (status === "completed" || status === "failed") {
             clearInterval(intervalId);
             setPollingIntervalId(null);
             console.log(`Crawl ${status} - polling stopped, refreshing data`);
-            
+
             // Now fetch full data once
             await fetchBots();
             await fetchScrapeHistory();
@@ -463,23 +596,23 @@ function DashboardPage() {
           // If still running, just continue polling (no data refresh needed)
         }
       } catch (err) {
-        console.error('Polling error:', err);
+        console.error("Polling error:", err);
         // Continue polling even on error
       }
     }, 15000);
-    
+
     setPollingIntervalId(intervalId);
   }
-  
+
   // Handle scheduler toggle
   async function handleSchedulerToggle(enable) {
     if (!selectedBot || !token || schedulerLoading) return;
-    
+
     setSchedulerLoading(true);
-    setSchedulerError('');
-    
+    setSchedulerError("");
+
     const botId = selectedBot._id || selectedBot.id;
-    
+
     try {
       if (enable) {
         // Start scheduler
@@ -488,12 +621,12 @@ function DashboardPage() {
         // Stop scheduler
         await stopBotScheduler(botId, token);
       }
-      
+
       // Refetch bots to get updated state from backend
       await fetchBots();
     } catch (err) {
-      setSchedulerError(err.message || 'Failed to toggle scheduler');
-      setTimeout(() => setSchedulerError(''), 5000);
+      setSchedulerError(err.message || "Failed to toggle scheduler");
+      setTimeout(() => setSchedulerError(""), 5000);
     } finally {
       setSchedulerLoading(false);
     }
@@ -502,48 +635,54 @@ function DashboardPage() {
   // Fetch scrape history for selected bot
   const fetchScrapeHistory = useCallback(async () => {
     if (!selectedBot || !token) {
-      console.log('fetchScrapeHistory: Skipped - No bot or token', { 
-        hasSelectedBot: !!selectedBot, 
+      console.log("fetchScrapeHistory: Skipped - No bot or token", {
+        hasSelectedBot: !!selectedBot,
         hasToken: !!token,
-        tokenLength: token?.length 
+        tokenLength: token?.length,
       });
       setScrapeHistory([]);
       return;
     }
-    
+
     const botId = selectedBot._id || selectedBot.id;
-    console.log('fetchScrapeHistory: Fetching for bot', { 
-      botId, 
+    console.log("fetchScrapeHistory: Fetching for bot", {
+      botId,
       botName: selectedBot.name,
       tokenPresent: !!token,
-      tokenPreview: token.substring(0, 20) + '...'
+      tokenPreview: token.substring(0, 20) + "...",
     });
     setScrapeHistoryLoading(true);
-    
+
     try {
       const response = await apiRequest(`/bot/${botId}/scrape-history`, {
-        method: 'GET',
-        token
+        method: "GET",
+        token,
       });
-      
-      console.log('fetchScrapeHistory: Response received', { 
-        success: response.success, 
+
+      console.log("fetchScrapeHistory: Response received", {
+        success: response.success,
         historyCount: response.history?.length || 0,
-        response 
+        response,
       });
-      
+
       if (response.success && response.history) {
-        console.log('fetchScrapeHistory: Setting history -', response.history.length, 'entries');
+        console.log(
+          "fetchScrapeHistory: Setting history -",
+          response.history.length,
+          "entries"
+        );
         setScrapeHistory(response.history);
       } else {
-        console.log('fetchScrapeHistory: No history in response or not successful');
+        console.log(
+          "fetchScrapeHistory: No history in response or not successful"
+        );
         setScrapeHistory([]);
       }
     } catch (err) {
-      console.error('fetchScrapeHistory: Error occurred', { 
-        error: err.message, 
+      console.error("fetchScrapeHistory: Error occurred", {
+        error: err.message,
         botId,
-        hasToken: !!token 
+        hasToken: !!token,
       });
       setScrapeHistory([]);
     } finally {
@@ -558,39 +697,47 @@ function DashboardPage() {
 
   const hasProvisionedTenant = Boolean(tenantDetails);
 
-  const isAdmin = user?.role === 'admin';
-  const isUser = user?.role === 'user';
-  const isAgent = user?.role === 'agent';
+  const isAdmin = user?.role === "admin";
+  const isUser = user?.role === "user";
+  const isAgent = user?.role === "agent";
 
   return (
     <div className="dashboard-container">
       {/* Welcome Section */}
       <section className="dashboard-welcome">
         <h2 className="dashboard-welcome-title">
-          Welcome back, {user?.name || user?.agentUsername || user?.username || 'User'}! 👋
+          Welcome back,{" "}
+          {user?.name || user?.agentUsername || user?.username || "User"}! 👋
         </h2>
         <p className="dashboard-welcome-subtitle">
-          {isAdmin 
-            ? 'Manage your users and monitor system activity from here.'
+          {isAdmin
+            ? "Manage your users and monitor system activity from here."
             : isAgent
-            ? 'Access your assigned chatbot resources and tools.'
-            : 'Manage your chatbots and websites from this dashboard.'}
+            ? "Access your assigned chatbot resources and tools."
+            : "Manage your chatbots and websites from this dashboard."}
         </p>
       </section>
 
       {isUser && !hasProvisionedTenant && (
-        <div className="dashboard-alert dashboard-alert--info" style={{ marginTop: '1rem' }}>
-          <strong>Welcome!</strong> Your administrator has set up your account. 
+        <div
+          className="dashboard-alert dashboard-alert--info"
+          style={{ marginTop: "1rem" }}
+        >
+          <strong>Welcome!</strong> Your administrator has set up your account.
           You can now interact with your personalized chatbot.
         </div>
       )}
 
       {createSuccess && (
-        <div className="dashboard-alert dashboard-alert--success">{createSuccess}</div>
+        <div className="dashboard-alert dashboard-alert--success">
+          {createSuccess}
+        </div>
       )}
 
       {tenantError && (
-        <div className="dashboard-alert dashboard-alert--error">{tenantError}</div>
+        <div className="dashboard-alert dashboard-alert--error">
+          {tenantError}
+        </div>
       )}
 
       {tenantLoading ? (
@@ -629,7 +776,10 @@ function DashboardPage() {
 
               {tenantDetails && (
                 <div className="dashboard-current-user">
-                  <h3>Currently Viewing: {tenantDetails.name || tenantDetails.username}</h3>
+                  <h3>
+                    Currently Viewing:{" "}
+                    {tenantDetails.name || tenantDetails.username}
+                  </h3>
                   <div className="user-info-card">
                     <div className="info-row">
                       <span className="info-label">Email:</span>
@@ -638,21 +788,26 @@ function DashboardPage() {
                     <div className="info-row">
                       <span className="info-label">Chatbot Capacity:</span>
                       <span className="info-value">
-                        {tenantDetails.maxBots} chatbot{tenantDetails.maxBots > 1 ? 's' : ''} allowed
+                        {tenantDetails.maxBots} chatbot
+                        {tenantDetails.maxBots > 1 ? "s" : ""} allowed
                       </span>
                     </div>
                     {tenantDetails.maxAgents > 0 && (
                       <div className="info-row">
                         <span className="info-label">Agent Capacity:</span>
                         <span className="info-value">
-                          {tenantDetails.maxAgents} agent{tenantDetails.maxAgents > 1 ? 's' : ''} allowed
+                          {tenantDetails.maxAgents} agent
+                          {tenantDetails.maxAgents > 1 ? "s" : ""} allowed
                         </span>
                       </div>
                     )}
                   </div>
                   <div className="dashboard-hint">
                     <span className="hint-icon">💡</span>
-                    <span>Navigate to "Manage Users" from the sidebar to view all users and create new ones.</span>
+                    <span>
+                      Navigate to "Manage Users" from the sidebar to view all
+                      users and create new ones.
+                    </span>
                   </div>
                 </div>
               )}
@@ -661,10 +816,13 @@ function DashboardPage() {
                 <div className="dashboard-empty-state">
                   <div className="empty-icon">📋</div>
                   <h3>No User Selected</h3>
-                  <p>Navigate to "Manage Users" from the sidebar to view and manage all users.</p>
-                  <button 
+                  <p>
+                    Navigate to "Manage Users" from the sidebar to view and
+                    manage all users.
+                  </p>
+                  <button
                     className="dashboard-action-btn"
-                    onClick={() => navigate('/admin/users')}
+                    onClick={() => navigate("/admin/users")}
                   >
                     Go to Manage Users →
                   </button>
@@ -672,7 +830,7 @@ function DashboardPage() {
               )}
             </section>
           )}
-          
+
           {/* User View - Full Bot Management */}
           {(isUser || isAgent) && (
             <section className="dashboard-info">
@@ -680,209 +838,307 @@ function DashboardPage() {
               <p className="dashboard-subtitle">
                 Manage your chatbot websites and configurations.
               </p>
-              
+
               {/* Capacity Display */}
-              <div style={{
-                padding: '1rem 1.5rem',
-                background: '#eff6ff',
-                border: '2px solid #3b82f6',
-                borderRadius: '8px',
-                marginBottom: '1.5rem',
-                fontSize: '1rem',
-                width: '100%',
-                boxSizing: 'border-box',
-                color: '#1e40af',
-                lineHeight: '1.5',
-                overflow: 'visible',
-                whiteSpace: 'normal',
-                minWidth: 0
-              }}>
-                <span style={{ display: 'block', width: '100%' }}>
-                  <strong style={{ color: '#1e40af', fontWeight: '600' }}>
-                    You can create up to {tenantDetails?.maxBots} chatbot{tenantDetails?.maxBots > 1 ? 's' : ''}
+              <div
+                style={{
+                  padding: "1rem 1.5rem",
+                  background: "#eff6ff",
+                  border: "2px solid #3b82f6",
+                  borderRadius: "8px",
+                  marginBottom: "1.5rem",
+                  fontSize: "1rem",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  color: "#1e40af",
+                  lineHeight: "1.5",
+                  overflow: "visible",
+                  whiteSpace: "normal",
+                  minWidth: 0,
+                }}
+              >
+                <span style={{ display: "block", width: "100%" }}>
+                  <strong style={{ color: "#1e40af", fontWeight: "600" }}>
+                    You can create up to {tenantDetails?.maxBots} chatbot
+                    {tenantDetails?.maxBots > 1 ? "s" : ""}
                   </strong>
                   {deferredBots.length > 0 && (
-                    <span style={{ marginLeft: '0.5rem', color: '#1e40af' }}>
+                    <span style={{ marginLeft: "0.5rem", color: "#1e40af" }}>
                       ({deferredBots.length} / {tenantDetails?.maxBots} created)
                     </span>
                   )}
                 </span>
               </div>
-              
-              {botsLoading && <Loader message="Loading websites..." size="small" />}
-              
+
+              {botsLoading && (
+                <Loader message="Loading websites..." size="small" />
+              )}
+
               {botsError && bots.length > 0 && (
-                <div style={{
-                  padding: '1rem',
-                  background: '#fee2e2',
-                  border: '1px solid #ef4444',
-                  borderRadius: '4px',
-                  color: '#991b1b',
-                  marginBottom: '1rem'
-                }}>
+                <div
+                  style={{
+                    padding: "1rem",
+                    background: "#fee2e2",
+                    border: "1px solid #ef4444",
+                    borderRadius: "4px",
+                    color: "#991b1b",
+                    marginBottom: "1rem",
+                  }}
+                >
                   {botsError}
                 </div>
               )}
-              
+
               {!botsLoading && !botsError && (
                 <>
                   {/* Action Buttons */}
-                  <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "1rem",
+                      marginBottom: "1rem",
+                      flexWrap: "wrap",
+                    }}
+                  >
                     {/* Add Website Button */}
-                    {deferredBots.length < tenantDetails?.maxBots && (
+                    {(() => {
+                      // Show button if tenantDetails exists and we're under the limit (or maxBots not loaded yet)
+                      if (!tenantDetails) return false;
+
+                      // If maxBots is not loaded yet, show optimistically (backend will enforce limit)
+                      if (
+                        tenantDetails.maxBots === undefined ||
+                        tenantDetails.maxBots === null
+                      ) {
+                        return true; // Show while loading - backend will handle limit
+                      }
+
+                      // If maxBots is set, check if we're under the limit
+                      return (
+                        tenantDetails.maxBots > 0 &&
+                        deferredBots.length < tenantDetails.maxBots
+                      );
+                    })() && (
                       <button
                         className="dashboard-action-btn"
                         onClick={() => setAddWebsiteModalOpen(true)}
                         style={{
-                          padding: '0.75rem 1.5rem',
-                          fontSize: '1rem',
-                          flex: '1',
-                          minWidth: '200px'
+                          padding: "0.75rem 1.5rem",
+                          fontSize: "1rem",
+                          flex: "1",
+                          minWidth: "200px",
                         }}
                       >
                         ➕ Add Website
                       </button>
                     )}
-                    
+
                     {/* Add Agent Button - Only for Users, not Agents */}
-                    {isUser && tenantDetails?.maxAgents > 0 && agents.length < tenantDetails?.maxAgents && (
-                      <button
-                        className="dashboard-action-btn"
-                        onClick={() => setAddAgentModalOpen(true)}
-                        style={{
-                          padding: '0.75rem 1.5rem',
-                          fontSize: '1rem',
-                          flex: '1',
-                          minWidth: '200px',
-                          background: '#10b981',
-                          borderColor: '#10b981'
-                        }}
-                      >
-                        👤 Add Agent
-                      </button>
-                    )}
+                    {isUser &&
+                      tenantDetails &&
+                      // Show if maxAgents not loaded yet (optimistic) or if under the limit
+                      (tenantDetails.maxAgents === undefined ||
+                        tenantDetails.maxAgents === null ||
+                        (tenantDetails.maxAgents > 0 &&
+                          agents.length < tenantDetails.maxAgents)) && (
+                        <button
+                          className="dashboard-action-btn"
+                          onClick={() => setAddAgentModalOpen(true)}
+                          style={{
+                            padding: "0.75rem 1.5rem",
+                            fontSize: "1rem",
+                            flex: "1",
+                            minWidth: "200px",
+                            background: "#10b981",
+                            borderColor: "#10b981",
+                          }}
+                        >
+                          👤 Add Agent
+                        </button>
+                      )}
                   </div>
 
                   {/* Agent Status Display */}
                   {tenantDetails?.maxAgents > 0 && (
-                    <div style={{
-                      padding: '0.75rem 1rem',
-                      background: '#f0fdf4',
-                      border: '1px solid #10b981',
-                      borderRadius: '6px',
-                      marginBottom: '1rem',
-                      fontSize: '0.875rem',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      color: '#065f46',
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      minWidth: 0,
-                      overflow: 'visible',
-                      whiteSpace: 'normal'
-                    }}>
-                      <span style={{ 
-                        flex: '1 1 auto',
+                    <div
+                      style={{
+                        padding: "0.75rem 1rem",
+                        background: "#f0fdf4",
+                        border: "1px solid #10b981",
+                        borderRadius: "6px",
+                        marginBottom: "1rem",
+                        fontSize: "0.875rem",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        color: "#065f46",
+                        width: "100%",
+                        boxSizing: "border-box",
                         minWidth: 0,
-                        marginRight: '1rem'
-                      }}>
-                        <strong style={{ fontWeight: '600' }}>Human Agents:</strong>{' '}
+                        overflow: "visible",
+                        whiteSpace: "normal",
+                      }}
+                    >
+                      <span
+                        style={{
+                          flex: "1 1 auto",
+                          minWidth: 0,
+                          marginRight: "1rem",
+                        }}
+                      >
+                        <strong style={{ fontWeight: "600" }}>
+                          Human Agents:
+                        </strong>{" "}
                         {agents.length} / {tenantDetails.maxAgents}
                       </span>
                       {agents.length > 0 && (
-                        <span style={{ 
-                          color: '#059669', 
-                          fontSize: '0.75rem',
-                          flexShrink: 0,
-                          whiteSpace: 'nowrap'
-                        }}>
-                          {agents.filter(a => a.isActive).length} active
+                        <span
+                          style={{
+                            color: "#059669",
+                            fontSize: "0.75rem",
+                            flexShrink: 0,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {agents.filter((a) => a.isActive).length} active
                         </span>
                       )}
                     </div>
                   )}
 
                   {addAgentSuccess && (
-                    <div style={{
-                      padding: '0.75rem 1rem',
-                      background: '#d1fae5',
-                      border: '1px solid #10b981',
-                      borderRadius: '6px',
-                      color: '#065f46',
-                      marginBottom: '1rem',
-                      fontSize: '0.875rem'
-                    }}>
+                    <div
+                      style={{
+                        padding: "0.75rem 1rem",
+                        background: "#d1fae5",
+                        border: "1px solid #10b981",
+                        borderRadius: "6px",
+                        color: "#065f46",
+                        marginBottom: "1rem",
+                        fontSize: "0.875rem",
+                      }}
+                    >
                       {addAgentSuccess}
                     </div>
                   )}
 
                   {/* Website List */}
                   {deferredBots.length === 0 ? (
-                    <div style={{
-                      padding: '2rem',
-                      background: '#f9fafb',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px',
-                      textAlign: 'center',
-                      color: '#6b7280'
-                    }}>
-                      <p style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>No websites added yet</p>
-                      <p style={{ fontSize: '0.875rem', fontStyle: 'italic' }}>
+                    <div
+                      style={{
+                        padding: "2rem",
+                        background: "#f9fafb",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: "8px",
+                        textAlign: "center",
+                        color: "#6b7280",
+                      }}
+                    >
+                      <p
+                        style={{ fontSize: "1.125rem", marginBottom: "0.5rem" }}
+                      >
+                        No websites added yet
+                      </p>
+                      <p style={{ fontSize: "0.875rem", fontStyle: "italic" }}>
                         Click "Add Website" to create your first chatbot
                       </p>
                     </div>
                   ) : (
                     <div>
-                      <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.875rem', color: '#6b7280', fontWeight: '500', textTransform: 'uppercase' }}>Your Websites</h4>
-                      <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.75rem',
-                        marginBottom: '1.5rem'
-                      }}>
-                        {deferredBots.map(bot => (
+                      <h4
+                        style={{
+                          margin: "0 0 0.75rem 0",
+                          fontSize: "0.875rem",
+                          color: "#6b7280",
+                          fontWeight: "500",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        Your Websites
+                      </h4>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.75rem",
+                          marginBottom: "1.5rem",
+                        }}
+                      >
+                        {deferredBots.map((bot) => (
                           <div
                             key={bot._id || bot.id}
                             onClick={() => handleBotSelect(bot)}
                             style={{
-                              padding: '1rem 1.25rem',
-                              background: selectedBot && (selectedBot._id || selectedBot.id) === (bot._id || bot.id) ? '#eff6ff' : 'white',
-                              border: selectedBot && (selectedBot._id || selectedBot.id) === (bot._id || bot.id) ? '2px solid #3b82f6' : '1px solid #e5e7eb',
-                              borderRadius: '8px',
-                              cursor: 'pointer',
-                              transition: 'all 0.2s',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between'
+                              padding: "1rem 1.25rem",
+                              background:
+                                selectedBot &&
+                                (selectedBot._id || selectedBot.id) ===
+                                  (bot._id || bot.id)
+                                  ? "#eff6ff"
+                                  : "white",
+                              border:
+                                selectedBot &&
+                                (selectedBot._id || selectedBot.id) ===
+                                  (bot._id || bot.id)
+                                  ? "2px solid #3b82f6"
+                                  : "1px solid #e5e7eb",
+                              borderRadius: "8px",
+                              cursor: "pointer",
+                              transition: "all 0.2s",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
                             }}
                           >
                             <div style={{ flex: 1 }}>
-                              {bot.scrapedWebsites && bot.scrapedWebsites.length > 0 && bot.scrapedWebsites[0] ? (
+                              {bot.scrapedWebsites &&
+                              bot.scrapedWebsites.length > 0 &&
+                              bot.scrapedWebsites[0] ? (
                                 <a
                                   href={bot.scrapedWebsites[0]}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   onClick={(e) => e.stopPropagation()}
                                   style={{
-                                    fontSize: '1rem',
-                                    color: selectedBot && (selectedBot._id || selectedBot.id) === (bot._id || bot.id) ? '#1e40af' : '#3b82f6',
-                                    textDecoration: 'none',
-                                    fontWeight: '500',
-                                    wordBreak: 'break-all'
+                                    fontSize: "1rem",
+                                    color:
+                                      selectedBot &&
+                                      (selectedBot._id || selectedBot.id) ===
+                                        (bot._id || bot.id)
+                                        ? "#1e40af"
+                                        : "#3b82f6",
+                                    textDecoration: "none",
+                                    fontWeight: "500",
+                                    wordBreak: "break-all",
                                   }}
                                 >
                                   {bot.scrapedWebsites[0]}
                                 </a>
                               ) : (
-                                <span style={{ fontSize: '1rem', color: '#9ca3af', fontStyle: 'italic' }}>
+                                <span
+                                  style={{
+                                    fontSize: "1rem",
+                                    color: "#9ca3af",
+                                    fontStyle: "italic",
+                                  }}
+                                >
                                   No website configured
                                 </span>
                               )}
                             </div>
-                            {selectedBot && (selectedBot._id || selectedBot.id) === (bot._id || bot.id) && (
-                              <span style={{ marginLeft: '1rem', color: '#3b82f6', fontSize: '1.25rem' }}>✓</span>
-                            )}
+                            {selectedBot &&
+                              (selectedBot._id || selectedBot.id) ===
+                                (bot._id || bot.id) && (
+                                <span
+                                  style={{
+                                    marginLeft: "1rem",
+                                    color: "#3b82f6",
+                                    fontSize: "1.25rem",
+                                  }}
+                                >
+                                  ✓
+                                </span>
+                              )}
                           </div>
                         ))}
                       </div>
@@ -891,14 +1147,16 @@ function DashboardPage() {
 
                   {/* Actions - Only show when panel is explicitly shown and a website is selected */}
                   {showWebsiteActionsPanel && selectedBot && (
-                    <div style={{
-                      padding: '1.5rem',
-                      background: '#f0f9ff',
-                      border: '2px solid #3b82f6',
-                      borderRadius: '8px',
-                      marginTop: '1.5rem',
-                      position: 'relative'
-                    }}>
+                    <div
+                      style={{
+                        padding: "1.5rem",
+                        background: "#f0f9ff",
+                        border: "2px solid #3b82f6",
+                        borderRadius: "8px",
+                        marginTop: "1.5rem",
+                        position: "relative",
+                      }}
+                    >
                       {/* Close Button - Only closes Website Actions panel, selection persists in context */}
                       <button
                         onClick={() => {
@@ -907,180 +1165,345 @@ function DashboardPage() {
                           setShowWebsiteActionsPanel(false);
                         }}
                         style={{
-                          position: 'absolute',
-                          top: '1rem',
-                          right: '1rem',
-                          background: 'transparent',
-                          border: 'none',
-                          fontSize: '1.5rem',
-                          cursor: 'pointer',
-                          color: '#64748b',
+                          position: "absolute",
+                          top: "1rem",
+                          right: "1rem",
+                          background: "transparent",
+                          border: "none",
+                          fontSize: "1.5rem",
+                          cursor: "pointer",
+                          color: "#64748b",
                           lineHeight: 1,
-                          padding: '0.25rem',
-                          width: '2rem',
-                          height: '2rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: '4px',
-                          transition: 'all 0.2s'
+                          padding: "0.25rem",
+                          width: "2rem",
+                          height: "2rem",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderRadius: "4px",
+                          transition: "all 0.2s",
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.background = '#e2e8f0';
-                          e.currentTarget.style.color = '#334155';
+                          e.currentTarget.style.background = "#e2e8f0";
+                          e.currentTarget.style.color = "#334155";
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'transparent';
-                          e.currentTarget.style.color = '#64748b';
+                          e.currentTarget.style.background = "transparent";
+                          e.currentTarget.style.color = "#64748b";
                         }}
                         title="Close actions panel"
                       >
                         ✕
                       </button>
 
-                      <h4 style={{ margin: '0 2rem 0.5rem 0', color: '#0c4a6e', fontSize: '1.125rem' }}>
+                      <h4
+                        style={{
+                          margin: "0 2rem 0.5rem 0",
+                          color: "#0c4a6e",
+                          fontSize: "1.125rem",
+                        }}
+                      >
                         Website Actions
                       </h4>
-                      <p style={{ margin: '0 0 1rem 0', fontSize: '0.875rem', color: '#475569' }}>
-                        Manage chatbot for: <strong>{(selectedBot.scrapedWebsites && selectedBot.scrapedWebsites[0]) ? selectedBot.scrapedWebsites[0] : 'this website'}</strong>
+                      <p
+                        style={{
+                          margin: "0 0 1rem 0",
+                          fontSize: "0.875rem",
+                          color: "#475569",
+                        }}
+                      >
+                        Manage chatbot for:{" "}
+                        <strong>
+                          {selectedBot.scrapedWebsites &&
+                          selectedBot.scrapedWebsites[0]
+                            ? selectedBot.scrapedWebsites[0]
+                            : "this website"}
+                        </strong>
                       </p>
 
                       {/* Crawl Status & Metadata Display */}
-                      <div style={{
-                        padding: '1rem',
-                        background: '#ffffff',
-                        border: '1px solid #cbd5e1',
-                        borderRadius: '6px',
-                        marginBottom: '1rem'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                          <span style={{ fontSize: '0.875rem', fontWeight: '600', color: '#334155' }}>Crawl Status</span>
-                          {selectedBot.schedulerConfig?.status === 'running' && (
-                            <span style={{
-                              padding: '0.25rem 0.75rem',
-                              background: '#dbeafe',
-                              color: '#1e40af',
-                              fontSize: '0.75rem',
-                              fontWeight: '600',
-                              borderRadius: '12px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.5rem'
-                            }}>
-                              <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#3b82f6', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}></span>
+                      <div
+                        style={{
+                          padding: "1rem",
+                          background: "#ffffff",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "6px",
+                          marginBottom: "1rem",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            marginBottom: "0.75rem",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: "0.875rem",
+                              fontWeight: "600",
+                              color: "#334155",
+                            }}
+                          >
+                            Crawl Status
+                          </span>
+                          {selectedBot.schedulerConfig?.status ===
+                            "running" && (
+                            <span
+                              style={{
+                                padding: "0.25rem 0.75rem",
+                                background: "#dbeafe",
+                                color: "#1e40af",
+                                fontSize: "0.75rem",
+                                fontWeight: "600",
+                                borderRadius: "12px",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.5rem",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  width: "8px",
+                                  height: "8px",
+                                  borderRadius: "50%",
+                                  background: "#3b82f6",
+                                  animation:
+                                    "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+                                }}
+                              ></span>
                               Crawl in progress
                             </span>
                           )}
-                          {selectedBot.schedulerConfig?.status === 'completed' && (
-                            <span style={{
-                              padding: '0.25rem 0.75rem',
-                              background: '#d1fae5',
-                              color: '#065f46',
-                              fontSize: '0.75rem',
-                              fontWeight: '600',
-                              borderRadius: '12px'
-                            }}>
+                          {selectedBot.schedulerConfig?.status ===
+                            "completed" && (
+                            <span
+                              style={{
+                                padding: "0.25rem 0.75rem",
+                                background: "#d1fae5",
+                                color: "#065f46",
+                                fontSize: "0.75rem",
+                                fontWeight: "600",
+                                borderRadius: "12px",
+                              }}
+                            >
                               ✓ Completed
                             </span>
                           )}
-                          {selectedBot.schedulerConfig?.status === 'failed' && (
-                            <span style={{
-                              padding: '0.25rem 0.75rem',
-                              background: '#fee2e2',
-                              color: '#991b1b',
-                              fontSize: '0.75rem',
-                              fontWeight: '600',
-                              borderRadius: '12px'
-                            }}>
+                          {selectedBot.schedulerConfig?.status === "failed" && (
+                            <span
+                              style={{
+                                padding: "0.25rem 0.75rem",
+                                background: "#fee2e2",
+                                color: "#991b1b",
+                                fontSize: "0.75rem",
+                                fontWeight: "600",
+                                borderRadius: "12px",
+                              }}
+                            >
                               ✗ Failed
                             </span>
                           )}
                           {!selectedBot.schedulerConfig?.status && (
-                            <span style={{
-                              padding: '0.25rem 0.75rem',
-                              background: '#f3f4f6',
-                              color: '#6b7280',
-                              fontSize: '0.75rem',
-                              fontWeight: '600',
-                              borderRadius: '12px'
-                            }}>
+                            <span
+                              style={{
+                                padding: "0.25rem 0.75rem",
+                                background: "#f3f4f6",
+                                color: "#6b7280",
+                                fontSize: "0.75rem",
+                                fontWeight: "600",
+                                borderRadius: "12px",
+                              }}
+                            >
                               Not started
                             </span>
                           )}
                         </div>
-                        
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', fontSize: '0.8125rem' }}>
+
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr",
+                            gap: "0.75rem",
+                            fontSize: "0.8125rem",
+                          }}
+                        >
                           <div>
-                            <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Last Crawl</div>
-                            <div style={{ color: '#1e293b', fontWeight: '500' }}>
+                            <div
+                              style={{
+                                color: "#64748b",
+                                marginBottom: "0.25rem",
+                              }}
+                            >
+                              Last Crawl
+                            </div>
+                            <div
+                              style={{ color: "#1e293b", fontWeight: "500" }}
+                            >
                               {selectedBot.lastScrapeAt
-                                ? new Date(selectedBot.lastScrapeAt).toLocaleString('en-US', {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
+                                ? new Date(
+                                    selectedBot.lastScrapeAt
+                                  ).toLocaleString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
                                   })
-                                : 'Never'}
+                                : "Never"}
                             </div>
                           </div>
                           <div>
-                            <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Bot Status</div>
-                            <div style={{ color: '#1e293b', fontWeight: '500' }}>
-                              {selectedBot.botReady
-                                ? <span style={{ color: '#059669' }}>✓ Ready</span>
-                                : <span style={{ color: '#dc2626' }}>Not Ready</span>}
+                            <div
+                              style={{
+                                color: "#64748b",
+                                marginBottom: "0.25rem",
+                              }}
+                            >
+                              Bot Status
+                            </div>
+                            <div
+                              style={{ color: "#1e293b", fontWeight: "500" }}
+                            >
+                              {selectedBot.botReady ? (
+                                <span style={{ color: "#059669" }}>
+                                  ✓ Ready
+                                </span>
+                              ) : (
+                                <span style={{ color: "#dc2626" }}>
+                                  Not Ready
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
 
-                        {selectedBot.schedulerConfig?.totalDocuments !== undefined && selectedBot.schedulerConfig.totalDocuments > 0 && (
-                          <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
-                            <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>Documents Crawled</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#0ea5e9', marginTop: '0.25rem' }}>
-                              {selectedBot.schedulerConfig.totalDocuments.toLocaleString()}
+                        {selectedBot.schedulerConfig?.totalDocuments !==
+                          undefined &&
+                          selectedBot.schedulerConfig.totalDocuments > 0 && (
+                            <div
+                              style={{
+                                marginTop: "0.75rem",
+                                paddingTop: "0.75rem",
+                                borderTop: "1px solid #e2e8f0",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontSize: "0.8125rem",
+                                  color: "#64748b",
+                                }}
+                              >
+                                Documents Crawled
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "1.25rem",
+                                  fontWeight: "700",
+                                  color: "#0ea5e9",
+                                  marginTop: "0.25rem",
+                                }}
+                              >
+                                {selectedBot.schedulerConfig.totalDocuments.toLocaleString()}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
 
                         {/* Crawl History */}
                         {scrapeHistory.length > 0 && (
-                          <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
-                            <div style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '0.5rem', fontWeight: '600' }}>
+                          <div
+                            style={{
+                              marginTop: "0.75rem",
+                              paddingTop: "0.75rem",
+                              borderTop: "1px solid #e2e8f0",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: "0.8125rem",
+                                color: "#64748b",
+                                marginBottom: "0.5rem",
+                                fontWeight: "600",
+                              }}
+                            >
                               Crawl History
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto' }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "0.5rem",
+                                maxHeight: "200px",
+                                overflowY: "auto",
+                              }}
+                            >
                               {scrapeHistory.map((entry, index) => (
                                 <div
                                   key={entry._id || index}
                                   style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    padding: '0.5rem',
-                                    background: '#f8fafc',
-                                    borderRadius: '4px',
-                                    fontSize: '0.75rem'
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    padding: "0.5rem",
+                                    background: "#f8fafc",
+                                    borderRadius: "4px",
+                                    fontSize: "0.75rem",
                                   }}
                                 >
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.125rem' }}>
-                                    <div style={{ color: '#1e293b', fontWeight: '500' }}>
-                                      {new Date(entry.completedAt).toLocaleString('en-US', {
-                                        month: 'short',
-                                        day: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit'
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      flexDirection: "column",
+                                      gap: "0.125rem",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        color: "#1e293b",
+                                        fontWeight: "500",
+                                      }}
+                                    >
+                                      {new Date(
+                                        entry.completedAt
+                                      ).toLocaleString("en-US", {
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
                                       })}
                                     </div>
-                                    <div style={{ color: '#64748b', fontSize: '0.7rem' }}>
-                                      {entry.trigger === 'scheduler' ? 'Scheduled' : 'Manual'}
+                                    <div
+                                      style={{
+                                        color: "#64748b",
+                                        fontSize: "0.7rem",
+                                      }}
+                                    >
+                                      {entry.trigger === "scheduler"
+                                        ? "Scheduled"
+                                        : "Manual"}
                                     </div>
                                   </div>
                                   <div>
                                     {entry.success ? (
-                                      <span style={{ color: '#059669', fontSize: '1rem' }}>✓</span>
+                                      <span
+                                        style={{
+                                          color: "#059669",
+                                          fontSize: "1rem",
+                                        }}
+                                      >
+                                        ✓
+                                      </span>
                                     ) : (
-                                      <span style={{ color: '#dc2626', fontSize: '1rem' }}>✗</span>
+                                      <span
+                                        style={{
+                                          color: "#dc2626",
+                                          fontSize: "1rem",
+                                        }}
+                                      >
+                                        ✗
+                                      </span>
                                     )}
                                   </div>
                                 </div>
@@ -1089,226 +1512,327 @@ function DashboardPage() {
                           </div>
                         )}
                         {scrapeHistoryLoading && (
-                          <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
-                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Loading history...</div>
+                          <div
+                            style={{
+                              marginTop: "0.75rem",
+                              paddingTop: "0.75rem",
+                              borderTop: "1px solid #e2e8f0",
+                              textAlign: "center",
+                            }}
+                          >
+                            <div
+                              style={{ fontSize: "0.75rem", color: "#64748b" }}
+                            >
+                              Loading history...
+                            </div>
                           </div>
                         )}
                       </div>
-                    
-                    {scrapeSuccess && (
-                      <div style={{
-                        padding: '0.75rem',
-                        background: '#d1fae5',
-                        border: '1px solid #10b981',
-                        borderRadius: '4px',
-                        color: '#065f46',
-                        marginBottom: '1rem',
-                        fontSize: '0.875rem'
-                      }}>
-                        {scrapeSuccess}
-                      </div>
-                    )}
-                    
-                    {scrapeError && (
-                      <div style={{
-                        padding: '0.75rem',
-                        background: '#fee2e2',
-                        border: '1px solid #ef4444',
-                        borderRadius: '4px',
-                        color: '#991b1b',
-                        marginBottom: '1rem',
-                        fontSize: '0.875rem'
-                      }}>
-                        {scrapeError}
-                      </div>
-                    )}
-                      
-                      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+
+                      {scrapeSuccess && (
+                        <div
+                          style={{
+                            padding: "0.75rem",
+                            background: "#d1fae5",
+                            border: "1px solid #10b981",
+                            borderRadius: "4px",
+                            color: "#065f46",
+                            marginBottom: "1rem",
+                            fontSize: "0.875rem",
+                          }}
+                        >
+                          {scrapeSuccess}
+                        </div>
+                      )}
+
+                      {scrapeError && (
+                        <div
+                          style={{
+                            padding: "0.75rem",
+                            background: "#fee2e2",
+                            border: "1px solid #ef4444",
+                            borderRadius: "4px",
+                            color: "#991b1b",
+                            marginBottom: "1rem",
+                            fontSize: "0.875rem",
+                          }}
+                        >
+                          {scrapeError}
+                        </div>
+                      )}
+
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "0.75rem",
+                          flexWrap: "wrap",
+                        }}
+                      >
                         <button
                           className="dashboard-action-btn"
                           onClick={handleRunScrape}
-                          disabled={scrapeLoading || selectedBot.schedulerConfig?.status === 'running'}
+                          disabled={
+                            scrapeLoading ||
+                            selectedBot.schedulerConfig?.status === "running"
+                          }
                           style={{
-                            opacity: (scrapeLoading || selectedBot.schedulerConfig?.status === 'running') ? 0.6 : 1,
-                            cursor: (scrapeLoading || selectedBot.schedulerConfig?.status === 'running') ? 'not-allowed' : 'pointer',
-                            flex: '1 1 200px'
+                            opacity:
+                              scrapeLoading ||
+                              selectedBot.schedulerConfig?.status === "running"
+                                ? 0.6
+                                : 1,
+                            cursor:
+                              scrapeLoading ||
+                              selectedBot.schedulerConfig?.status === "running"
+                                ? "not-allowed"
+                                : "pointer",
+                            flex: "1 1 200px",
                           }}
                         >
-                          {scrapeLoading ? '⏳ Running...' : selectedBot.schedulerConfig?.status === 'running' ? '⏳ Crawling...' : '🔄 Run Crawl'}
+                          {scrapeLoading
+                            ? "⏳ Running..."
+                            : selectedBot.schedulerConfig?.status === "running"
+                            ? "⏳ Crawling..."
+                            : "🔄 Run Crawl"}
                         </button>
                         <button
                           className="dashboard-action-btn"
                           onClick={() => setAddKnowledgeModalOpen(true)}
-                          style={{ flex: '1 1 200px' }}
+                          style={{ flex: "1 1 200px" }}
                         >
                           📝 Add Knowledge
                         </button>
                         <button
                           className="dashboard-action-btn dashboard-action-btn--widget"
                           onClick={() => setWidgetInstallerOpen(true)}
-                          style={{ flex: '1 1 200px' }}
+                          style={{ flex: "1 1 200px" }}
                         >
                           🚀 Install Widget
                         </button>
                       </div>
-                      <div style={{
-                        marginTop: '1rem',
-                        padding: '0.75rem',
-                        background: '#e0f2fe',
-                        borderRadius: '4px',
-                        fontSize: '0.875rem',
-                        color: '#0c4a6e'
-                      }}>
-                        ℹ️ <strong>Run Crawl</strong> adds website content to your chatbot's knowledge base.
+                      <div
+                        style={{
+                          marginTop: "1rem",
+                          padding: "0.75rem",
+                          background: "#e0f2fe",
+                          borderRadius: "4px",
+                          fontSize: "0.875rem",
+                          color: "#0c4a6e",
+                        }}
+                      >
+                        ℹ️ <strong>Run Crawl</strong> adds website content to
+                        your chatbot's knowledge base.
                       </div>
-                      
+
                       {/* Scheduler Section */}
-                      <div style={{
-                        marginTop: '1.5rem',
-                        paddingTop: '1.5rem',
-                        borderTop: '2px solid #e2e8f0'
-                      }}>
-                        <h5 style={{ 
-                          margin: '0 0 1rem 0', 
-                          fontSize: '1rem', 
-                          color: '#0f172a',
-                          fontWeight: '600'
-                        }}>
+                      <div
+                        style={{
+                          marginTop: "1.5rem",
+                          paddingTop: "1.5rem",
+                          borderTop: "2px solid #e2e8f0",
+                        }}
+                      >
+                        <h5
+                          style={{
+                            margin: "0 0 1rem 0",
+                            fontSize: "1rem",
+                            color: "#0f172a",
+                            fontWeight: "600",
+                          }}
+                        >
                           ⏱️ Scheduled Crawling
                         </h5>
-                        
+
                         {schedulerError && (
-                          <div style={{
-                            padding: '0.75rem',
-                            background: '#fee2e2',
-                            border: '1px solid #ef4444',
-                            borderRadius: '4px',
-                            color: '#991b1b',
-                            marginBottom: '1rem',
-                            fontSize: '0.875rem'
-                          }}>
+                          <div
+                            style={{
+                              padding: "0.75rem",
+                              background: "#fee2e2",
+                              border: "1px solid #ef4444",
+                              borderRadius: "4px",
+                              color: "#991b1b",
+                              marginBottom: "1rem",
+                              fontSize: "0.875rem",
+                            }}
+                          >
                             {schedulerError}
                           </div>
                         )}
-                        
+
                         {/* Scheduler Toggle */}
-                        <div style={{
-                          padding: '1rem',
-                          background: '#ffffff',
-                          border: '1px solid #cbd5e1',
-                          borderRadius: '6px',
-                          marginBottom: '1rem'
-                        }}>
-                          <div style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'space-between',
-                            marginBottom: '0.75rem'
-                          }}>
+                        <div
+                          style={{
+                            padding: "1rem",
+                            background: "#ffffff",
+                            border: "1px solid #cbd5e1",
+                            borderRadius: "6px",
+                            marginBottom: "1rem",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              marginBottom: "0.75rem",
+                            }}
+                          >
                             <div style={{ flex: 1 }}>
-                              <div style={{ 
-                                fontSize: '0.875rem', 
-                                fontWeight: '600', 
-                                color: '#334155',
-                                marginBottom: '0.25rem'
-                              }}>
+                              <div
+                                style={{
+                                  fontSize: "0.875rem",
+                                  fontWeight: "600",
+                                  color: "#334155",
+                                  marginBottom: "0.25rem",
+                                }}
+                              >
                                 Enable Scheduled Crawling
                               </div>
-                              <div style={{ 
-                                fontSize: '0.75rem', 
-                                color: '#64748b'
-                              }}>
+                              <div
+                                style={{
+                                  fontSize: "0.75rem",
+                                  color: "#64748b",
+                                }}
+                              >
                                 Automatically crawl website every 10 minutes
                               </div>
                             </div>
-                            
-                            <label style={{
-                              position: 'relative',
-                              display: 'inline-block',
-                              width: '52px',
-                              height: '28px',
-                              cursor: schedulerLoading ? 'not-allowed' : 'pointer',
-                              opacity: schedulerLoading ? 0.6 : 1
-                            }}>
+
+                            <label
+                              style={{
+                                position: "relative",
+                                display: "inline-block",
+                                width: "52px",
+                                height: "28px",
+                                cursor: schedulerLoading
+                                  ? "not-allowed"
+                                  : "pointer",
+                                opacity: schedulerLoading ? 0.6 : 1,
+                              }}
+                            >
                               <input
                                 type="checkbox"
-                                checked={schedulerStatus === 'active'}
-                                onChange={(e) => handleSchedulerToggle(e.target.checked)}
+                                checked={schedulerStatus === "active"}
+                                onChange={(e) =>
+                                  handleSchedulerToggle(e.target.checked)
+                                }
                                 disabled={schedulerLoading}
                                 style={{ opacity: 0, width: 0, height: 0 }}
                               />
-                              <span style={{
-                                position: 'absolute',
-                                cursor: schedulerLoading ? 'not-allowed' : 'pointer',
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                bottom: 0,
-                                backgroundColor: schedulerStatus === 'active' ? '#10b981' : '#cbd5e1',
-                                transition: '0.4s',
-                                borderRadius: '28px'
-                              }}>
-                                <span style={{
-                                  position: 'absolute',
-                                  content: '""',
-                                  height: '20px',
-                                  width: '20px',
-                                  left: schedulerStatus === 'active' ? '28px' : '4px',
-                                  bottom: '4px',
-                                  backgroundColor: 'white',
-                                  transition: '0.4s',
-                                  borderRadius: '50%'
-                                }}></span>
+                              <span
+                                style={{
+                                  position: "absolute",
+                                  cursor: schedulerLoading
+                                    ? "not-allowed"
+                                    : "pointer",
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  backgroundColor:
+                                    schedulerStatus === "active"
+                                      ? "#10b981"
+                                      : "#cbd5e1",
+                                  transition: "0.4s",
+                                  borderRadius: "28px",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    position: "absolute",
+                                    content: '""',
+                                    height: "20px",
+                                    width: "20px",
+                                    left:
+                                      schedulerStatus === "active"
+                                        ? "28px"
+                                        : "4px",
+                                    bottom: "4px",
+                                    backgroundColor: "white",
+                                    transition: "0.4s",
+                                    borderRadius: "50%",
+                                  }}
+                                ></span>
                               </span>
                             </label>
                           </div>
-                          
+
                           {/* Scheduler Status Display */}
-                          <div style={{
-                            paddingTop: '0.75rem',
-                            borderTop: '1px solid #e2e8f0',
-                            display: 'grid',
-                            gridTemplateColumns: '1fr 1fr',
-                            gap: '0.75rem',
-                            fontSize: '0.8125rem'
-                          }}>
+                          <div
+                            style={{
+                              paddingTop: "0.75rem",
+                              borderTop: "1px solid #e2e8f0",
+                              display: "grid",
+                              gridTemplateColumns: "1fr 1fr",
+                              gap: "0.75rem",
+                              fontSize: "0.8125rem",
+                            }}
+                          >
                             <div>
-                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Scheduler Status</div>
-                              <div style={{ fontWeight: '600' }}>
+                              <div
+                                style={{
+                                  color: "#64748b",
+                                  marginBottom: "0.25rem",
+                                }}
+                              >
+                                Scheduler Status
+                              </div>
+                              <div style={{ fontWeight: "600" }}>
                                 {schedulerLoading ? (
-                                  <span style={{ color: '#6b7280' }}>⏳ Updating...</span>
-                                ) : schedulerStatus === 'active' ? (
-                                  <span style={{ color: '#059669' }}>✓ Active</span>
+                                  <span style={{ color: "#6b7280" }}>
+                                    ⏳ Updating...
+                                  </span>
+                                ) : schedulerStatus === "active" ? (
+                                  <span style={{ color: "#059669" }}>
+                                    ✓ Active
+                                  </span>
                                 ) : (
-                                  <span style={{ color: '#64748b' }}>○ Inactive</span>
+                                  <span style={{ color: "#64748b" }}>
+                                    ○ Inactive
+                                  </span>
                                 )}
                               </div>
                             </div>
-                            
+
                             <div>
-                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Last Scheduled Crawl</div>
-                              <div style={{ fontWeight: '500', color: '#1e293b' }}>
+                              <div
+                                style={{
+                                  color: "#64748b",
+                                  marginBottom: "0.25rem",
+                                }}
+                              >
+                                Last Scheduled Crawl
+                              </div>
+                              <div
+                                style={{ fontWeight: "500", color: "#1e293b" }}
+                              >
                                 {schedulerConfig?.lastScrapeCompleted
-                                  ? new Date(schedulerConfig.lastScrapeCompleted).toLocaleString('en-US', {
-                                      month: 'short',
-                                      day: 'numeric',
-                                      hour: '2-digit',
-                                      minute: '2-digit'
+                                  ? new Date(
+                                      schedulerConfig.lastScrapeCompleted
+                                    ).toLocaleString("en-US", {
+                                      month: "short",
+                                      day: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
                                     })
-                                  : 'Never'}
+                                  : "Never"}
                               </div>
                             </div>
                           </div>
                         </div>
-                        
-                        <div style={{
-                          padding: '0.75rem',
-                          background: '#fef3c7',
-                          borderRadius: '4px',
-                          fontSize: '0.875rem',
-                          color: '#78350f'
-                        }}>
-                          ℹ️ When enabled, the scheduler will automatically crawl your website every 10 minutes and automatically updates chatbot knowledge.
+
+                        <div
+                          style={{
+                            padding: "0.75rem",
+                            background: "#fef3c7",
+                            borderRadius: "4px",
+                            fontSize: "0.875rem",
+                            color: "#78350f",
+                          }}
+                        >
+                          ℹ️ When enabled, the scheduler will automatically
+                          crawl your website every 10 minutes and automatically
+                          updates chatbot knowledge.
                         </div>
                       </div>
                     </div>
@@ -1321,24 +1845,22 @@ function DashboardPage() {
       ) : (
         <section className="dashboard-empty">
           <p>
-            {isAdmin 
-              ? 'Create a user or select one from the Users page to view their details.'
-              : 'Your account is being set up. Please contact your administrator if this persists.'
-            }
+            {isAdmin
+              ? "Create a user or select one from the Users page to view their details."
+              : "Your account is being set up. Please contact your administrator if this persists."}
           </p>
         </section>
       )}
 
-
       {/* Add Agent Modal */}
       {addAgentModalOpen && (
         <div className="scrape-modal-overlay" role="dialog" aria-modal="true">
-          <div className="scrape-modal" style={{ maxWidth: '500px' }}>
+          <div className="scrape-modal" style={{ maxWidth: "500px" }}>
             <AgentForm
               onSubmit={handleCreateAgent}
               onClose={() => {
                 setAddAgentModalOpen(false);
-                setAddAgentError('');
+                setAddAgentError("");
               }}
               loading={addAgentLoading}
               error={addAgentError}
@@ -1348,7 +1870,7 @@ function DashboardPage() {
       )}
 
       {/* Widget Installer Modal */}
-      <WidgetInstaller 
+      <WidgetInstaller
         isOpen={isWidgetInstallerOpen}
         onClose={() => setWidgetInstallerOpen(false)}
         bots={selectedBot ? [selectedBot] : []}
@@ -1363,10 +1885,19 @@ function DashboardPage() {
               Enter the website URL you want to create a chatbot for.
             </p>
 
-            {addWebsiteError && <p className="scrape-error">{addWebsiteError}</p>}
+            {addWebsiteError && (
+              <p className="scrape-error">{addWebsiteError}</p>
+            )}
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label htmlFor="website-url" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+            <div style={{ marginBottom: "1rem" }}>
+              <label
+                htmlFor="website-url"
+                style={{
+                  display: "block",
+                  marginBottom: "0.5rem",
+                  fontWeight: "500",
+                }}
+              >
                 Website URL
               </label>
               <input
@@ -1377,14 +1908,14 @@ function DashboardPage() {
                 onChange={(e) => setWebsiteUrl(e.target.value)}
                 disabled={addWebsiteLoading}
                 style={{
-                  width: '100%',
-                  padding: '0.5rem',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '4px',
-                  fontSize: '1rem'
+                  width: "100%",
+                  padding: "0.5rem",
+                  border: "1px solid #d1d5db",
+                  borderRadius: "4px",
+                  fontSize: "1rem",
                 }}
                 onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
+                  if (e.key === "Enter") {
                     handleAddWebsite();
                   }
                 }}
@@ -1397,8 +1928,8 @@ function DashboardPage() {
                 className="scrape-btn-neutral"
                 onClick={() => {
                   setAddWebsiteModalOpen(false);
-                  setWebsiteUrl('');
-                  setAddWebsiteError('');
+                  setWebsiteUrl("");
+                  setAddWebsiteError("");
                 }}
                 disabled={addWebsiteLoading}
               >
@@ -1410,7 +1941,7 @@ function DashboardPage() {
                 onClick={handleAddWebsite}
                 disabled={addWebsiteLoading}
               >
-                {addWebsiteLoading ? '⏳ Adding...' : '➕ Add Website'}
+                {addWebsiteLoading ? "⏳ Adding..." : "➕ Add Website"}
               </button>
             </div>
           </div>
@@ -1426,22 +1957,33 @@ function DashboardPage() {
               Add trusted information to your chatbot's knowledge base manually.
             </p>
 
-            {addKnowledgeError && <p className="scrape-error">{addKnowledgeError}</p>}
+            {addKnowledgeError && (
+              <p className="scrape-error">{addKnowledgeError}</p>
+            )}
             {addKnowledgeSuccess && (
-              <div style={{
-                padding: '0.75rem',
-                background: '#d1fae5',
-                border: '1px solid #10b981',
-                borderRadius: '4px',
-                color: '#065f46',
-                marginBottom: '1rem'
-              }}>
+              <div
+                style={{
+                  padding: "0.75rem",
+                  background: "#d1fae5",
+                  border: "1px solid #10b981",
+                  borderRadius: "4px",
+                  color: "#065f46",
+                  marginBottom: "1rem",
+                }}
+              >
                 ✅ {addKnowledgeSuccess}
               </div>
             )}
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label htmlFor="knowledge-content" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+            <div style={{ marginBottom: "1rem" }}>
+              <label
+                htmlFor="knowledge-content"
+                style={{
+                  display: "block",
+                  marginBottom: "0.5rem",
+                  fontWeight: "500",
+                }}
+              >
                 Content
               </label>
               <textarea
@@ -1452,13 +1994,13 @@ function DashboardPage() {
                 disabled={addKnowledgeLoading}
                 rows={10}
                 style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '4px',
-                  fontSize: '1rem',
-                  fontFamily: 'inherit',
-                  resize: 'vertical'
+                  width: "100%",
+                  padding: "0.75rem",
+                  border: "1px solid #d1d5db",
+                  borderRadius: "4px",
+                  fontSize: "1rem",
+                  fontFamily: "inherit",
+                  resize: "vertical",
                 }}
               />
             </div>
@@ -1469,9 +2011,9 @@ function DashboardPage() {
                 className="scrape-btn-neutral"
                 onClick={() => {
                   setAddKnowledgeModalOpen(false);
-                  setKnowledgeContent('');
-                  setAddKnowledgeError('');
-                  setAddKnowledgeSuccess('');
+                  setKnowledgeContent("");
+                  setAddKnowledgeError("");
+                  setAddKnowledgeSuccess("");
                 }}
                 disabled={addKnowledgeLoading}
               >
@@ -1483,11 +2025,15 @@ function DashboardPage() {
                 onClick={handleAddKnowledge}
                 disabled={addKnowledgeLoading || !knowledgeContent.trim()}
                 style={{
-                  opacity: (addKnowledgeLoading || !knowledgeContent.trim()) ? 0.6 : 1,
-                  cursor: (addKnowledgeLoading || !knowledgeContent.trim()) ? 'not-allowed' : 'pointer'
+                  opacity:
+                    addKnowledgeLoading || !knowledgeContent.trim() ? 0.6 : 1,
+                  cursor:
+                    addKnowledgeLoading || !knowledgeContent.trim()
+                      ? "not-allowed"
+                      : "pointer",
                 }}
               >
-                {addKnowledgeLoading ? '⏳ Adding...' : '✅ Add Knowledge'}
+                {addKnowledgeLoading ? "⏳ Adding..." : "✅ Add Knowledge"}
               </button>
             </div>
           </div>
