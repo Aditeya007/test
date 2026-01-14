@@ -69,10 +69,8 @@ function AgentPanel() {
   // Filter state
   const [filterStatus, setFilterStatus] = useState('queued'); // 'queued', 'assigned', 'completed'
 
-  // Sidebar menu state
-  const [menuOpen, setMenuOpen] = useState(false);
+  // Sidebar collapsed state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const menuRef = useRef(null);
 
   // Socket.IO ref
   const socketRef = useRef(null);
@@ -385,23 +383,6 @@ function AgentPanel() {
     fetchConversations();
   }, []);
 
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setMenuOpen(false);
-      }
-    };
-
-    if (menuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [menuOpen]);
-
   // Agent queue listeners are attached on socket initialization above
 
   const fetchConversations = useCallback(async () => {
@@ -660,48 +641,6 @@ function AgentPanel() {
       <aside className={`agent-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
           <h2 className="sidebar-logo">Agent Panel</h2>
-          <div className="sidebar-header-actions">
-            <div className="sidebar-menu-container" ref={menuRef}>
-              <button
-                className="sidebar-menu-btn"
-                onClick={() => setMenuOpen(!menuOpen)}
-                title="Menu"
-                aria-label="Menu"
-              >
-                <span className="menu-dots">⋯</span>
-              </button>
-              {menuOpen && (
-                <div className="sidebar-menu-dropdown">
-                  <button
-                    className="menu-item"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      fetchConversations();
-                    }}
-                  >
-                    ↻ Refresh
-                  </button>
-                  <button
-                    className="menu-item"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      alert('Help not implemented yet');
-                    }}
-                  >
-                    ❓ Help
-                  </button>
-                </div>
-              )}
-            </div>
-            <button
-              className="sidebar-close-btn"
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            >
-              ✕
-            </button>
-          </div>
         </div>
 
         <nav className="sidebar-nav">
@@ -724,6 +663,15 @@ function AgentPanel() {
         {/* Top Header */}
         <header className="agent-header">
           <div className="header-left">
+            <button
+              className="sidebar-toggle"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              type="button"
+              aria-label="Toggle sidebar menu"
+              title={sidebarCollapsed ? "Open sidebar" : "Close sidebar"}
+            >
+              {sidebarCollapsed ? "☰" : "✕"}
+            </button>
             <h2 className="page-title">Ongoing Chats</h2>
           </div>
           <div className="header-right">
