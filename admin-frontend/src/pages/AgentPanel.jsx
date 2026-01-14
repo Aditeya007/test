@@ -65,7 +65,7 @@ function AgentPanel() {
   const [sendingMessage, setSendingMessage] = useState(false);
 
   // Filter state
-  const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'queued', 'assigned'
+  const [filterStatus, setFilterStatus] = useState('queued'); // 'queued', 'assigned', 'completed'
 
   // Socket.IO ref
   const socketRef = useRef(null);
@@ -607,9 +607,9 @@ function AgentPanel() {
 
   // Filter conversations based on status
   const filteredConversations = conversations.filter(conv => {
-    if (filterStatus === 'all') return true;
     if (filterStatus === 'queued') return false; // Queued handled separately
     if (filterStatus === 'assigned') return (conv.status === 'assigned' || conv.status === 'active') && (conv.assignedAgent === agentId || conv.agentId === agentId);
+    if (filterStatus === 'completed') return conv.status === 'closed';
     return true;
   });
 
@@ -639,25 +639,9 @@ function AgentPanel() {
         </div>
 
         <nav className="sidebar-nav">
-          <button className="nav-item" onClick={() => alert('Dashboard navigation not implemented yet')}>
-            <span className="nav-icon">📊</span>
-            <span className="nav-label">Dashboard</span>
-          </button>
           <button className="nav-item active">
             <span className="nav-icon">💬</span>
             <span className="nav-label">Chat</span>
-          </button>
-          <button className="nav-item" onClick={() => alert('Users navigation not implemented yet')}>
-            <span className="nav-icon">👥</span>
-            <span className="nav-label">Users</span>
-          </button>
-          <button className="nav-item" onClick={() => alert('Site Settings navigation not implemented yet')}>
-            <span className="nav-icon">⚙️</span>
-            <span className="nav-label">Site Settings</span>
-          </button>
-          <button className="nav-item" onClick={() => alert('View Logs navigation not implemented yet')}>
-            <span className="nav-icon">📜</span>
-            <span className="nav-label">View Logs</span>
           </button>
         </nav>
 
@@ -707,37 +691,25 @@ function AgentPanel() {
             <div className="chat-list-panel">
         {/* Filter Tabs */}
         <div className="chat-filter-tabs">
-          <button 
-            className={`filter-tab ${filterStatus === 'all' ? 'active' : ''}`}
-            onClick={() => setFilterStatus('all')}
-          >
-            All ({conversations.length + queuedConversations.length})
-          </button>
-          <button 
+          <button
             className={`filter-tab ${filterStatus === 'queued' ? 'active' : ''}`}
             onClick={() => setFilterStatus('queued')}
           >
             Queue ({queuedConversations.length})
           </button>
-          <button 
+          <button
             className={`filter-tab ${filterStatus === 'assigned' ? 'active' : ''}`}
             onClick={() => setFilterStatus('assigned')}
           >
             My Chats ({conversations.filter(c => (c.status === 'assigned' || c.status === 'active') && (c.assignedAgent === agentId || c.agentId === agentId)).length})
           </button>
-          <button 
+          <button
             className={`filter-tab ${filterStatus === 'completed' ? 'active' : ''}`}
             onClick={() => setFilterStatus('completed')}
           >
             Completed ({completedConversations.length})
           </button>
         </div>
-
-        {conversationsLoading && (
-          <div className="chat-list-loading">
-            <Loader message="Loading..." />
-          </div>
-        )}
         
         {conversationsError && (
           <div className="chat-list-error">
