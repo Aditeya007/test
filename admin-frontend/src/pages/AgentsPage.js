@@ -192,13 +192,13 @@ function AgentsPage() {
       {addAgentSuccess && (
         <div
           style={{
-            padding: "0.75rem 1rem",
+            padding: "0.7em 0.9em",
             background: "#d1fae5",
             border: "1px solid #10b981",
-            borderRadius: "6px",
+            borderRadius: "8px",
             color: "#065f46",
-            marginBottom: "1rem",
-            fontSize: "0.875rem",
+            marginBottom: "1em",
+            fontSize: "0.8rem",
           }}
         >
           {addAgentSuccess}
@@ -208,24 +208,25 @@ function AgentsPage() {
       {/* Agent Capacity Info */}
       {maxAgents > 0 && (
         <div
+          className="agent-capacity-card"
           style={{
-            padding: "1rem 1.5rem",
+            padding: "0.8em 1em",
             background: "#eff6ff",
             border: "2px solid #3b82f6",
             borderRadius: "8px",
-            marginBottom: "1.5rem",
-            fontSize: "1rem",
+            marginBottom: "1em",
+            fontSize: "0.8rem",
             width: "100%",
             boxSizing: "border-box",
             color: "#1e40af",
-            lineHeight: "1.5",
+            lineHeight: "1.4",
           }}
         >
           <strong
             style={{
               color: "#1e40af",
               fontWeight: "600",
-              marginRight: "0.5rem",
+              marginRight: "0.3rem",
             }}
           >
             Agent Capacity:
@@ -234,7 +235,7 @@ function AgentsPage() {
             {agents.length} / {maxAgents} agents
           </span>
           {agents.length < maxAgents && (
-            <span style={{ marginLeft: "0.5rem", color: "#1e40af" }}>
+            <span style={{ marginLeft: "0.3rem", color: "#1e40af" }}>
               ({maxAgents - agents.length} available)
             </span>
           )}
@@ -242,7 +243,7 @@ function AgentsPage() {
       )}
 
       {/* Agents Table */}
-      <div style={{ marginTop: "2rem" }}>
+      <div style={{ marginTop: "1.2em" }}>
         {agents.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">👤</div>
