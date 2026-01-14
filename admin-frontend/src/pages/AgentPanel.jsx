@@ -571,8 +571,11 @@ function AgentPanel() {
         method: 'POST'
       });
 
-      // Refresh conversations and clear selection if this was selected
-      await fetchConversations();
+      // Don't call fetchConversations - the Socket.IO event handler will update the UI
+      // This prevents overwriting the state and losing the closed conversation
+      // The conversation:closed event moves it to completedConversations
+      
+      // Clear selection if this was selected
       if (selectedConversationId === conversationId) {
         setSelectedConversationId(null);
         setMessages([]);

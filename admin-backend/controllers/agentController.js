@@ -599,9 +599,10 @@ const getConversations = async (req, res) => {
       tenantConnection.models.Conversation ||
       tenantConnection.model("Conversation", ConversationSchema);
 
-    // Query conversations: show WAITING chats OR chats assigned to this agent
+    // Query conversations: show WAITING chats OR chats assigned to this agent (including closed ones)
     // Do NOT show chats taken by other agents
     const agentId = req.agent.agentId;
+    
     const conversations = await Conversation.find({
       $or: [
         { status: "waiting" },
@@ -1203,13 +1204,14 @@ const closeConversation = async (req, res) => {
     }
 
     // Get the assigned agent (if any)
-    const assignedAgentId = conversation.assignedAgent;
+    const assignedAgentId = conversation.assignedAgent || conversation.agentId;
 
-    // Close conversation and return to bot mode
-    // Set status to 'closed' instead of 'bot' to preserve the closed state for agent view
+    // Close conversation - keep assignedAgent so we can show it in agent's completed list
+    // Set status to 'closed' to preserve the closed state for agent view
     conversation.status = "closed";
-    conversation.assignedAgent = null;
-    conversation.agentId = null;
+    // DO NOT clear assignedAgent - we need it to show in agent's completed chats
+    // conversation.assignedAgent = null;
+    // conversation.agentId = null;
     conversation.lastActiveAt = new Date();
     conversation.endedAt = new Date();
     await conversation.save();
