@@ -1069,6 +1069,131 @@ exports.getConversations = async (req, res) => {
 };
 
 /**
+ * Get conversations for a specific agent (per-agent supervisor view)
+ * @route   GET /api/user/agents/:agentId/conversations
+ * @access  Protected (requires JWT)
+ * @param   agentId - The agent ID
+ * @returns {Object} { conversations: Array<Conversation> }
+ */
+exports.getAgentConversations = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { agentId } = req.params;
+
+    if (!agentId) {
+      return res.status(400).json({
+        success: false,
+        error: "agentId is required"
+      });
+    }
+
+    // Get tenant context
+    const tenantContext = await getUserTenantContext(userId);
+    if (!tenantContext.databaseUri) {
+      return res.status(503).json({
+        success: false,
+        error: "Tenant database not provisioned"
+      });
+    }
+
+    // Get tenant connection and models
+    const mongoose = require("mongoose");
+    const tenantConn = await getTenantConnection(tenantContext.databaseUri);
+
+    // Load Conversation model
+    const ConversationSchema = new mongoose.Schema({
+      botId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Bot',
+        required: true,
+        index: true
+      },
+      sessionId: {
+        type: String,
+        required: true,
+        index: true,
+        trim: true
+      },
+      status: {
+        type: String,
+        enum: ['bot', 'waiting', 'active', 'queued', 'assigned', 'closed', 'ai', 'human'],
+        default: 'bot',
+        required: true
+      },
+      assignedAgent: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Agent',
+        default: null
+      },
+      agentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Agent',
+        default: null
+      },
+      requestedAt: {
+        type: Date,
+        default: null
+      },
+      endedAt: {
+        type: Date,
+        default: null
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now,
+        index: true
+      },
+      lastActiveAt: {
+        type: Date,
+        default: Date.now,
+        index: true
+      }
+    });
+
+    const Conversation = tenantConn.models.Conversation || 
+      tenantConn.model('Conversation', ConversationSchema);
+
+    // Fetch conversations for this specific agent, sorted by most recent first
+    // Match either assignedAgent or agentId to be safe
+    const conversations = await Conversation.find({
+      $or: [
+        { assignedAgent: agentId },
+        { agentId: agentId }
+      ]
+    })
+      .sort({ lastActiveAt: -1 })
+      .lean();
+
+    console.log(`✅ Retrieved ${conversations.length} conversations for agent ${agentId}`);
+
+    res.json({
+      success: true,
+      conversations: conversations.map(conv => ({
+        _id: conv._id,
+        botId: conv.botId,
+        sessionId: conv.sessionId,
+        status: conv.status,
+        assignedAgent: conv.assignedAgent,
+        agentId: conv.agentId,
+        requestedAt: conv.requestedAt,
+        endedAt: conv.endedAt,
+        createdAt: conv.createdAt,
+        lastActiveAt: conv.lastActiveAt
+      }))
+    });
+  } catch (err) {
+    console.error("❌ Error fetching agent conversations:", {
+      message: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    });
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch agent conversations",
+      details: process.env.NODE_ENV === "development" ? err.message : undefined
+    });
+  }
+};
+/**
  * Get messages for a specific conversation (read-only for supervisors)
  * @route   GET /api/user/conversations/:conversationId/messages
  * @access  Protected (requires JWT)

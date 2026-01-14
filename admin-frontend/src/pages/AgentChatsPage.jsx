@@ -1,15 +1,18 @@
-// src/pages/ChatsPage.jsx
+// src/pages/AgentChatsPage.jsx
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useParams, useNavigate } from 'react-router-dom';
 import { apiRequest } from '../api';
 import Loader from '../components/Loader';
 import '../styles/ChatsPage.css';
 
-function ChatsPage() {
+function AgentChatsPage() {
   const { user, token } = useAuth();
+  const { agentId } = useParams();
+  const navigate = useNavigate();
   
-  // Conversations state
+  // Conversations state (filtered to only this agent)
   const [conversations, setConversations] = useState([]);
   const [conversationsLoading, setConversationsLoading] = useState(true);
   const [conversationsError, setConversationsError] = useState('');
@@ -22,10 +25,9 @@ function ChatsPage() {
   
   // Bot mapping
   const [bots, setBots] = useState({});
-  const [botsLoading, setBotsLoading] = useState(false);
   
-  // Agent mapping (to show agent name in conversation list)
-  const [agents, setAgents] = useState({});
+  // Agent info
+  const [agentInfo, setAgentInfo] = useState(null);
   
   // Socket.IO ref
   const socketRef = useRef(null);
@@ -44,18 +46,18 @@ function ChatsPage() {
       script.src = 'https://cdn.socket.io/4.5.4/socket.io.min.js';
       script.crossOrigin = 'anonymous';
       script.onload = () => {
-        console.log('Chats Page: Socket.IO client library loaded');
+        console.log('Agent Chats Page: Socket.IO client library loaded');
         initializeSocket();
       };
       script.onerror = () => {
-        console.error('Chats Page: Failed to load Socket.IO client library');
+        console.error('Agent Chats Page: Failed to load Socket.IO client library');
       };
       document.head.appendChild(script);
     };
 
     const initializeSocket = () => {
       if (socketRef.current?.connected) {
-        console.log('Chats Page: Socket.IO already connected');
+        console.log('Agent Chats Page: Socket.IO already connected');
         return;
       }
 
@@ -67,82 +69,86 @@ function ChatsPage() {
         });
 
         socketRef.current.on('connect', () => {
-          console.log('Chats Page: Socket.IO connected');
+          console.log('Agent Chats Page: Socket.IO connected');
           // Join tenant-wide room for real-time updates
           if (user && user._id) {
             const tenantId = user._id || user.id;
             socketRef.current.emit('join:tenant', tenantId);
-            console.log(`Chats Page: Joined tenant room: tenant:${tenantId}`);
+            console.log(`Agent Chats Page: Joined tenant room: tenant:${tenantId}`);
           }
         });
 
         socketRef.current.on('message:new', (data) => {
-          console.log('Chats Page: Received message:new:', data);
-          // Update messages if this is for the selected conversation
+          console.log('Agent Chats Page: Received message:new:', data);
+          
+          // Only update if this message is for the selected conversation AND from the selected agent
           if (data.conversationId === selectedConversationRef.current) {
-            setMessages(prev => {
-              // Check if message already exists
-              if (prev.find(m => m._id === data._id)) {
-                return prev;
-              }
-              return [...prev, {
-                _id: data._id,
-                sender: data.sender,
-                text: data.text,
-                createdAt: data.createdAt,
-                sources: data.sources,
-                metadata: data.metadata
-              }];
-            });
+            // Find the conversation to check if it belongs to this agent
+            const conversation = conversations.find(c => c._id === data.conversationId);
+            if (conversation && conversation.assignedAgent === agentId) {
+              setMessages(prev => {
+                // Check if message already exists
+                if (prev.find(m => m._id === data._id)) {
+                  return prev;
+                }
+                return [...prev, {
+                  _id: data._id,
+                  sender: data.sender,
+                  text: data.text,
+                  createdAt: data.createdAt,
+                  sources: data.sources,
+                  metadata: data.metadata
+                }];
+              });
 
-            // Auto-scroll to bottom after a brief delay
-            setTimeout(() => {
-              const messagesArea = document.querySelector('.messages-scroll-area');
-              if (messagesArea) {
-                messagesArea.scrollTop = messagesArea.scrollHeight;
-              }
-            }, 100);
+              // Auto-scroll to bottom after a brief delay
+              setTimeout(() => {
+                const messagesArea = document.querySelector('.messages-scroll-area');
+                if (messagesArea) {
+                  messagesArea.scrollTop = messagesArea.scrollHeight;
+                }
+              }, 100);
+            }
           }
 
-          // Update conversation list - move to top with latest activity
-          setConversations(prev => prev.map(conv =>
-            conv._id === data.conversationId
-              ? { ...conv, lastActiveAt: data.createdAt }
-              : conv
-          ).sort((a, b) => new Date(b.lastActiveAt) - new Date(a.lastActiveAt)));
-        });
-
-        socketRef.current.on('conversation:created', (conversation) => {
-          console.log('Chats Page: Received conversation:created:', conversation);
-          setConversations(prev => {
-            const exists = prev.some(c => c._id === conversation._id);
-            if (exists) return prev;
-            return [conversation, ...prev];
-          });
+          // Update conversation list - only for this agent's conversations
+          const conversation = conversations.find(c => c._id === data.conversationId);
+          if (conversation && conversation.assignedAgent === agentId) {
+            setConversations(prev => prev.map(conv =>
+              conv._id === data.conversationId
+                ? { ...conv, lastActiveAt: data.createdAt }
+                : conv
+            ).sort((a, b) => new Date(b.lastActiveAt) - new Date(a.lastActiveAt)));
+          }
         });
 
         socketRef.current.on('conversation:closed', (data) => {
-          console.log('Chats Page: Received conversation:closed:', data);
+          console.log('Agent Chats Page: Received conversation:closed:', data);
           const conversationId = data.conversationId || data._id;
-          setConversations(prev =>
-            prev.map(c =>
-              c._id === conversationId
-                ? { ...c, status: 'closed' }
-                : c
-            )
-          );
-          if (selectedConversationRef.current === conversationId) {
-            setSelectedConversationId(null);
-            setMessages([]);
+          
+          // Only update if this conversation belongs to this agent
+          const conversation = conversations.find(c => c._id === conversationId);
+          if (conversation && conversation.assignedAgent === agentId) {
+            setConversations(prev =>
+              prev.map(c =>
+                c._id === conversationId
+                  ? { ...c, status: 'closed' }
+                  : c
+              )
+            );
+            if (selectedConversationRef.current === conversationId) {
+              setSelectedConversationId(null);
+              setMessages([]);
+            }
           }
         });
 
         socketRef.current.on('connect_error', (error) => {
-          console.error('Chats Page: Socket.IO connection error:', error);
+          console.error('Agent Chats Page: Socket.IO connection error:', error);
         });
 
       } catch (error) {
-        console.error('Chats Page: Failed to initialize Socket.IO:', error);
+        console.error('Agent Chats Page: Failed to initialize Socket.IO:', error);
       }
     };
 
@@ -151,27 +157,27 @@ function ChatsPage() {
     // Cleanup on unmount
     return () => {
       if (socketRef.current) {
-        console.log('Chats Page: Disconnecting Socket.IO');
+        console.log('Agent Chats Page: Disconnecting Socket.IO');
         socketRef.current.disconnect();
         socketRef.current = null;
       }
     };
-  }, [token, user]);
+  }, [token, user, agentId, conversations]);
 
   // Update selected conversation ref
   useEffect(() => {
     selectedConversationRef.current = selectedConversationId;
   }, [selectedConversationId]);
 
-  // Fetch conversations for the tenant
+  // Fetch conversations for this specific agent
   const fetchConversations = useCallback(async () => {
-    if (!token || !user) return;
+    if (!token || !user || !agentId) return;
 
     setConversationsLoading(true);
     setConversationsError('');
 
     try {
-      const response = await apiRequest('/user/conversations', {
+      const response = await apiRequest(`/user/agents/${agentId}/conversations`, {
         method: 'GET',
         token
       });
@@ -183,15 +189,10 @@ function ChatsPage() {
         );
         setConversations(sorted);
 
-        // Fetch bot and agent details
+        // Fetch bot details
         const botIds = [...new Set(sorted.map(c => c.botId).filter(Boolean))];
-        const agentIds = [...new Set(sorted.map(c => c.assignedAgent || c.agentId).filter(Boolean))];
-
         if (botIds.length > 0) {
           await fetchBotDetails(botIds);
-        }
-        if (agentIds.length > 0) {
-          await fetchAgentDetails(agentIds);
         }
       }
     } catch (error) {
@@ -200,9 +201,9 @@ function ChatsPage() {
     } finally {
       setConversationsLoading(false);
     }
-  }, [token, user]);
+  }, [token, user, agentId]);
 
-  // Fetch bot details for conversation list display
+  // Fetch bot details
   const fetchBotDetails = async (botIds) => {
     const botMap = {};
     for (const botId of botIds) {
@@ -218,24 +219,6 @@ function ChatsPage() {
       }
     }
     setBots(botMap);
-  };
-
-  // Fetch agent details (names of assigned agents)
-  const fetchAgentDetails = async (agentIds) => {
-    const agentMap = {};
-    for (const agentId of agentIds) {
-      try {
-        const response = await apiRequest(`/agent/${agentId}`, {
-          method: 'GET',
-          token
-        });
-        agentMap[agentId] = response.agent?.username || response.agent?.name || 'Unknown Agent';
-      } catch (error) {
-        console.error(`Failed to fetch agent ${agentId}:`, error);
-        agentMap[agentId] = 'Unknown Agent';
-      }
-    }
-    setAgents(agentMap);
   };
 
   // Fetch messages for selected conversation
@@ -346,12 +329,6 @@ function ChatsPage() {
     return bot ? (bot.websiteUrl || bot.name || 'Unknown Website') : 'Loading...';
   };
 
-  // Get agent name
-  const getAgentName = (agentId) => {
-    if (!agentId) return null;
-    return agents[agentId] || 'Loading...';
-  };
-
   const selectedConversation = conversations.find(c => c._id === selectedConversationId);
 
   if (conversationsLoading && conversations.length === 0) {
@@ -368,10 +345,18 @@ function ChatsPage() {
       {/* Left Panel - Conversations List */}
       <div className="chats-left-panel">
         <div className="chats-header">
-          <h2 className="chats-title">Conversations</h2>
+          <h2 className="chats-title">Agent Chats</h2>
           <p className="chats-subtitle">
             {conversations.length} conversation{conversations.length !== 1 ? 's' : ''}
           </p>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => navigate('/agents')}
+            style={{ marginTop: '10px', fontSize: '0.85rem' }}
+          >
+            ← Back to Agents
+          </button>
         </div>
 
         <div className="chats-list">
@@ -382,7 +367,7 @@ function ChatsPage() {
           {conversations.length === 0 && !conversationsError && (
             <div className="empty-state">
               <p className="empty-icon">💬</p>
-              <p className="empty-text">No conversations yet</p>
+              <p className="empty-text">No conversations for this agent</p>
             </div>
           )}
 
@@ -397,18 +382,12 @@ function ChatsPage() {
               <div className="conversation-info">
                 <div className="conversation-header">
                   <h3 className="conversation-agent">
-                    {conversation.assignedAgent || conversation.agentId
-                      ? `Agent: ${getAgentName(conversation.assignedAgent || conversation.agentId)}`
-                      : 'Unassigned'}
+                    {conversation.sessionId || `Session ${conversation._id?.slice(-4)}`}
                   </h3>
                   <span className="conversation-time">
                     {formatTime(conversation.lastActiveAt)}
                   </span>
                 </div>
-
-                <p className="conversation-session">
-                  {conversation.sessionId || `Session ${conversation._id?.slice(-4)}`}
-                </p>
 
                 <div className="conversation-footer">
                   <span className="conversation-bot">
@@ -437,9 +416,7 @@ function ChatsPage() {
                 {selectedConversation && (
                   <>
                     <h3 className="messages-title">
-                      {selectedConversation.assignedAgent || selectedConversation.agentId
-                        ? `Agent: ${getAgentName(selectedConversation.assignedAgent || selectedConversation.agentId)}`
-                        : 'Unassigned'}
+                      {selectedConversation.sessionId || `Session ${selectedConversation._id?.slice(-4)}`}
                     </h3>
                     <p className="messages-subtitle">
                       {getBotName(selectedConversation.botId)}
@@ -508,4 +485,4 @@ function ChatsPage() {
   );
 }
 
-export default ChatsPage;
+export default AgentChatsPage;

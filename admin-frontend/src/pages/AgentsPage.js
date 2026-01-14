@@ -267,6 +267,7 @@ function AgentsPage() {
                   <th>Status</th>
                   <th>Active</th>
                   <th>Created</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -303,6 +304,16 @@ function AgentsPage() {
                       </td>
                       <td style={{ fontSize: "0.85rem" }}>
                         {formatDate(agent.createdAt)}
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="auth-btn auth-btn--primary"
+                          onClick={() => navigate(`/agents/${agentId}/chats`)}
+                          style={{ padding: "0.5rem 1rem", fontSize: "0.85rem" }}
+                        >
+                          💬 Chats
+                        </button>
                       </td>
                     </tr>
                   );

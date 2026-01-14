@@ -47,4 +47,13 @@ router.get('/conversations', auth, userLimiter, userController.getConversations)
  */
 router.get('/conversations/:conversationId/messages', auth, userLimiter, userController.getConversationMessages);
 
+/**
+ * @route   GET /api/user/agents/:agentId/conversations
+ * @desc    Get all conversations for a specific agent (per-agent supervisor view)
+ * @access  Protected (requires JWT)
+ * @param   agentId - The agent ID
+ * @returns { success: boolean, conversations: Array }
+ */
+router.get('/agents/:agentId/conversations', auth, userLimiter, userController.getAgentConversations);
+
 module.exports = router;

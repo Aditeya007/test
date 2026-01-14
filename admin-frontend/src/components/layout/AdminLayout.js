@@ -96,13 +96,6 @@ function AdminLayout({ children }) {
       path: "/agents",
       userOnly: true, // Only show for regular users, not admins
     },
-    {
-      id: "chats",
-      label: "Chats",
-      icon: "💬",
-      path: "/chats",
-      userOnly: true, // Only show for regular users, not admins
-    },
   ];
 
   const isAdmin = user?.role === "admin";
