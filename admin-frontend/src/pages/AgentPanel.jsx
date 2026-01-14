@@ -625,28 +625,12 @@ function AgentPanel() {
         </div>
 
         <nav className="sidebar-nav">
-          <div className="nav-item" onClick={() => alert('Dashboard navigation not implemented yet')}>
-            <span className="nav-icon">📊</span>
-            <span className="nav-text">Dashboard</span>
-          </div>
           <div className="nav-item active">
             <span className="nav-icon">💬</span>
             <span className="nav-text">Chat</span>
           </div>
           <div className="nav-subitem" onClick={() => setFilterStatus('assigned')}>My Open Chats</div>
           <div className="nav-subitem" onClick={() => setFilterStatus('completed')}>Completed Chats</div>
-          <div className="nav-item" onClick={() => alert('Users navigation not implemented yet')}>
-            <span className="nav-icon">👥</span>
-            <span className="nav-text">Users</span>
-          </div>
-          <div className="nav-item" onClick={() => alert('Site Settings navigation not implemented yet')}>
-            <span className="nav-icon">⚙️</span>
-            <span className="nav-text">Site Settings</span>
-          </div>
-          <div className="nav-item" onClick={() => alert('View Logs navigation not implemented yet')}>
-            <span className="nav-icon">📜</span>
-            <span className="nav-text">View Logs</span>
-          </div>
         </nav>
 
         <div className="sidebar-footer">

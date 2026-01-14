@@ -366,7 +366,7 @@
             autocomplete="off"
           />
           <button id="rag-widget-send" class="rag-widget-send-btn">Send</button>
-          <button id="rag-widget-request-agent" class="rag-widget-request-agent-btn">Talk to Human</button>
+          <button id="rag-widget-request-agent" class="rag-widget-request-agent-btn">Live Agent</button>
         </div>
       </div>
     `;
@@ -591,19 +591,25 @@
       }
 
       .rag-widget-request-agent-btn {
-        padding: 0.8em 1.2em;
-        background: #28a745;
+        padding: 0.5em 0.9em;
+        background: #FF8307; /* match widget primary button color */
         color: white;
         border: none;
         border-radius: 8px;
         font-weight: 600;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: all 0.15s ease;
         white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .rag-widget-request-agent-btn:hover:not(:disabled) {
-        background: #218838;
+        background: #e67506;
         transform: translateY(-1px);
       }
 
@@ -772,7 +778,7 @@
           // Re-enable button on offline
           if (requestAgentBtn) {
             requestAgentBtn.disabled = false;
-            requestAgentBtn.textContent = 'Talk to Human';
+            requestAgentBtn.textContent = 'Live Agent';
           }
           return;
         }
@@ -784,14 +790,14 @@
         }
 
         if (data.state === 'available') {
-          addMessage('Connecting you to a human agent…', 'bot');
+          addMessage('Connecting you to a human agent...', 'bot');
           // Keep button disabled
           return;
         }
 
         // Fallback for old response format
         if (data.success) {
-          addMessage('Connecting you to a human agent... Please wait.', 'bot');
+          addMessage('Connecting you to a human agent...', 'bot');
           // Keep button disabled
           return;
         }
@@ -802,7 +808,7 @@
       // Re-enable button on error
       if (requestAgentBtn) {
         requestAgentBtn.disabled = false;
-        requestAgentBtn.textContent = 'Talk to Human';
+        requestAgentBtn.textContent = 'Live Agent';
       }
     } catch (err) {
       console.error('RAG Widget: Error requesting agent:', err);
@@ -810,7 +816,7 @@
       // Re-enable button on error
       if (requestAgentBtn) {
         requestAgentBtn.disabled = false;
-        requestAgentBtn.textContent = 'Talk to Human';
+        requestAgentBtn.textContent = 'Live Agent';
       }
     }
   }
