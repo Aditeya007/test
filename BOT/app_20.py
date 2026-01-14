@@ -1463,12 +1463,14 @@ ANSWER (be concise and factual):"""
             # Rerank the aggregated results
             print("🎯 Reranking aggregated documents...")
             reranked_docs = self.smart_rerank_candidates(normalized_query, all_docs, topn=40) 
+            
+            # Backend-only RAG observability: log top chunks sent to LLM
             print(f"\n{'='*80}")
-            print(f"DEBUG - DOCUMENTS BEING SENT TO LLM:")
+            print(f"RAG RETRIEVAL — TOP CHUNKS USED FOR ANSWER")
             print(f"{'='*80}")
-            for i, doc in enumerate(reranked_docs[:5]):  
-                print(f"\nDOC {i+1} (length: {len(doc)} chars):")
-                print(f"{doc[:300]}...")  # First 300 characters
+            for i, doc in enumerate(reranked_docs[:2]):  # Only top 1-2 chunks
+                chunk_preview = doc[:400].replace('\n', ' ').replace('\r', '')
+                print(f"Chunk {i+1}: {len(doc)} chars | {chunk_preview}...")
             print(f"{'='*80}\n")
 
             # Generate answer with improved configuration
