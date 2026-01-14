@@ -1,6 +1,7 @@
 // src/pages/AgentPanel.jsx
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../api';
 import Loader from '../components/Loader';
@@ -26,6 +27,7 @@ function decodeToken(token) {
 
 function AgentPanel() {
   const { user, logout: authLogout } = useAuth();
+  const navigate = useNavigate();
   // Read agent token from localStorage (stored by AgentLoginPage)
   const agentToken = localStorage.getItem('agentToken');
   
@@ -66,6 +68,9 @@ function AgentPanel() {
 
   // Filter state
   const [filterStatus, setFilterStatus] = useState('queued'); // 'queued', 'assigned', 'completed'
+
+  // Sidebar collapsed state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Socket.IO ref
   const socketRef = useRef(null);
@@ -633,7 +638,7 @@ function AgentPanel() {
   return (
     <div className="agent-panel-layout">
       {/* Sidebar */}
-      <aside className="agent-sidebar">
+      <aside className={`agent-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
           <h2 className="sidebar-logo">Agent Panel</h2>
         </div>
@@ -658,6 +663,15 @@ function AgentPanel() {
         {/* Top Header */}
         <header className="agent-header">
           <div className="header-left">
+            <button
+              className="sidebar-toggle"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              type="button"
+              aria-label="Toggle sidebar menu"
+              title={sidebarCollapsed ? "Open sidebar" : "Close sidebar"}
+            >
+              {sidebarCollapsed ? "☰" : "✕"}
+            </button>
             <h2 className="page-title">Ongoing Chats</h2>
           </div>
           <div className="header-right">
@@ -674,7 +688,7 @@ function AgentPanel() {
               <span className="user-badge badge-agent">AGENT</span>
               <button
                 className="profile-icon-btn"
-                onClick={() => alert('Profile not implemented yet')}
+                onClick={() => navigate("/profile")}
                 title="View Profile"
                 aria-label="View Profile"
               >
@@ -711,6 +725,12 @@ function AgentPanel() {
           </button>
         </div>
         
+        {conversationsLoading && (
+          <div className="chat-list-loading">
+            <Loader message="Loading conversations..." />
+          </div>
+        )}
+
         {conversationsError && (
           <div className="chat-list-error">
             <p>{conversationsError}</p>
@@ -724,7 +744,9 @@ function AgentPanel() {
               // Queue Tab
               queuedConversations.length === 0 ? (
                 <div className="chat-list-empty">
+                  <div className="empty-state-icon">💬</div>
                   <p>No conversations in queue</p>
+                  <span className="empty-state-subtitle">New conversations will appear here</span>
                 </div>
               ) : (
                 queuedConversations.map((conv) => (
@@ -755,7 +777,9 @@ function AgentPanel() {
               // Completed Chats Tab
               completedConversations.length === 0 ? (
                 <div className="chat-list-empty">
+                  <div className="empty-state-icon">✅</div>
                   <p>No completed conversations</p>
+                  <span className="empty-state-subtitle">Completed chats will appear here</span>
                 </div>
               ) : (
                 completedConversations.map((conv) => (
@@ -779,7 +803,9 @@ function AgentPanel() {
               // All / My Chats Tab
               filteredConversations.length === 0 ? (
                 <div className="chat-list-empty">
-                  <p>No conversations matching filter</p>
+                  <div className="empty-state-icon">💬</div>
+                  <p>No active conversations</p>
+                  <span className="empty-state-subtitle">Your assigned chats will appear here</span>
                 </div>
               ) : (
                 filteredConversations.map((conv) => (
