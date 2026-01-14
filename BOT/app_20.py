@@ -1363,38 +1363,24 @@ ANSWER (be concise and factual):"""
             # deterministic URL-level rerank and return a single page (title + URL).
             if self.is_location_query(question):
                 try:
-                    print("🔍 Location query detected — running Gemini intent classification and URL-level rerank (fast path)...")
+                    print("🔍 Location query detected — running semantic page-level URL resolver (fast path)...")
 
-                    # 1) Use Gemini to classify intent into ABOUT, CONTACT, PRICING, SERVICES, UNKNOWN
+                    # 1) Compute question embedding using the same embedding model
+                    qa = self.analyze_question_semantically(question)
+                    q_emb = qa.get('question_embedding')
+
+                    # 2) Query Chroma for 40-50 relevant chunks using the question embedding
                     try:
-                        cls_prompt = (
-                            "Classify the user's intent into one of: ABOUT, CONTACT, PRICING, SERVICES, UNKNOWN. "
-                            "Return ONLY the label (one of ABOUT, CONTACT, PRICING, SERVICES, UNKNOWN) and nothing else.\n\n"
-                            f"User question: {question}\n\nLabel:"
-                        )
-                        gen_cfg = genai.types.GenerationConfig(temperature=0.0, max_output_tokens=8)
-                        cls_resp = self.model.generate_content(cls_prompt, generation_config=gen_cfg)
-                        intent_label = (cls_resp.text or "").strip().upper()
-                        if intent_label not in {"ABOUT", "CONTACT", "PRICING", "SERVICES", "UNKNOWN"}:
-                            intent_label = "UNKNOWN"
-                    except Exception as e:
-                        print(f"⚠️ Gemini intent classification failed: {e}; defaulting to UNKNOWN")
-                        intent_label = "UNKNOWN"
-
-                    print(f"🔎 Classified intent: {intent_label}")
-
-                    # 2) Query Chroma for up to 50 related chunks
-                    try:
-                        results_quick = self.collection.query(query_texts=[question], n_results=50)
+                        results_quick = self.collection.query(query_embeddings=[q_emb.tolist()], n_results=50)
                     except Exception:
-                        qa = self.analyze_question_semantically(question)
-                        results_quick = self.collection.query(query_embeddings=[qa['question_embedding'].tolist()], n_results=50)
+                        # Fallback to a text query if embedding-driven query fails
+                        results_quick = self.collection.query(query_texts=[question], n_results=50)
 
                     docs = results_quick.get('documents', [[]])[0]
                     metadatas = results_quick.get('metadatas', [[]])[0]
 
-                    # 3) Group by URL and compute scores
-                    url_scores = {}
+                    # 3) Group chunks by page-level URL and combine into a single page document
+                    pages = {}
                     for doc, md in zip(docs, metadatas):
                         if not md or not isinstance(md, dict):
                             continue
@@ -1402,75 +1388,76 @@ ANSWER (be concise and factual):"""
                         if not url:
                             continue
                         url = url.strip()
-                        if url == "":
+                        if not url:
                             continue
-                        entry = url_scores.get(url)
+                        title = md.get('page_title') or md.get('title') or md.get('page') or md.get('domain') or url
+                        entry = pages.get(url)
                         if entry is None:
-                            title = md.get('page_title') or md.get('title') or md.get('page') or md.get('domain') or url
-                            entry = {'score': 0, 'title': title, 'url': url}
-                            url_scores[url] = entry
+                            pages[url] = {'title': title, 'chunks': []}
+                            entry = pages[url]
 
-                        # Build chunk text for semantic checks
-                        chunk_text = ''
-                        if isinstance(doc, str):
-                            chunk_text += ' ' + doc.lower()
+                        # Add chunk text and title metadata to the page document
+                        if isinstance(doc, str) and doc.strip():
+                            entry['chunks'].append(doc.strip())
                         if md.get('page_title'):
-                            chunk_text += ' ' + str(md.get('page_title')).lower()
+                            entry['chunks'].append(str(md.get('page_title')).strip())
                         if md.get('title'):
-                            chunk_text += ' ' + str(md.get('title')).lower()
+                            entry['chunks'].append(str(md.get('title')).strip())
 
-                        # Intent-specific positive signals (simple substring boosts on chunks)
-                        if intent_label == 'CONTACT':
-                            signals = ['phone', 'email', 'support', 'reach', 'call', 'whatsapp']
-                        elif intent_label == 'ABOUT':
-                            signals = ['who we are', 'mission', 'company', 'our story', 'about']
-                        elif intent_label == 'PRICING':
-                            signals = ['pricing', 'price', 'cost', 'plan', 'quote']
-                        elif intent_label == 'SERVICES':
-                            signals = ['service', 'services', 'offering', 'offerings', 'solution', 'solutions']
-                        else:
-                            signals = []
+                    if not pages:
+                        print("⚠️ No URL candidates found for location query")
+                        return "I couldn't find a relevant page for that request."
 
-                        for s in signals:
-                            if s in chunk_text:
-                                entry['score'] += 2
+                    # 4) For each page, compute a page-level embedding and cosine similarity to the question
+                    import math
 
-                        # Apply URL-based penalties
-                        low_url = url.lower()
-                        if '/blog' in low_url:
-                            entry['score'] -= 5
-                        if '/category' in low_url:
-                            entry['score'] -= 5
-                        if '/tag' in low_url:
-                            entry['score'] -= 5
-                        # Also punish obvious policy pages
-                        if any(p in low_url for p in ['/privacy', '/terms', '/cookie', '/policy']):
-                            entry['score'] -= 10
+                    def cosine_sim(a, b):
+                        # ensure iterable
+                        try:
+                            ax = list(a)
+                            bx = list(b)
+                        except Exception:
+                            return -1.0
+                        if not ax or not bx:
+                            return -1.0
+                        dot = sum(x * y for x, y in zip(ax, bx))
+                        norm_a = math.sqrt(sum(x * x for x in ax))
+                        norm_b = math.sqrt(sum(y * y for y in bx))
+                        if norm_a == 0 or norm_b == 0:
+                            return -1.0
+                        return dot / (norm_a * norm_b)
 
-                    # 4) Choose the top URL but avoid blog/category/tag/policy pages when possible
-                    if url_scores:
-                        # Sort by score desc, then by URL lexicographically for determinism
-                        sorted_urls = sorted(url_scores.items(), key=lambda kv: (-kv[1]['score'], kv[0]))
-                        chosen = None
-                        for url, entry in sorted_urls:
-                            low = url.lower()
-                            if any(x in low for x in ['/blog', '/category', '/tag', '/privacy', '/terms', '/cookie', '/policy']):
-                                continue
-                            chosen = entry
-                            break
+                    best = None
+                    best_score = -1.0
 
-                        if chosen is None:
-                            # No non-penalized candidate found — do not return blog or policy pages for navigation requests
-                            print("⚠️ No suitable non-blog/non-policy URL found for location query")
-                            return "I couldn't find a suitable page link for that request."
+                    for url, info in pages.items():
+                        page_text = " \n ".join(info['chunks'])
+                        # Compute page embedding using the same embedding model
+                        try:
+                            p_emb = self.embedding_model.encode(page_text)
+                        except Exception:
+                            # Fallback to encoding first chunk if full page encoding fails
+                            first_chunk = info['chunks'][0] if info['chunks'] else page_text
+                            p_emb = self.embedding_model.encode(first_chunk)
 
-                        formatted = f"{chosen.get('title')}\n{chosen.get('url')}"
-                        print(f"✅ Location fast-path selected: {chosen.get('url')} (score={chosen.get('score')})")
-                        return formatted
-                    else:
-                        print("⚠️ Location fast-path found no URL candidates; falling back to normal flow")
+                        sim = cosine_sim(q_emb, p_emb)
+
+                        # Deterministic tie-breaker: higher similarity, then lexicographically smaller URL
+                        if sim > best_score or (abs(sim - best_score) < 1e-12 and (best is None or url < best['url'])):
+                            best_score = sim
+                            best = {'url': url, 'title': info['title'], 'score': sim}
+
+                    # 5) Require a reasonably strong semantic match to return a page
+                    PAGE_SIMILARITY_THRESHOLD = 0.70
+                    if best is None or best_score < PAGE_SIMILARITY_THRESHOLD:
+                        print(f"🔎 Best page similarity {best_score} below threshold {PAGE_SIMILARITY_THRESHOLD}")
+                        return "I couldn't find a relevant page for that request."
+
+                    formatted = f"{best['title']}\n{best['url']}"
+                    print(f"✅ Location fast-path selected: {best['url']} (score={best['score']})")
+                    return formatted
                 except Exception as e:
-                    print(f"⚠️ Location rerank failed: {e}; falling back to normal flow")
+                    print(f"⚠️ Location resolver failed: {e}; falling back to normal flow")
 
             # ============================================================================
             # PRIORITY 1: Name collection (separate flow)
