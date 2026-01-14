@@ -410,6 +410,48 @@ exports.getBots = async (req, res) => {
 };
 
 /**
+ * Get a single bot by ID
+ * @route   GET /api/bot/:botId
+ * @access  Protected (requires JWT or agent token)
+ * @returns {Object} { bot: Object } - The bot details
+ */
+exports.getBot = async (req, res) => {
+  try {
+    const { botId } = req.params;
+
+    // Find bot by ID
+    const bot = await Bot.findById(botId);
+
+    if (!bot) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bot not found'
+      });
+    }
+
+    // Transform bot to include id field
+    const botObj = bot.toObject({ versionKey: false });
+    const botWithId = {
+      ...botObj,
+      id: botObj._id
+    };
+
+    res.json({ 
+      bot: botWithId
+    });
+  } catch (err) {
+    console.error('❌ Error fetching bot:', {
+      message: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch bot'
+    });
+  }
+};
+
+/**
  * Create a new bot for the current user
  * @route   POST /api/bot
  * @access  Protected (requires JWT)

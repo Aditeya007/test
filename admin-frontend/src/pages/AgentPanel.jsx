@@ -386,10 +386,22 @@ function AgentPanel() {
     
     try {
       const data = await agentApiRequest('/agent/conversations', { method: 'GET' });
-      setConversations(data.conversations || data || []);
+      const allConversations = data.conversations || data || [];
+      
+      // Separate conversations by status
+      const queued = allConversations.filter(c => c.status === 'waiting' || c.status === 'queued');
+      const assigned = allConversations.filter(c => 
+        (c.status === 'assigned' || c.status === 'active') && 
+        (c.assignedAgent === agentId || c.agentId === agentId)
+      );
+      const closed = allConversations.filter(c => c.status === 'closed');
+      
+      setConversations(assigned);
+      setQueuedConversations(queued);
+      setCompletedConversations(closed);
       
       // Extract unique bot IDs and fetch bot details
-      const botIds = [...new Set((data.conversations || data || []).map(c => c.botId).filter(Boolean))];
+      const botIds = [...new Set(allConversations.map(c => c.botId).filter(Boolean))];
       await fetchBotDetails(botIds);
     } catch (error) {
       console.error('Failed to fetch conversations:', error);
@@ -397,14 +409,14 @@ function AgentPanel() {
     } finally {
       setConversationsLoading(false);
     }
-  }, [agentToken]);
+  }, [agentToken, agentId]);
 
   const fetchBotDetails = async (botIds) => {
     const botMap = {};
     
     for (const botId of botIds) {
       try {
-        const botData = await agentApiRequest(`/bots/${botId}`, { method: 'GET' });
+        const botData = await agentApiRequest(`/bot/${botId}`, { method: 'GET' });
         botMap[botId] = botData.bot || botData;
       } catch (error) {
         console.error(`Failed to fetch bot ${botId}:`, error);

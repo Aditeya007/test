@@ -1363,8 +1363,27 @@ ANSWER (be concise and factual):"""
             # deterministic URL-level rerank and return a single page (title + URL).
             if self.is_location_query(question):
                 try:
-                    print("🔍 Location query detected — running URL-level rerank (fast path)...")
-                    # Query Chroma for up to 50 candidate chunks
+                    print("🔍 Location query detected — running Gemini intent classification and URL-level rerank (fast path)...")
+
+                    # 1) Use Gemini to classify intent into ABOUT, CONTACT, PRICING, SERVICES, UNKNOWN
+                    try:
+                        cls_prompt = (
+                            "Classify the user's intent into one of: ABOUT, CONTACT, PRICING, SERVICES, UNKNOWN. "
+                            "Return ONLY the label (one of ABOUT, CONTACT, PRICING, SERVICES, UNKNOWN) and nothing else.\n\n"
+                            f"User question: {question}\n\nLabel:"
+                        )
+                        gen_cfg = genai.types.GenerationConfig(temperature=0.0, max_output_tokens=8)
+                        cls_resp = self.model.generate_content(cls_prompt, generation_config=gen_cfg)
+                        intent_label = (cls_resp.text or "").strip().upper()
+                        if intent_label not in {"ABOUT", "CONTACT", "PRICING", "SERVICES", "UNKNOWN"}:
+                            intent_label = "UNKNOWN"
+                    except Exception as e:
+                        print(f"⚠️ Gemini intent classification failed: {e}; defaulting to UNKNOWN")
+                        intent_label = "UNKNOWN"
+
+                    print(f"🔎 Classified intent: {intent_label}")
+
+                    # 2) Query Chroma for up to 50 related chunks
                     try:
                         results_quick = self.collection.query(query_texts=[question], n_results=50)
                     except Exception:
@@ -1374,7 +1393,7 @@ ANSWER (be concise and factual):"""
                     docs = results_quick.get('documents', [[]])[0]
                     metadatas = results_quick.get('metadatas', [[]])[0]
 
-                    # Group by URL and score each URL based on chunk content and URL patterns
+                    # 3) Group by URL and compute scores
                     url_scores = {}
                     for doc, md in zip(docs, metadatas):
                         if not md or not isinstance(md, dict):
@@ -1383,28 +1402,40 @@ ANSWER (be concise and factual):"""
                         if not url:
                             continue
                         url = url.strip()
+                        if url == "":
+                            continue
                         entry = url_scores.get(url)
                         if entry is None:
                             title = md.get('page_title') or md.get('title') or md.get('page') or md.get('domain') or url
                             entry = {'score': 0, 'title': title, 'url': url}
                             url_scores[url] = entry
 
-                        # Prepare text to check for positive signals
-                        check_text_parts = []
+                        # Build chunk text for semantic checks
+                        chunk_text = ''
                         if isinstance(doc, str):
-                            check_text_parts.append(doc.lower())
+                            chunk_text += ' ' + doc.lower()
                         if md.get('page_title'):
-                            check_text_parts.append(str(md.get('page_title')).lower())
+                            chunk_text += ' ' + str(md.get('page_title')).lower()
                         if md.get('title'):
-                            check_text_parts.append(str(md.get('title')).lower())
-                        check_text = " ".join(check_text_parts)
+                            chunk_text += ' ' + str(md.get('title')).lower()
 
-                        # Positive signals
-                        for term in ["about", "who we are", "company", "our story", "mission"]:
-                            if term in check_text:
+                        # Intent-specific positive signals (simple substring boosts on chunks)
+                        if intent_label == 'CONTACT':
+                            signals = ['phone', 'email', 'support', 'reach', 'call', 'whatsapp']
+                        elif intent_label == 'ABOUT':
+                            signals = ['who we are', 'mission', 'company', 'our story', 'about']
+                        elif intent_label == 'PRICING':
+                            signals = ['pricing', 'price', 'cost', 'plan', 'quote']
+                        elif intent_label == 'SERVICES':
+                            signals = ['service', 'services', 'offering', 'offerings', 'solution', 'solutions']
+                        else:
+                            signals = []
+
+                        for s in signals:
+                            if s in chunk_text:
                                 entry['score'] += 2
 
-                        # Negative signals based on URL path
+                        # Apply URL-based penalties
                         low_url = url.lower()
                         if '/blog' in low_url:
                             entry['score'] -= 5
@@ -1412,12 +1443,29 @@ ANSWER (be concise and factual):"""
                             entry['score'] -= 5
                         if '/tag' in low_url:
                             entry['score'] -= 5
+                        # Also punish obvious policy pages
+                        if any(p in low_url for p in ['/privacy', '/terms', '/cookie', '/policy']):
+                            entry['score'] -= 10
 
+                    # 4) Choose the top URL but avoid blog/category/tag/policy pages when possible
                     if url_scores:
-                        # Deterministic selection: highest score, tie-breaker by URL string
-                        best_url, best_entry = sorted(url_scores.items(), key=lambda kv: (-kv[1]['score'], kv[0]))[0]
-                        formatted = f"{best_entry.get('title')}\n{best_entry.get('url')}"
-                        print(f"✅ Location fast-path selected: {best_entry.get('url')} (score={best_entry.get('score')})")
+                        # Sort by score desc, then by URL lexicographically for determinism
+                        sorted_urls = sorted(url_scores.items(), key=lambda kv: (-kv[1]['score'], kv[0]))
+                        chosen = None
+                        for url, entry in sorted_urls:
+                            low = url.lower()
+                            if any(x in low for x in ['/blog', '/category', '/tag', '/privacy', '/terms', '/cookie', '/policy']):
+                                continue
+                            chosen = entry
+                            break
+
+                        if chosen is None:
+                            # No non-penalized candidate found — do not return blog or policy pages for navigation requests
+                            print("⚠️ No suitable non-blog/non-policy URL found for location query")
+                            return "I couldn't find a suitable page link for that request."
+
+                        formatted = f"{chosen.get('title')}\n{chosen.get('url')}"
+                        print(f"✅ Location fast-path selected: {chosen.get('url')} (score={chosen.get('score')})")
                         return formatted
                     else:
                         print("⚠️ Location fast-path found no URL candidates; falling back to normal flow")
