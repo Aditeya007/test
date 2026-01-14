@@ -553,13 +553,12 @@ function AgentPanel() {
   };
 
   const handleCloseChat = async (conversationId) => {
-    if (!confirm('Are you sure you want to close this conversation?')) return;
-    
+    // Close immediately without browser confirmation
     try {
       await agentApiRequest(`/agent/conversations/${conversationId}/close`, {
         method: 'POST'
       });
-      
+
       // Refresh conversations and clear selection if this was selected
       await fetchConversations();
       if (selectedConversationId === conversationId) {
