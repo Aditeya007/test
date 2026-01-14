@@ -5,6 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../api';
 import Loader from '../components/Loader';
+import AgentForm from '../components/AgentForm';
 import '../styles/index.css';
 
 function AgentsPage() {
@@ -16,6 +17,10 @@ function AgentsPage() {
   const [error, setError] = useState('');
   const [maxAgents, setMaxAgents] = useState(0);
   const [viewingUser, setViewingUser] = useState(null);
+  const [addAgentModalOpen, setAddAgentModalOpen] = useState(false);
+  const [addAgentLoading, setAddAgentLoading] = useState(false);
+  const [addAgentError, setAddAgentError] = useState('');
+  const [addAgentSuccess, setAddAgentSuccess] = useState('');
 
   const isAdmin = user?.role === 'admin';
   const targetUserId = userId || user?.id || user?._id;
@@ -101,6 +106,33 @@ function AgentsPage() {
     return <span className={`status-badge ${statusInfo.class}`}>{statusInfo.label}</span>;
   };
 
+  const handleCreateAgent = async (formData) => {
+    setAddAgentLoading(true);
+    setAddAgentError('');
+    setAddAgentSuccess('');
+
+    try {
+      await apiRequest('/agent/create', {
+        method: 'POST',
+        token,
+        data: formData
+      });
+      
+      setAddAgentSuccess('Agent created successfully!');
+      setAddAgentModalOpen(false);
+      
+      // Refetch agents
+      await fetchAgents();
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setAddAgentSuccess(''), 3000);
+    } catch (err) {
+      setAddAgentError(err.message || 'Failed to create agent');
+    } finally {
+      setAddAgentLoading(false);
+    }
+  };
+
   if (loading) {
     return <Loader message="Loading agents..." />;
   }
@@ -118,6 +150,16 @@ function AgentsPage() {
             </p>
           </div>
           <div className="admin-users-header-controls">
+            {/* Create Agent Button - Only show for regular users (not admins viewing other users' agents) */}
+            {!isAdmin && maxAgents > 0 && agents.length < maxAgents && (
+              <button
+                type="button"
+                className="auth-btn auth-btn--success"
+                onClick={() => setAddAgentModalOpen(true)}
+              >
+                👤 Create Agent
+              </button>
+            )}
             <button
               type="button"
               className="btn-ghost"
@@ -140,6 +182,20 @@ function AgentsPage() {
       </header>
 
       {error && <div className="admin-users-error">{error}</div>}
+
+      {addAgentSuccess && (
+        <div style={{
+          padding: '0.75rem 1rem',
+          background: '#d1fae5',
+          border: '1px solid #10b981',
+          borderRadius: '6px',
+          color: '#065f46',
+          marginBottom: '1rem',
+          fontSize: '0.875rem'
+        }}>
+          {addAgentSuccess}
+        </div>
+      )}
 
       {/* Agent Capacity Info */}
       {maxAgents > 0 && (
@@ -226,6 +282,23 @@ function AgentsPage() {
           </div>
         )}
       </div>
+
+      {/* Add Agent Modal */}
+      {addAgentModalOpen && (
+        <div className="scrape-modal-overlay" role="dialog" aria-modal="true">
+          <div className="scrape-modal" style={{ maxWidth: '500px' }}>
+            <AgentForm
+              onSubmit={handleCreateAgent}
+              onClose={() => {
+                setAddAgentModalOpen(false);
+                setAddAgentError('');
+              }}
+              loading={addAgentLoading}
+              error={addAgentError}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

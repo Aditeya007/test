@@ -3,7 +3,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
-function UserTable({ users, onEdit, onDelete, onViewResources, onSelect, activeTenantId, onViewAgents }) {
+function UserTable({ users, onEdit, onDelete, onSelect, activeTenantId, onViewAgents }) {
   const navigate = useNavigate();
   if (!users || users.length === 0) {
     return (
@@ -95,14 +95,6 @@ function UserTable({ users, onEdit, onDelete, onViewResources, onSelect, activeT
                         Current
                       </span>
                     )}
-                    <button
-                      type="button"
-                      className="action-btn action-btn-info"
-                      onClick={() => onViewResources(user)}
-                      title="View resources"
-                    >
-                      Resources
-                    </button>
                     {onViewAgents && (user.maxAgents > 0) && (
                       <button
                         type="button"

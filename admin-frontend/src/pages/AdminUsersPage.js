@@ -6,7 +6,6 @@ import { useAuth } from "../context/AuthContext";
 import { apiRequest } from "../api";
 import Loader from "../components/Loader";
 import UserTable from "../components/users/UserTable";
-import UserResourcePanel from "../components/users/UserResourcePanel";
 import Pagination from "../components/Pagination";
 import "../styles/index.css";
 
@@ -18,12 +17,6 @@ function AdminUsersPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [resourceState, setResourceState] = useState({
-    data: null,
-    loading: false,
-    error: "",
-  });
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -132,14 +125,6 @@ function AdminUsersPage() {
         token,
       });
       setSuccessMessage("User deleted successfully");
-      if (
-        selectedUser &&
-        (selectedUser.id || selectedUser._id) ===
-          (userToDelete.id || userToDelete._id)
-      ) {
-        setSelectedUser(null);
-        setResourceState({ data: null, loading: false, error: "" });
-      }
       if (activeTenantId === (userToDelete.id || userToDelete._id)) {
         setActiveTenant(null);
       }
@@ -154,27 +139,6 @@ function AdminUsersPage() {
       setErrorMessage(err.message || "Failed to delete user");
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const handleViewResources = async (userRow) => {
-    setSelectedUser(userRow);
-    setResourceState({ data: null, loading: true, error: "" });
-    try {
-      const response = await apiRequest(
-        `/users/${userRow.id || userRow._id}/resources`,
-        {
-          method: "GET",
-          token,
-        }
-      );
-      setResourceState({ data: response.tenant, loading: false, error: "" });
-    } catch (err) {
-      setResourceState({
-        data: null,
-        loading: false,
-        error: err.message || "Failed to load resources",
-      });
     }
   };
 
@@ -197,7 +161,7 @@ function AdminUsersPage() {
       <header className="admin-users-header">
         <div className="admin-users-header-content">
           <div className="admin-users-header-title">
-            <h2>User Management</h2>
+            <h2 style={{ marginRight: "10px" }}>User Management</h2>
             <p>Provision and manage tenant accounts for the RAG platform.</p>
           </div>
           <div className="admin-users-header-controls">
@@ -260,7 +224,6 @@ function AdminUsersPage() {
             <UserTable
               users={users}
               onDelete={handleDeleteUser}
-              onViewResources={handleViewResources}
               onSelect={handleSelectActive}
               onViewAgents={handleViewAgents}
               activeTenantId={activeTenantId}
@@ -277,15 +240,6 @@ function AdminUsersPage() {
           </>
         )}
       </div>
-
-      <UserResourcePanel
-        user={selectedUser}
-        resourceState={resourceState}
-        onClose={() => {
-          setSelectedUser(null);
-          setResourceState({ data: null, loading: false, error: "" });
-        }}
-      />
     </div>
   );
 }

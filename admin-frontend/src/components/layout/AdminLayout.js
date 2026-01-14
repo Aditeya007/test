@@ -181,10 +181,6 @@ function AdminLayout({ children }) {
             >
               ☰
             </button>
-            <h1 className="page-title">
-              {menuItems.find((item) => item.id === activeMenuItem)?.label ||
-                "Dashboard"}
-            </h1>
           </div>
           <div className="header-right">
             <div className="user-info">
