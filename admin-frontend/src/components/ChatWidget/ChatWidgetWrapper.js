@@ -1,6 +1,6 @@
 // src/components/ChatWidget/ChatWidgetWrapper.js
 
-import React, { useRef, useEffect } from 'react';
+import React from 'react';
 import ChatWidget from './ChatWidget';
 import { useChatWidget } from '../../context/ChatWidgetContext';
 import './ChatWidgetWrapper.css';
@@ -23,60 +23,11 @@ const CloseIcon = () => (
 
 function ChatWidgetWrapper() {
   const { isWidgetActive, isWidgetOpen, selectedBotId, toggleWidget } = useChatWidget();
-  const sessionIdRef = useRef(null);
 
-  // Toggle widget visibility (no session close on toggle)
+  // Toggle widget visibility
   const handleToggleWidget = () => {
     toggleWidget();
   };
-
-  // Expose sessionId setter to ChatWidget
-  const handleSessionIdUpdate = (sessionId) => {
-    sessionIdRef.current = sessionId;
-  };
-
-  // Browser-level tab/page close detection - send lead data ONLY on tab close
-  useEffect(() => {
-    const sendSessionClose = () => {
-      if (!sessionIdRef.current || !selectedBotId) {
-        return;
-      }
-
-      const payload = {
-        session_id: sessionIdRef.current,
-        resource_id: selectedBotId
-      };
-
-      // Use absolute URL for production
-      const url = 'https://chatbot.excellisit.net/api/chat/session/close';
-
-      // sendBeacon is the most reliable for page unload
-      if (navigator.sendBeacon) {
-        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-        navigator.sendBeacon(url, blob);
-        console.log('ChatWidgetWrapper: Session close sent via sendBeacon on tab close');
-      } else {
-        // Fallback to fetch with keepalive
-        fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          keepalive: true
-        }).catch(() => {});
-        console.log('ChatWidgetWrapper: Session close sent via fetch on tab close');
-      }
-    };
-
-    // pagehide is more reliable than beforeunload, especially on mobile
-    window.addEventListener('pagehide', sendSessionClose);
-    // beforeunload for older browsers
-    window.addEventListener('beforeunload', sendSessionClose);
-
-    return () => {
-      window.removeEventListener('pagehide', sendSessionClose);
-      window.removeEventListener('beforeunload', sendSessionClose);
-    };
-  }, [selectedBotId]);
 
   // CRITICAL FIX #2: Don't render anything if widget hasn't been activated
   if (!isWidgetActive) {
@@ -96,8 +47,7 @@ function ChatWidgetWrapper() {
         {/* We pass the toggle function down so the chatbot can close itself. */}
         {hasValidBot ? (
           <ChatWidget 
-            toggleChatbot={handleToggleWidget} 
-            onSessionIdUpdate={handleSessionIdUpdate}
+            toggleChatbot={handleToggleWidget}
           />
         ) : (
           <div className="rag-chatbot-container">

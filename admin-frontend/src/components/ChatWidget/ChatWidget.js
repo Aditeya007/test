@@ -15,7 +15,7 @@ const HeaderCloseIcon = () => (
     </svg>
 );
 
-const ChatWidget = ({ toggleChatbot, onSessionIdUpdate }) => {
+const ChatWidget = ({ toggleChatbot }) => {
     const { user, activeTenant } = useAuth();
     const { execute, loading } = useApi();
     const { selectedBotId } = useChatWidget();
@@ -43,11 +43,6 @@ const ChatWidget = ({ toggleChatbot, onSessionIdUpdate }) => {
         const newSessionId = `widget_session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
         setSessionId(newSessionId);
         
-        // Notify parent wrapper of sessionId for close handling
-        if (onSessionIdUpdate) {
-            onSessionIdUpdate(newSessionId);
-        }
-        
         // CRITICAL FIX #2: Show appropriate welcome based on botId presence
         if (!selectedBotId) {
             setMessages([{
@@ -63,7 +58,7 @@ const ChatWidget = ({ toggleChatbot, onSessionIdUpdate }) => {
                 id: `welcome_${Date.now()}`
             }]);
         }
-    }, [selectedBotId, onSessionIdUpdate]);
+    }, [selectedBotId]);
 
     // Automatically scroll to the latest message
     useEffect(() => {
@@ -196,10 +191,6 @@ const ChatWidget = ({ toggleChatbot, onSessionIdUpdate }) => {
         if (result.success && result.data?.answer) {
             if (result.data.session_id) {
                 setSessionId(result.data.session_id);
-                // Update parent wrapper with new sessionId
-                if (onSessionIdUpdate) {
-                    onSessionIdUpdate(result.data.session_id);
-                }
             }
 
             // Extract and store conversationId for socket connection
