@@ -717,7 +717,8 @@ exports.addManualKnowledge = [
           
           try {
             const botServiceUrl = process.env.BOT_SERVICE_URL || 'http://127.0.0.1:8000';
-            const restartUrl = `${botServiceUrl}/restart?resource_id=${encodeURIComponent(bot.userId.toString())}`;
+            const fastApiSecret = process.env.FASTAPI_SHARED_SECRET || '';
+            const restartUrl = `${botServiceUrl}/system/restart`;
             const parsedUrl = url.parse(restartUrl);
             
             // Use http or https based on protocol
@@ -734,8 +735,14 @@ exports.addManualKnowledge = [
               port: parsedUrl.port,
               path: parsedUrl.path,
               method: 'POST',
-              timeout: 5000
+              timeout: 5000,
+              headers: {}
             };
+            
+            // Add service secret header if available
+            if (fastApiSecret && fastApiSecret.trim()) {
+              options.headers['X-Service-Secret'] = fastApiSecret;
+            }
             
             // Non-blocking restart request (don't wait for response)
             const req = protocol.request(options, (res) => {
