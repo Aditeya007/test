@@ -4,6 +4,9 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const http = require('http');
+const https = require('https');
+const url = require('url');
 const botJob = require('../jobs/botJob');
 const { getUserTenantContext } = require('../services/userContextService');
 const { provisionResourcesForBot } = require('../services/provisioningService');
@@ -715,19 +718,38 @@ exports.addManualKnowledge = [
           try {
             const botServiceUrl = process.env.BOT_SERVICE_URL || 'http://localhost:8000';
             const restartUrl = `${botServiceUrl}/restart?resource_id=${encodeURIComponent(bot.userId.toString())}`;
+            const parsedUrl = url.parse(restartUrl);
+            
+            // Use http or https based on protocol
+            const protocol = parsedUrl.protocol === 'https:' ? https : http;
+            
+            const options = {
+              hostname: parsedUrl.hostname,
+              port: parsedUrl.port,
+              path: parsedUrl.path,
+              method: 'POST',
+              timeout: 5000
+            };
             
             // Non-blocking restart request (don't wait for response)
-            fetch(restartUrl, { method: 'POST' })
-              .then(response => {
-                if (response.ok) {
-                  console.log('✅ Bot restart requested successfully');
-                } else {
-                  console.warn('⚠️  Bot restart returned non-OK status:', response.status);
-                }
-              })
-              .catch(err => {
-                console.warn('⚠️  Failed to trigger bot restart:', err.message);
-              });
+            const req = protocol.request(options, (res) => {
+              if (res.statusCode >= 200 && res.statusCode < 300) {
+                console.log('✅ Bot restart requested successfully');
+              } else {
+                console.warn('⚠️  Bot restart returned status:', res.statusCode);
+              }
+            });
+            
+            req.on('error', (err) => {
+              console.warn('⚠️  Failed to trigger bot restart:', err.message);
+            });
+            
+            req.on('timeout', () => {
+              req.destroy();
+              console.warn('⚠️  Bot restart request timed out');
+            });
+            
+            req.end();
           } catch (err) {
             console.warn('⚠️  Error preparing bot restart:', err.message);
           }
