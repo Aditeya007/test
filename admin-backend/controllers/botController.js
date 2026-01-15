@@ -701,7 +701,7 @@ exports.addManualKnowledge = [
         stderr += data.toString();
       });
       
-      child.on('close', (code) => {
+      child.on('close', async (code) => {
         if (code === 0) {
           console.log('✅ Manual knowledge added successfully:', {
             botId,
@@ -709,9 +709,32 @@ exports.addManualKnowledge = [
             stdout: stdout.trim()
           });
           
+          // Auto-restart bot to reload vector stores (same as after scraping)
+          console.log('🔄 Triggering bot restart to reload vector stores...');
+          
+          try {
+            const botServiceUrl = process.env.BOT_SERVICE_URL || 'http://localhost:8000';
+            const restartUrl = `${botServiceUrl}/restart?resource_id=${encodeURIComponent(bot.userId.toString())}`;
+            
+            // Non-blocking restart request (don't wait for response)
+            fetch(restartUrl, { method: 'POST' })
+              .then(response => {
+                if (response.ok) {
+                  console.log('✅ Bot restart requested successfully');
+                } else {
+                  console.warn('⚠️  Bot restart returned non-OK status:', response.status);
+                }
+              })
+              .catch(err => {
+                console.warn('⚠️  Failed to trigger bot restart:', err.message);
+              });
+          } catch (err) {
+            console.warn('⚠️  Error preparing bot restart:', err.message);
+          }
+          
           res.json({
             success: true,
-            message: 'Knowledge added successfully',
+            message: 'Knowledge added successfully. Bot is restarting to reload vector stores.',
             botId,
             botName: bot.name
           });
