@@ -199,6 +199,13 @@ app.use((req, res, next) => {
 // =============================================================================
 dbConnect();
 
+// =============================================================================
+// START LEAD DISPATCH CRON JOB
+// =============================================================================
+const leadDispatchJob = require('./jobs/leadDispatchJob');
+leadDispatchJob.start();
+console.log('🚀 Lead Dispatch System initialized (server-side batch email delivery)');
+
 // API Routes (order matters: specific before chat)
 app.use('/api/auth', authRoutes);          // Register, login
 app.use('/api/user', userRoutes);          // Current user info
@@ -739,7 +746,11 @@ const gracefulShutdown = async (signal) => {
   isShuttingDown = true;
   console.log(`\n🛑 ${signal} signal received: initiating graceful shutdown`);
   
-  // Step 1: Wait for active jobs to complete
+  // Step 1: Stop lead dispatch cron job
+  console.log('⏸️  Stopping lead dispatch cron job...');
+  leadDispatchJob.stop();
+  
+  // Step 2: Wait for active jobs to complete
   if (activeJobCount > 0) {
     console.log(`⏳ Waiting for ${activeJobCount} active job(s) to complete...`);
     const maxWaitTime = 60000; // 60 seconds

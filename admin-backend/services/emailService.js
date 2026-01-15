@@ -149,6 +149,46 @@ This lead was submitted through your RAG chatbot widget.
   }
 
   /**
+   * Send a batch lead notification email (used by cron job)
+   * @param {Object} emailContent - Email content { subject, htmlBody, textBody }
+   * @param {string} recipientEmail - Recipient email address
+   * @param {string} websiteName - Website name for display
+   * @returns {Promise<boolean>} - True if email sent, false otherwise
+   */
+  async sendBatchLeadEmail(emailContent, recipientEmail, websiteName) {
+    // If SMTP not configured, silently skip
+    if (!this.transporter) {
+      console.log(`ℹ️ Email Service disabled - skipping batch lead delivery to ${recipientEmail}`);
+      return false;
+    }
+
+    // Validate recipient email
+    if (!recipientEmail || !this.isValidEmail(recipientEmail)) {
+      console.warn(`⚠️ Invalid recipient email: ${recipientEmail}`);
+      return false;
+    }
+
+    try {
+      // Send email
+      const mailOptions = {
+        from: this.fromEmail,
+        to: recipientEmail,
+        subject: emailContent.subject,
+        html: emailContent.htmlBody,
+        text: emailContent.textBody
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ Batch lead email sent successfully to ${recipientEmail} (Message ID: ${info.messageId})`);
+      return true;
+
+    } catch (err) {
+      console.error(`❌ Failed to send batch lead email to ${recipientEmail}:`, err.message);
+      return false;
+    }
+  }
+
+  /**
    * Validate email format
    * @param {string} email - Email address to validate
    * @returns {boolean} - True if valid email format

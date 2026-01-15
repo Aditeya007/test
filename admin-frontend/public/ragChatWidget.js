@@ -899,7 +899,8 @@
     }
   }
 
-  // Close session and deliver lead data - ONLY called on tab close
+  // Close session and queue lead data - ONLY called on tab close
+  // This function NO LONGER sends email - it only queues the lead for server-side dispatch
   function closeSession() {
     if (!state.sessionId || !config.botId) {
       return;
@@ -917,7 +918,7 @@
     if (navigator.sendBeacon) {
       const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
       navigator.sendBeacon(url, blob);
-      console.log('RAG Widget: Session close sent via sendBeacon on tab close');
+      console.log('RAG Widget: Session close queued via sendBeacon (lead will be sent by server)');
     } else {
       // Fallback to fetch with keepalive
       fetch(url, {
@@ -928,7 +929,7 @@
       }).catch(err => {
         console.error('RAG Widget: Failed to close session:', err);
       });
-      console.log('RAG Widget: Session close sent via fetch on tab close');
+      console.log('RAG Widget: Session close queued via fetch (lead will be sent by server)');
     }
   }
 

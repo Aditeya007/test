@@ -1128,13 +1128,16 @@ exports.endSession = async (req, res) => {
 
 /**
  * POST /api/chat/session/close
- * Close a chat session and deliver any lead data to configured email
+ * Close a chat session and queue lead data for server-side dispatch
+ * 
+ * This endpoint NO LONGER sends emails directly.
+ * Instead, it queues the lead for batch processing by the server-side cron job.
  * 
  * @body { session_id: string, resource_id: string }
- * @returns { success: boolean, message: string, lead_sent?: boolean }
+ * @returns { success: boolean, message: string, lead_queued?: boolean }
  */
 exports.closeSessionAndDeliverLead = async (req, res) => {
-  const emailService = require('../services/emailService');
+  const LeadQueue = require('../models/LeadQueue');
   
   try {
     const { session_id, resource_id } = req.body;
@@ -1161,7 +1164,7 @@ exports.closeSessionAndDeliverLead = async (req, res) => {
     // Load models from user's tenant database
     const { Conversation, Lead } = await getTenantModels(user.databaseUri);
 
-    // Find lead for this session
+    // Find lead for this session in the Python bot's Lead collection
     let lead = await Lead.findOne({ session_id });
 
     // If no lead exists, silently succeed
@@ -1169,87 +1172,60 @@ exports.closeSessionAndDeliverLead = async (req, res) => {
       console.log(`ℹ️ No lead data found for session ${session_id}`);
       return res.json({
         success: true,
-        message: 'Session closed - no lead data to deliver',
-        lead_sent: false
+        message: 'Session closed - no lead data to queue',
+        lead_queued: false
       });
     }
 
-    // Check if already delivered
-    if (lead.delivered) {
-      console.log(`⚠️ Lead for session ${session_id} already delivered at ${lead.delivered_at}`);
-      return res.json({
-        success: true,
-        message: 'Lead already delivered',
-        lead_sent: false
-      });
-    }
-
-    // Find the bot to get lead_delivery_email configuration
+    // Find the conversation to get botId
     const conversation = await Conversation.findOne({ sessionId: session_id });
     if (!conversation) {
       console.log(`⚠️ No conversation found for session ${session_id}`);
       return res.json({
         success: true,
         message: 'Session closed - conversation not found',
-        lead_sent: false
+        lead_queued: false
       });
     }
 
     const Bot = require('../models/Bot');
     const bot = await Bot.findById(conversation.botId);
     
-    // If no bot or no delivery email configured, silently skip
+    // Only queue lead if bot has lead_delivery_email configured
     if (!bot || !bot.lead_delivery_email) {
-      console.log(`ℹ️ No lead delivery email configured for bot ${conversation.botId}`);
+      console.log(`ℹ️ No lead delivery email configured for bot ${conversation.botId} - skipping queue`);
       return res.json({
         success: true,
         message: 'Session closed - lead delivery not configured',
-        lead_sent: false
+        lead_queued: false
       });
     }
 
-    // Prepare lead data for email
-    const leadData = {
-      name: lead.name,
-      phone: lead.phone,
-      email: lead.email,
-      original_question: lead.original_question,
-      session_id: lead.session_id,
-      created_at: lead.created_at,
-      website_url: user.name // Use user's name as website identifier
-    };
+    // Queue the lead for server-side batch processing
+    await LeadQueue.queueLead({
+      tenantId: user._id,
+      botId: conversation.botId,
+      conversationId: conversation._id,
+      sessionId: session_id,
+      name: lead.name || null,
+      email: lead.email || null,
+      phone: lead.phone || null,
+      originalQuestion: lead.original_question || null
+    });
 
-    // Send email
-    const emailSent = await emailService.sendLeadEmail(leadData, bot.lead_delivery_email);
+    console.log(`✅ Lead queued for server-side dispatch (session: ${session_id}, tenant: ${user._id})`);
 
-    if (emailSent) {
-      // Mark lead as delivered
-      lead.delivered = true;
-      lead.delivered_at = new Date();
-      await lead.save();
-
-      console.log(`✅ Lead delivered for session ${session_id}`);
-
-      return res.json({
-        success: true,
-        message: 'Lead delivered successfully',
-        lead_sent: true
-      });
-    } else {
-      // Email sending failed
-      console.warn(`⚠️ Failed to send lead email for session ${session_id}`);
-      return res.json({
-        success: false,
-        error: 'Failed to send lead email',
-        lead_sent: false
-      });
-    }
+    return res.json({
+      success: true,
+      message: 'Lead queued successfully',
+      lead_queued: true
+    });
 
   } catch (err) {
-    console.error('❌ Failed to close session and deliver lead:', err.message);
+    console.error('❌ Failed to close session and queue lead:', err.message);
     res.status(500).json({
       success: false,
-      error: 'Failed to close session and deliver lead',
+      error: 'Failed to close session and queue lead',
       details: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
