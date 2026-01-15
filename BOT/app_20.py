@@ -2044,10 +2044,9 @@ async def _handle_chat_request(request: QuestionRequest) -> AnswerResponse:
         user_id=request.user_id
     )
     
-    # Store bot_id in session context for lead creation
+    # Store bot_id in session context for lead creation (MUST happen before chat())
     if request.bot_id:
-        if session_identifier not in chatbot_instance.conversation_contexts:
-            chatbot_instance.conversation_contexts[session_identifier] = {}
+        chatbot_instance.conversation_contexts.setdefault(session_identifier, {})
         chatbot_instance.conversation_contexts[session_identifier]["bot_id"] = request.bot_id
     
     try:
