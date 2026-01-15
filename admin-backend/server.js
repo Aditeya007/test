@@ -543,7 +543,8 @@ io.on('connection', (socket) => {
               botEndpoint: tenantContext.botEndpoint,
               resourceId: tenantContext.resourceId,
               vectorStorePath: bot.vectorStorePath,
-              databaseUri: tenantContext.databaseUri
+              databaseUri: tenantContext.databaseUri,
+              botId: bot._id.toString()
             },
             sanitizedMessage,
             { sessionId: sessionId || conversation.sessionId }

@@ -216,7 +216,8 @@ exports.runBot = async (req, res) => {
         botEndpoint: tenantContext.botEndpoint,
         resourceId: tenantContext.resourceId,
         vectorStorePath: bot.vectorStorePath, // ✅ Use bot-specific path
-        databaseUri: tenantContext.databaseUri
+        databaseUri: tenantContext.databaseUri,
+        botId: bot._id.toString()
       },
       sanitizedInput,
       { sessionId: normalizedSessionId }
