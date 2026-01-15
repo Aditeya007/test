@@ -899,6 +899,38 @@
     }
   }
 
+  // Close session and deliver lead data
+  function closeSession() {
+    if (!state.sessionId || !config.botId) {
+      return;
+    }
+
+    const payload = {
+      session_id: state.sessionId,
+      resource_id: config.botId
+    };
+
+    const url = `${config.apiBase}/chat/session/close`;
+
+    // Prefer sendBeacon for reliability during page unload
+    if (navigator.sendBeacon) {
+      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      navigator.sendBeacon(url, blob);
+      console.log('RAG Widget: Session close sent via sendBeacon');
+    } else {
+      // Fallback to fetch with keepalive
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        keepalive: true
+      }).catch(err => {
+        console.error('RAG Widget: Failed to close session:', err);
+      });
+      console.log('RAG Widget: Session close sent via fetch with keepalive');
+    }
+  }
+
   // Toggle widget visibility
   function toggleWidget() {
     const widgetWindow = document.getElementById('rag-widget-window');
@@ -918,6 +950,8 @@
         if (input) input.focus();
       }, 100);
     } else {
+      // Closing widget - deliver lead data
+      closeSession();
       widgetWindow.style.display = 'none';
       widgetToggle.classList.remove('hidden');
     }
@@ -1045,18 +1079,9 @@
       requestAgentBtn.addEventListener('click', requestAgent);
     }
 
-    // Handle widget unload - end session
-    window.addEventListener('beforeunload', async () => {
-      try {
-        // Use sendBeacon for reliable delivery during page unload
-        const blob = new Blob(
-          [JSON.stringify({ sessionId: state.sessionId, botId: config.botId })],
-          { type: 'application/json' }
-        );
-        navigator.sendBeacon(`${config.apiBase}/chat/end-session`, blob);
-      } catch (err) {
-        console.error('RAG Widget: Error ending session:', err);
-      }
+    // Handle page unload - close session and deliver lead
+    window.addEventListener('beforeunload', () => {
+      closeSession();
     });
 
     window.RAGWidget._initialized = true;
