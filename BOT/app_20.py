@@ -379,6 +379,7 @@ class QuestionRequest(BaseModel):
     database_uri: Optional[str] = None
     vector_store_path: Optional[str] = None
     bot_id: Optional[str] = None
+    api_key: Optional[str] = None  # Gemini API key from admin
 
 class AnswerResponse(BaseModel):
     answer: str
@@ -464,18 +465,9 @@ class SemanticIntelligentRAG:
         self.max_retrieval = 100
         self.max_passages = 10
 
-        # Initialize Gemini API client
-        print("🔄 Initializing Gemini API client...")
-        try:
-            api_key = os.getenv('GOOGLE_API_KEY')
-            if not api_key:
-                raise ValueError("GOOGLE_API_KEY not found in environment variables")
-            genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-2.5-flash')
-            print("✅ Gemini API client initialized successfully!")
-        except Exception as e:
-            print(f"❌ Error initializing Gemini API: {e}")
-            raise
+        # Gemini model will be initialized per-request with dynamic API key
+        self.model = None
+        print("ℹ️  Gemini API will be configured per-request using admin-provided API key")
 
         # Usage tracking
         self.daily_requests = 0
@@ -2043,6 +2035,25 @@ async def _handle_chat_request(request: QuestionRequest) -> AnswerResponse:
         resource_id=request.resource_id,
         user_id=request.user_id
     )
+    
+    # Validate API key is provided
+    if not request.api_key or not request.api_key.strip():
+        raise HTTPException(
+            status_code=400, 
+            detail="Gemini API key not provided. Please configure your API key in the Admin Dashboard under Manage Users."
+        )
+    
+    # Configure Gemini API with the provided key (per-request dynamic configuration)
+    try:
+        genai.configure(api_key=request.api_key.strip())
+        chatbot_instance.model = genai.GenerativeModel('gemini-2.5-flash')
+        print(f"✅ Gemini API configured for session {session_identifier}")
+    except Exception as api_error:
+        print(f"❌ Error configuring Gemini API: {api_error}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to configure Gemini API: {str(api_error)}"
+        )
     
     # Store bot_id in session context for lead creation (MUST happen before chat())
     if request.bot_id:

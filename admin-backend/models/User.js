@@ -13,30 +13,30 @@ const mongoose = require('mongoose');
  */
 const UserSchema = new mongoose.Schema(
   {
-    name: { 
-      type: String, 
+    name: {
+      type: String,
       required: [true, 'Name is required'],
       trim: true,
       minlength: [2, 'Name must be at least 2 characters'],
       maxlength: [100, 'Name cannot exceed 100 characters']
     },
-    email: { 
-      type: String, 
-      required: [true, 'Email is required'], 
+    email: {
+      type: String,
+      required: [true, 'Email is required'],
       lowercase: true,
       trim: true,
       match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please provide a valid email address']
     },
-    username: { 
-      type: String, 
-      required: [true, 'Username is required'], 
+    username: {
+      type: String,
+      required: [true, 'Username is required'],
       trim: true,
       minlength: [3, 'Username must be at least 3 characters'],
       maxlength: [30, 'Username cannot exceed 30 characters'],
       match: [/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores']
     },
-    password: { 
-      type: String, 
+    password: {
+      type: String,
       required: [true, 'Password is required'],
       minlength: [6, 'Password must be at least 6 characters']
       // Note: Stored as bcrypt hash, never plain text!
@@ -44,7 +44,7 @@ const UserSchema = new mongoose.Schema(
     adminId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: function() {
+      required: function () {
         return this.role === 'user'; // Only required for regular users, not for admins
       },
       index: true // Index for efficient queries filtering by admin
@@ -142,6 +142,12 @@ const UserSchema = new mongoose.Schema(
       trim: true,
       index: true
     },
+    apiKey: {
+      type: String,
+      trim: true,
+      minlength: [30, 'API key appears to be invalid'],
+      maxlength: [200, 'API key is too long']
+    },
     // lastLogin: { 
     //   type: Date 
     // },
@@ -163,8 +169,8 @@ UserSchema.index({ adminId: 1, createdAt: -1 }); // Compound index for filtering
 // Global username uniqueness: usernames must be unique across ALL users (admins and regular users)
 // This prevents conflicts during login
 UserSchema.index(
-  { username: 1 }, 
-  { 
+  { username: 1 },
+  {
     unique: true
   }
 );
@@ -172,8 +178,8 @@ UserSchema.index(
 // Email uniqueness: emails can be used across different admins, but must be unique within the same admin
 // For regular users (role='user'), email must be unique per admin
 UserSchema.index(
-  { email: 1, adminId: 1 }, 
-  { 
+  { email: 1, adminId: 1 },
+  {
     unique: true,
     partialFilterExpression: { role: 'user' }
   }
@@ -181,15 +187,15 @@ UserSchema.index(
 
 // For admins (role='admin'), email must be globally unique
 UserSchema.index(
-  { email: 1 }, 
-  { 
+  { email: 1 },
+  {
     unique: true,
     partialFilterExpression: { role: 'admin' }
   }
 );
 
 // Instance method to get public profile (exclude password)
-UserSchema.methods.toPublicProfile = function() {
+UserSchema.methods.toPublicProfile = function () {
   return {
     id: this._id,
     name: this.name,
@@ -206,6 +212,7 @@ UserSchema.methods.toPublicProfile = function() {
     maxBots: this.maxBots,
     maxAgents: this.maxAgents,
     apiToken: this.apiToken,
+    apiKey: this.apiKey, // Include API key in profile
     // Scheduler status fields
     schedulerPid: this.schedulerPid,
     schedulerStatus: this.schedulerStatus,
@@ -216,7 +223,7 @@ UserSchema.methods.toPublicProfile = function() {
 };
 
 // Instance method to generate API token for widget authentication
-UserSchema.methods.generateApiToken = function() {
+UserSchema.methods.generateApiToken = function () {
   const crypto = require('crypto');
   // Generate a secure random token
   const token = crypto.randomBytes(32).toString('hex');
@@ -225,12 +232,12 @@ UserSchema.methods.generateApiToken = function() {
 };
 
 // Static method to find user by API token
-UserSchema.statics.findByApiToken = function(apiToken) {
+UserSchema.statics.findByApiToken = function (apiToken) {
   return this.findOne({ apiToken });
 };
 
 // Static method to find user by email or username
-UserSchema.statics.findByEmailOrUsername = function(identifier) {
+UserSchema.statics.findByEmailOrUsername = function (identifier) {
   return this.findOne({
     $or: [
       { email: identifier.toLowerCase() },
