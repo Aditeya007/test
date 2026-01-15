@@ -1,6 +1,6 @@
 // src/components/ChatWidget/ChatWidgetWrapper.js
 
-import React from 'react';
+import React, { useRef } from 'react';
 import ChatWidget from './ChatWidget';
 import { useChatWidget } from '../../context/ChatWidgetContext';
 import './ChatWidgetWrapper.css';
@@ -23,6 +23,41 @@ const CloseIcon = () => (
 
 function ChatWidgetWrapper() {
   const { isWidgetActive, isWidgetOpen, selectedBotId, toggleWidget } = useChatWidget();
+  const sessionIdRef = useRef(null);
+
+  // Close session and hide widget - guarantees lead delivery
+  const handleToggleWidget = () => {
+    if (isWidgetOpen && sessionIdRef.current && selectedBotId) {
+      // Widget is closing - send session close IMMEDIATELY
+      const payload = {
+        session_id: sessionIdRef.current,
+        resource_id: selectedBotId
+      };
+
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+      const url = `${apiUrl}/api/chat/session/close`;
+
+      if (navigator.sendBeacon) {
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        navigator.sendBeacon(url, blob);
+      } else {
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          keepalive: true
+        }).catch(() => {});
+      }
+    }
+
+    // Then toggle widget visibility
+    toggleWidget();
+  };
+
+  // Expose sessionId setter to ChatWidget
+  const handleSessionIdUpdate = (sessionId) => {
+    sessionIdRef.current = sessionId;
+  };
 
   // CRITICAL FIX #2: Don't render anything if widget hasn't been activated
   if (!isWidgetActive) {
@@ -41,12 +76,15 @@ function ChatWidgetWrapper() {
       <div className={`chatbot-window-container ${isWidgetOpen ? 'open' : ''}`}>
         {/* We pass the toggle function down so the chatbot can close itself. */}
         {hasValidBot ? (
-          <ChatWidget toggleChatbot={toggleWidget} />
+          <ChatWidget 
+            toggleChatbot={handleToggleWidget} 
+            onSessionIdUpdate={handleSessionIdUpdate}
+          />
         ) : (
           <div className="rag-chatbot-container">
             <div className="chatbot-header">
               <h3>AI Assistant</h3>
-              <button onClick={toggleWidget} className="close-chatbot-btn" aria-label="Close Chatbot">
+              <button onClick={handleToggleWidget} className="close-chatbot-btn" aria-label="Close Chatbot">
                 <HeaderCloseIcon />
               </button>
             </div>
@@ -60,7 +98,7 @@ function ChatWidgetWrapper() {
 
       {/* The Launcher Button */}
       {/* This is the entry point for the user. It floats on the page. */}
-      <button className="chatbot-launcher-button" onClick={toggleWidget} aria-label="Toggle Chatbot">
+      <button className="chatbot-launcher-button" onClick={handleToggleWidget} aria-label="Toggle Chatbot">
         {/* We conditionally render the icon based on the 'isOpen' state. */}
         {isWidgetOpen ? <CloseIcon /> : <ChatIcon />}
       </button>
