@@ -716,15 +716,21 @@ exports.addManualKnowledge = [
           console.log('🔄 Triggering bot restart to reload vector stores...');
           
           try {
-            const botServiceUrl = process.env.BOT_SERVICE_URL || 'http://localhost:8000';
+            const botServiceUrl = process.env.BOT_SERVICE_URL || 'http://127.0.0.1:8000';
             const restartUrl = `${botServiceUrl}/restart?resource_id=${encodeURIComponent(bot.userId.toString())}`;
             const parsedUrl = url.parse(restartUrl);
             
             // Use http or https based on protocol
             const protocol = parsedUrl.protocol === 'https:' ? https : http;
             
+            // Fix hostname to use 127.0.0.1 instead of localhost to avoid IPv6 issues
+            let hostname = parsedUrl.hostname;
+            if (hostname === 'localhost') {
+              hostname = '127.0.0.1';
+            }
+            
             const options = {
-              hostname: parsedUrl.hostname,
+              hostname: hostname,
               port: parsedUrl.port,
               path: parsedUrl.path,
               method: 'POST',
