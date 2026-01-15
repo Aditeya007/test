@@ -50,17 +50,22 @@ function AdminLayout({ children }) {
   // Update active menu item based on current route
   React.useEffect(() => {
     const path = location.pathname;
-    if (path === "/dashboard" || path === "/") {
+    if (path === "/agent" || path.startsWith("/agent/")) {
+      dispatch(setActiveMenuItem("chat"));
+    } else if (path === "/dashboard" || path === "/") {
       dispatch(setActiveMenuItem("dashboard"));
     } else if (path === "/admin/users") {
       dispatch(setActiveMenuItem("users"));
+    } else if (path === "/websites" || path.startsWith("/websites/")) {
+      dispatch(setActiveMenuItem("websites"));
     } else if (path === "/agents" || path.startsWith("/agents/")) {
       dispatch(setActiveMenuItem("agents"));
     } else if (path === "/chats" || path.startsWith("/chats/")) {
       dispatch(setActiveMenuItem("chats"));
     } else if (path.startsWith("/bot/")) {
-      dispatch(setActiveMenuItem("dashboard"));
+      dispatch(setActiveMenuItem("websites"));
     }
+    // For profile page, keep the current active menu item (don't change it)
   }, [location.pathname, dispatch]);
 
   // Prevent body scroll when sidebar is open on mobile
@@ -100,10 +105,18 @@ function AdminLayout({ children }) {
 
   const menuItems = [
     {
+      id: "chat",
+      label: "Chat",
+      icon: "💬",
+      path: "/agent",
+      agentOnly: true, // Only show for agents
+    },
+    {
       id: "dashboard",
       label: "Dashboard",
       icon: "📊",
       path: "/dashboard",
+      // Available for both admins and regular users, but not for agents
     },
     {
       id: "users",
@@ -111,6 +124,13 @@ function AdminLayout({ children }) {
       icon: "👥",
       path: "/admin/users",
       adminOnly: true,
+    },
+    {
+      id: "websites",
+      label: "Websites",
+      icon: "🌐",
+      path: "/websites",
+      userOnly: true, // Only show for regular users, not admins
     },
     {
       id: "agents",
@@ -122,6 +142,7 @@ function AdminLayout({ children }) {
   ];
 
   const isAdmin = user?.role === "admin";
+  const isAgent = user?.role === "agent";
 
   // Get panel title based on user role
   const getPanelTitle = () => {
@@ -161,8 +182,23 @@ function AdminLayout({ children }) {
         <nav className="sidebar-nav">
           {menuItems
             .filter((item) => {
-              if (item.adminOnly && !isAdmin) return false;
-              if (item.userOnly && isAdmin) return false;
+              // For agents, only show agent-only items (Chat)
+              if (isAgent) {
+                return item.agentOnly === true;
+              }
+              
+              // For admins: show Dashboard and Manage Users
+              if (isAdmin) {
+                if (item.userOnly) return false; // Hide user-only items (Websites, Agents)
+                if (item.agentOnly) return false; // Hide agent-only items (Chat)
+                // Show adminOnly items (Manage Users) and items with no restrictions (Dashboard)
+                return true;
+              }
+              
+              // For regular users: show Dashboard, Websites, and Agents
+              if (item.adminOnly) return false; // Hide admin-only items (Manage Users)
+              if (item.agentOnly) return false; // Hide agent-only items (Chat)
+              // Show userOnly items (Websites, Agents) and items with no restrictions (Dashboard)
               return true;
             })
             .map((item) => (
@@ -178,13 +214,6 @@ function AdminLayout({ children }) {
               </button>
             ))}
         </nav>
-
-        <div className="sidebar-footer">
-          <button className="nav-item logout-btn" onClick={handleLogout}>
-            <span className="nav-icon">🚪</span>
-            <span className="nav-label">Logout</span>
-          </button>
-        </div>
       </aside>
 
       {/* Main Content */}
@@ -234,6 +263,14 @@ function AdminLayout({ children }) {
                 aria-label="View Profile"
               >
                 <span className="profile-icon">👤</span>
+              </button>
+              <button
+                className="logout-header-btn"
+                onClick={handleLogout}
+                title="Logout"
+                aria-label="Logout"
+              >
+                <span className="logout-icon">🚪</span>
               </button>
             </div>
           </div>

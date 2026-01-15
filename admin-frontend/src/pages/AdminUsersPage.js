@@ -162,7 +162,7 @@ function AdminUsersPage() {
         <div className="admin-users-header-content">
           <div className="admin-users-header-title">
             <h2 style={{ marginRight: "10px" }}>User Management</h2>
-            <p>Provision and manage tenant accounts for the RAG platform.</p>
+            {/* <p>Provision and manage tenant accounts for the RAG platform.</p> */}
           </div>
           <div className="admin-users-header-controls">
             <div className="search-container">
@@ -198,14 +198,14 @@ function AdminUsersPage() {
               >
                 ✨ Create User
               </button>
-              <button
+              {/* <button
                 type="button"
                 className="btn-ghost"
                 onClick={handleRefresh}
                 disabled={loading}
               >
                 Refresh
-              </button>
+              </button> */}
             </div>
           </div>
         </div>
@@ -216,7 +216,7 @@ function AdminUsersPage() {
         <div className="admin-users-success">{successMessage}</div>
       )}
 
-      <div style={{ marginTop: "2rem" }}>
+      <div style={{ marginTop: "1.2rem" }}>
         {loading ? (
           <Loader message="Loading users..." />
         ) : (

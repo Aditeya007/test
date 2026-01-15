@@ -381,8 +381,19 @@ exports.getBots = async (req, res) => {
       });
     }
 
-    // Find all bots for the current user
-    const bots = await Bot.find({ userId: currentUserId }).sort({ createdAt: 1 });
+    // Pagination parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Get total count for pagination
+    const totalCount = await Bot.countDocuments({ userId: currentUserId });
+
+    // Find bots with pagination
+    const bots = await Bot.find({ userId: currentUserId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
     // Transform bots to include id field
     const botsWithId = bots.map(bot => {
@@ -393,9 +404,15 @@ exports.getBots = async (req, res) => {
       };
     });
 
+    const totalPages = Math.ceil(totalCount / limit);
+
     res.json({ 
       bots: botsWithId, 
-      count: botsWithId.length 
+      count: botsWithId.length,
+      totalCount,
+      page,
+      limit,
+      totalPages
     });
   } catch (err) {
     console.error('❌ Error fetching bots:', {

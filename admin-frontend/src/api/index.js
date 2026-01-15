@@ -64,24 +64,30 @@ export async function apiRequest(endpoint, { method = 'GET', token, data, params
  * Get all bots for a user (admin endpoint)
  * @param {string} userId - User ID
  * @param {string} token - JWT token
- * @returns {Promise<Object>} { bots: Array, count: number }
+ * @param {number} page - Page number (default: 1)
+ * @param {number} limit - Items per page (default: 10)
+ * @returns {Promise<Object>} { bots: Array, count: number, totalCount: number, page: number, limit: number, totalPages: number }
  */
-export async function getUserBots(userId, token) {
+export async function getUserBots(userId, token, page = 1, limit = 10) {
   return apiRequest(`/users/${userId}/bots`, {
     method: 'GET',
-    token
+    token,
+    params: { page, limit }
   });
 }
 
 /**
  * Get all bots for the current user (user endpoint)
  * @param {string} token - JWT token
- * @returns {Promise<Object>} { bots: Array, count: number }
+ * @param {number} page - Page number (default: 1)
+ * @param {number} limit - Items per page (default: 10)
+ * @returns {Promise<Object>} { bots: Array, count: number, totalCount: number, page: number, limit: number, totalPages: number }
  */
-export async function getUserOwnBots(token) {
+export async function getUserOwnBots(token, page = 1, limit = 10) {
   return apiRequest('/bot', {
     method: 'GET',
-    token
+    token,
+    params: { page, limit }
   });
 }
 

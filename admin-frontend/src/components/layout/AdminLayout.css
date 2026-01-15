@@ -28,13 +28,13 @@
 }
 
 .sidebar-header {
-  padding: 2em 1.5em;
+  padding: 1.2em 1.5em;
   border-bottom: 2px solid rgba(255, 131, 7, 0.3);
   background: rgba(255, 131, 7, 0.05);
 }
 
 .sidebar-logo {
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   font-weight: 800;
   background: linear-gradient(135deg, #FF8307 0%, #ffb366 100%);
   -webkit-background-clip: text;
@@ -141,7 +141,7 @@
 }
 
 /* When sidebar is closed on desktop, expand main content */
-.admin-sidebar:not(.open) ~ .admin-main {
+.admin-sidebar:not(.open)~.admin-main {
   margin-left: 0;
   width: 100%;
 }
@@ -151,8 +151,8 @@
     margin-left: 0 !important;
     width: 100% !important;
   }
-  
-  .admin-sidebar:not(.open) ~ .admin-main {
+
+  .admin-sidebar:not(.open)~.admin-main {
     margin-left: 0 !important;
     width: 100% !important;
   }
@@ -163,7 +163,7 @@
   background: rgba(30, 41, 59, 0.95);
   backdrop-filter: blur(20px);
   border-bottom: 2px solid rgba(255, 131, 7, 0.2);
-  padding: 1.5em 2em;
+  padding: 0.9em 1.5em;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -180,7 +180,7 @@
 .header-left {
   display: flex;
   align-items: center;
-  gap: 1.5em;
+  gap: 1em;
   flex: 0 0 auto;
   flex-shrink: 0;
   min-width: 0;
@@ -190,9 +190,9 @@
   background: rgba(255, 131, 7, 0.1);
   border: 2px solid rgba(255, 131, 7, 0.3);
   color: #FF8307;
-  padding: 0.5em 0.8em;
-  border-radius: 8px;
-  font-size: 1rem;
+  padding: 0.4em 0.6em;
+  border-radius: 6px;
+  font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.3s;
   font-weight: 700;
@@ -200,8 +200,8 @@
   position: relative;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 32px;
+  min-height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -218,7 +218,7 @@
 }
 
 .page-title {
-  font-size: 1.8rem;
+  font-size: 1.4rem;
   font-weight: 800;
   color: #fff;
   margin: 0;
@@ -229,7 +229,7 @@
 .header-right {
   display: flex;
   align-items: center;
-  gap: 1.5em;
+  gap: 1em;
   flex: 1 1 auto;
   flex-shrink: 1;
   min-width: 0;
@@ -240,7 +240,7 @@
 .user-info {
   display: flex;
   align-items: center;
-  gap: 1em;
+  gap: 0.75em;
   flex-shrink: 0;
   min-width: 0;
   overflow: visible;
@@ -248,7 +248,7 @@
 }
 
 .user-name {
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: #f1f5f9;
 }
@@ -257,8 +257,8 @@
   background: rgba(255, 131, 7, 0.1);
   border: 2px solid rgba(255, 131, 7, 0.3);
   border-radius: 50%;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -280,16 +280,49 @@
 }
 
 .profile-icon {
-  font-size: 1.3rem;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logout-header-btn {
+  background: rgba(239, 68, 68, 0.1);
+  border: 2px solid rgba(239, 68, 68, 0.3);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.logout-header-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.6);
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.logout-header-btn:active {
+  transform: scale(0.95);
+}
+
+.logout-icon {
+  font-size: 1.1rem;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .user-badge {
-  padding: 0.4em 1em;
-  border-radius: 20px;
-  font-size: 0.85rem;
+  padding: 0.3em 0.8em;
+  border-radius: 16px;
+  font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -316,10 +349,11 @@
 /* Content Area */
 .admin-content {
   flex: 1;
-  padding: 2em;
+  padding: 1.2em 1.5em;
   overflow-y: auto;
   overflow-x: hidden;
-  min-height: 0; /* Allows flex child to shrink below content size */
+  min-height: 0;
+  /* Allows flex child to shrink below content size */
   background: linear-gradient(135deg, #0f1419 0%, #1a2332 50%, #0f1419 100%);
 }
 
@@ -401,7 +435,17 @@
     flex-shrink: 0;
   }
 
+  .logout-header-btn {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+  }
+
   .profile-icon {
+    font-size: 1.1rem;
+  }
+
+  .logout-icon {
     font-size: 1.1rem;
   }
 }
@@ -444,7 +488,7 @@
   .admin-sidebar:not(.open) {
     transform: translateX(-100%);
   }
-  
+
   .admin-sidebar.open {
     transform: translateX(0);
   }
@@ -537,12 +581,22 @@
     flex-shrink: 0;
   }
 
+  .logout-header-btn {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+  }
+
   .profile-icon {
     font-size: 1rem;
   }
 
+  .logout-icon {
+    font-size: 1rem;
+  }
+
   .admin-content {
-    padding: 1em;
+    padding: 1em 0.9em;
   }
 
   .sidebar-header {
@@ -605,7 +659,7 @@
   }
 
   .admin-content {
-    padding: 0.8em;
+    padding: 0.8em 0.7em;
   }
 
   .admin-sidebar {
@@ -701,7 +755,17 @@
     flex-shrink: 0;
   }
 
+  .logout-header-btn {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+  }
+
   .profile-icon {
+    font-size: 0.95rem;
+  }
+
+  .logout-icon {
     font-size: 0.95rem;
   }
 }
@@ -710,6 +774,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }

@@ -402,20 +402,43 @@ const listAgents = async (req, res) => {
       });
     }
 
+    // Pagination parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
     // Get agents from TENANT database
     const Agent = await getAgentModel(tenant.databaseUri);
-    const agents = await Agent.find().sort({ createdAt: -1 });
+    
+    // Get total count for pagination
+    const totalCount = await Agent.countDocuments();
+    
+    // Find agents with pagination
+    const agents = await Agent.find()
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const totalPages = Math.ceil(totalCount / limit);
 
     console.log(`📋 Retrieved agents for tenant ${tenant.username}:`, {
       tenantId: tenantId,
       database: tenant.databaseUri,
       agentCount: agents.length,
+      totalCount,
+      page,
+      limit,
+      totalPages,
       maxAgents: tenant.maxAgents,
     });
 
     res.json({
       agents: agents.map((agent) => agent.toPublicProfile()),
       count: agents.length,
+      totalCount,
+      page,
+      limit,
+      totalPages,
       maxAgents: tenant.maxAgents,
     });
   } catch (error) {

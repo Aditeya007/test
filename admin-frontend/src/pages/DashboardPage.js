@@ -907,10 +907,10 @@ function DashboardPage() {
               )}
 
               {/* Action Buttons Section */}
-              <div className="dashboard-actions-section">
+              {/* <div className="dashboard-actions-section">
                 <h3 className="dashboard-section-title">Quick Actions</h3>
                 <div className="dashboard-actions">
-                  {/* Add Website Button */}
+                  Add Website Button
                   {(() => {
                     if (!tenantDetails) return false;
                     if (
@@ -933,7 +933,7 @@ function DashboardPage() {
                     </button>
                   )}
 
-                  {/* Add Agent Button - Only for Users, not Agents */}
+                  Add Agent Button - Only for Users, not Agents
                   {isUser &&
                     tenantDetails &&
                     (tenantDetails.maxAgents === undefined ||
@@ -949,7 +949,7 @@ function DashboardPage() {
                       </button>
                     )}
                 </div>
-              </div>
+              </div> */}
 
               {botsLoading && (
                 <Loader message="Loading websites..." size="small" />
@@ -970,7 +970,7 @@ function DashboardPage() {
               {!botsLoading && !botsError && (
                 <>
                   {/* Websites Section */}
-                  <div className="dashboard-websites-section">
+                  {/* <div className="dashboard-websites-section">
                     <div className="dashboard-section-header">
                       <h3 className="dashboard-section-title">Your Websites</h3>
                       <p className="dashboard-section-subtitle">
@@ -978,7 +978,7 @@ function DashboardPage() {
                       </p>
                     </div>
 
-                    {/* Website List */}
+                    Website List
                     {deferredBots.length === 0 ? (
                       <div className="dashboard-empty-state">
                         <div className="empty-icon">🌐</div>
@@ -1043,7 +1043,7 @@ function DashboardPage() {
                         ))}
                       </div>
                     )}
-                  </div>
+                  </div> */}
 
                   {/* Actions - Only show when panel is explicitly shown and a website is selected */}
                   {showWebsiteActionsPanel && selectedBot && (

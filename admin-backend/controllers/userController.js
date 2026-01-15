@@ -872,7 +872,19 @@ exports.getUserBots = async (req, res) => {
         .json({ error: "Access denied: You can only view your own bots" });
     }
 
-    const bots = await Bot.find({ userId: id }).sort({ createdAt: 1 });
+    // Pagination parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Get total count for pagination
+    const totalCount = await Bot.countDocuments({ userId: id });
+
+    // Find bots with pagination
+    const bots = await Bot.find({ userId: id })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
     const botsWithId = bots.map((bot) => {
       const botObj = bot.toObject({ versionKey: false });
@@ -882,7 +894,16 @@ exports.getUserBots = async (req, res) => {
       };
     });
 
-    res.json({ bots: botsWithId, count: botsWithId.length });
+    const totalPages = Math.ceil(totalCount / limit);
+
+    res.json({ 
+      bots: botsWithId, 
+      count: botsWithId.length,
+      totalCount,
+      page,
+      limit,
+      totalPages
+    });
   } catch (err) {
     console.error("❌ Error fetching user bots:", {
       message: err.message,
@@ -937,15 +958,33 @@ exports.getUserAgents = async (req, res) => {
       return res.json({ agents: [], count: 0, maxAgents: user.maxAgents || 0 });
     }
 
+    // Pagination parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
     // Get agents from tenant database
     const Agent = await getAgentModel(user.databaseUri);
-    const agents = await Agent.find().sort({ createdAt: -1 });
+    
+    // Get total count for pagination
+    const totalCount = await Agent.countDocuments();
+    
+    // Find agents with pagination
+    const agents = await Agent.find()
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
     const agentsWithId = agents.map((agent) => agent.toPublicProfile());
+    const totalPages = Math.ceil(totalCount / limit);
 
     res.json({
       agents: agentsWithId,
       count: agentsWithId.length,
+      totalCount,
+      page,
+      limit,
+      totalPages,
       maxAgents: user.maxAgents || 0,
     });
   } catch (err) {

@@ -1,126 +1,104 @@
 // src/components/Pagination.js
 
-import React from 'react';
-import '../styles/index.css';
+import React from "react";
+import "../styles/index.css";
 
-function Pagination({ currentPage, totalPages, onPageChange, totalCount, limit }) {
-  // Always show pagination info, even if only 1 page (to show count)
-  // But only show navigation controls if there's more than 1 page
-  const showNavigation = totalPages > 1;
+function Pagination({ currentPage, totalPages, onPageChange, itemsPerPage = 10 }) {
+  if (totalPages <= 1) return null;
 
-  const startItem = (currentPage - 1) * limit + 1;
-  const endItem = Math.min(currentPage * limit, totalCount);
-
-  const handlePrevious = () => {
-    if (currentPage > 1) {
-      onPageChange(currentPage - 1);
-    }
-  };
-
-  const handleNext = () => {
-    if (currentPage < totalPages) {
-      onPageChange(currentPage + 1);
-    }
-  };
-
-  const handlePageClick = (page) => {
-    if (page !== currentPage && page >= 1 && page <= totalPages) {
-      onPageChange(page);
-    }
-  };
-
-  // Generate page numbers to display
   const getPageNumbers = () => {
     const pages = [];
     const maxVisible = 5;
-    
-    if (totalPages <= maxVisible) {
-      // Show all pages if total is less than max visible
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
-      }
-    } else {
-      // Show pages with ellipsis
-      if (currentPage <= 3) {
-        // Show first pages
-        for (let i = 1; i <= 4; i++) {
-          pages.push(i);
-        }
-        pages.push('ellipsis');
-        pages.push(totalPages);
-      } else if (currentPage >= totalPages - 2) {
-        // Show last pages
-        pages.push(1);
-        pages.push('ellipsis');
-        for (let i = totalPages - 3; i <= totalPages; i++) {
-          pages.push(i);
-        }
-      } else {
-        // Show middle pages
-        pages.push(1);
-        pages.push('ellipsis');
-        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
-          pages.push(i);
-        }
-        pages.push('ellipsis');
-        pages.push(totalPages);
-      }
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+
+    if (endPage - startPage < maxVisible - 1) {
+      startPage = Math.max(1, endPage - maxVisible + 1);
     }
-    
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+
     return pages;
   };
+
+  const pageNumbers = getPageNumbers();
+  const startPage = pageNumbers[0];
+  const endPage = pageNumbers[pageNumbers.length - 1];
 
   return (
     <div className="pagination-container">
       <div className="pagination-info">
-        Showing {startItem} to {endItem} of {totalCount} users
+        <span>Page {currentPage} of {totalPages}</span>
       </div>
-      {showNavigation && (
-        <div className="pagination-controls">
+      <div className="pagination-controls">
+        <button
+          className="pagination-btn"
+          onClick={() => onPageChange(1)}
+          disabled={currentPage === 1}
+          title="First page"
+        >
+          ««
+        </button>
+        <button
+          className="pagination-btn"
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          title="Previous page"
+        >
+          ‹
+        </button>
+        {startPage > 1 && (
+          <>
+            <button
+              className="pagination-btn"
+              onClick={() => onPageChange(1)}
+            >
+              1
+            </button>
+            {startPage > 2 && <span className="pagination-ellipsis">...</span>}
+          </>
+        )}
+        {pageNumbers.map((page) => (
           <button
-            type="button"
-            className="pagination-btn"
-            onClick={handlePrevious}
-            disabled={currentPage === 1}
-            title="Previous page"
+            key={page}
+            className={`pagination-page-btn ${currentPage === page ? "active" : ""}`}
+            onClick={() => onPageChange(page)}
           >
-            ← Previous
+            {page}
           </button>
-          
-          <div className="pagination-pages">
-            {getPageNumbers().map((page, index) => {
-              if (page === 'ellipsis') {
-                return (
-                  <span key={`ellipsis-${index}`} className="pagination-ellipsis">
-                    ...
-                  </span>
-                );
-              }
-              return (
-                <button
-                  key={page}
-                  type="button"
-                  className={`pagination-page-btn ${page === currentPage ? 'active' : ''}`}
-                  onClick={() => handlePageClick(page)}
-                  title={`Go to page ${page}`}
-                >
-                  {page}
-                </button>
-              );
-            })}
-          </div>
-          
-          <button
-            type="button"
-            className="pagination-btn"
-            onClick={handleNext}
-            disabled={currentPage === totalPages}
-            title="Next page"
-          >
-            Next →
-          </button>
-        </div>
-      )}
+        ))}
+        {endPage < totalPages && (
+          <>
+            {endPage < totalPages - 1 && (
+              <span className="pagination-ellipsis">...</span>
+            )}
+            <button
+              className="pagination-btn"
+              onClick={() => onPageChange(totalPages)}
+            >
+              {totalPages}
+            </button>
+          </>
+        )}
+        <button
+          className="pagination-btn"
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          title="Next page"
+        >
+          ›
+        </button>
+        <button
+          className="pagination-btn"
+          onClick={() => onPageChange(totalPages)}
+          disabled={currentPage === totalPages}
+          title="Last page"
+        >
+          »»
+        </button>
+      </div>
     </div>
   );
 }
