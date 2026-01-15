@@ -1480,121 +1480,408 @@ function WebsitesPage() {
           }}
         >
           <div
-            className="scrape-modal-content"
-            style={{ maxWidth: "900px", maxHeight: "80vh", overflow: "hidden", display: "flex", flexDirection: "column" }}
+            className="leads-modal-content"
+            style={{ 
+              maxWidth: "1100px", 
+              maxHeight: "85vh", 
+              overflow: "hidden", 
+              display: "flex", 
+              flexDirection: "column",
+              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+              padding: "2px",
+              borderRadius: "16px",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
+            }}
           >
-            <div className="scrape-modal-header">
-              <h3>📋 Leads</h3>
-              <button
-                type="button"
-                className="scrape-modal-close"
-                onClick={() => {
-                  setShowLeadsModal(false);
-                  setLeadsData([]);
-                  setLeadsError("");
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div style={{ flex: 1, overflow: "auto", padding: "1rem" }}>
-              {leadsLoading && (
-                <div style={{ textAlign: "center", padding: "2rem", color: "#64748b" }}>
-                  ⏳ Loading leads...
+            <div style={{
+              background: "#1a1d2e",
+              borderRadius: "14px",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              height: "100%"
+            }}>
+              <div style={{
+                padding: "1.5rem 2rem",
+                borderBottom: "1px solid rgba(102, 126, 234, 0.2)",
+                background: "linear-gradient(to right, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1))"
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <h3 style={{ 
+                      margin: 0, 
+                      fontSize: "1.5rem", 
+                      fontWeight: "700",
+                      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                      WebkitBackgroundClip: "text",
+                      WebkitTextFillColor: "transparent",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem"
+                    }}>
+                      <span style={{ fontSize: "1.75rem" }}>📊</span>
+                      Lead Contacts
+                    </h3>
+                    <p style={{ 
+                      margin: "0.25rem 0 0 0", 
+                      fontSize: "0.875rem", 
+                      color: "#94a3b8",
+                      fontWeight: "400"
+                    }}>
+                      {leadsData.length} {leadsData.length === 1 ? 'contact' : 'contacts'} collected
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLeadsModal(false);
+                      setLeadsData([]);
+                      setLeadsError("");
+                    }}
+                    style={{
+                      background: "rgba(255, 255, 255, 0.1)",
+                      border: "1px solid rgba(255, 255, 255, 0.2)",
+                      color: "#cbd5e1",
+                      width: "36px",
+                      height: "36px",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      fontSize: "1.25rem",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      transition: "all 0.2s ease"
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = "rgba(255, 255, 255, 0.15)";
+                      e.target.style.color = "#fff";
+                      e.target.style.transform = "scale(1.05)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = "rgba(255, 255, 255, 0.1)";
+                      e.target.style.color = "#cbd5e1";
+                      e.target.style.transform = "scale(1)";
+                    }}
+                  >
+                    ✕
+                  </button>
                 </div>
-              )}
+              </div>
 
-              {leadsError && (
-                <div
+              <div style={{ flex: 1, overflow: "auto", padding: "1.5rem" }}>
+                {leadsLoading && (
+                  <div style={{ 
+                    textAlign: "center", 
+                    padding: "4rem 2rem", 
+                    color: "#94a3b8" 
+                  }}>
+                    <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>⏳</div>
+                    <div style={{ fontSize: "1.125rem", fontWeight: "500" }}>Loading leads...</div>
+                    <div style={{ fontSize: "0.875rem", marginTop: "0.5rem", opacity: 0.7 }}>
+                      Please wait while we fetch your data
+                    </div>
+                  </div>
+                )}
+
+                {leadsError && (
+                  <div
+                    style={{
+                      padding: "1rem 1.25rem",
+                      background: "rgba(239, 68, 68, 0.1)",
+                      border: "1px solid rgba(239, 68, 68, 0.3)",
+                      borderRadius: "8px",
+                      color: "#fca5a5",
+                      marginBottom: "1rem",
+                      fontSize: "0.875rem",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.75rem"
+                    }}
+                  >
+                    <span style={{ fontSize: "1.25rem" }}>⚠️</span>
+                    <span>{leadsError}</span>
+                  </div>
+                )}
+
+                {!leadsLoading && !leadsError && leadsData.length === 0 && (
+                  <div style={{ 
+                    textAlign: "center", 
+                    padding: "4rem 2rem",
+                    color: "#64748b"
+                  }}>
+                    <div style={{ fontSize: "4rem", marginBottom: "1rem", opacity: 0.5 }}>📭</div>
+                    <div style={{ fontSize: "1.25rem", fontWeight: "600", color: "#94a3b8", marginBottom: "0.5rem" }}>
+                      No Leads Yet
+                    </div>
+                    <div style={{ fontSize: "0.875rem", color: "#64748b" }}>
+                      Leads will appear here once visitors submit their contact information
+                    </div>
+                  </div>
+                )}
+
+                {!leadsLoading && !leadsError && leadsData.length > 0 && (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ 
+                      width: "100%", 
+                      borderCollapse: "separate",
+                      borderSpacing: "0",
+                      fontSize: "0.875rem"
+                    }}>
+                      <thead>
+                        <tr>
+                          <th style={{ 
+                            padding: "1rem", 
+                            background: "rgba(102, 126, 234, 0.15)",
+                            textAlign: "left",
+                            fontWeight: "600",
+                            color: "#e2e8f0",
+                            fontSize: "0.75rem",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            borderBottom: "2px solid rgba(102, 126, 234, 0.3)",
+                            whiteSpace: "nowrap"
+                          }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              👤 Name
+                            </span>
+                          </th>
+                          <th style={{ 
+                            padding: "1rem", 
+                            background: "rgba(102, 126, 234, 0.15)",
+                            textAlign: "left",
+                            fontWeight: "600",
+                            color: "#e2e8f0",
+                            fontSize: "0.75rem",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            borderBottom: "2px solid rgba(102, 126, 234, 0.3)",
+                            whiteSpace: "nowrap"
+                          }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              📧 Email
+                            </span>
+                          </th>
+                          <th style={{ 
+                            padding: "1rem", 
+                            background: "rgba(102, 126, 234, 0.15)",
+                            textAlign: "left",
+                            fontWeight: "600",
+                            color: "#e2e8f0",
+                            fontSize: "0.75rem",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            borderBottom: "2px solid rgba(102, 126, 234, 0.3)",
+                            whiteSpace: "nowrap"
+                          }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              📱 Phone
+                            </span>
+                          </th>
+                          <th style={{ 
+                            padding: "1rem", 
+                            background: "rgba(102, 126, 234, 0.15)",
+                            textAlign: "left",
+                            fontWeight: "600",
+                            color: "#e2e8f0",
+                            fontSize: "0.75rem",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            borderBottom: "2px solid rgba(102, 126, 234, 0.3)",
+                            whiteSpace: "nowrap"
+                          }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              💬 Question
+                            </span>
+                          </th>
+                          <th style={{ 
+                            padding: "1rem", 
+                            background: "rgba(102, 126, 234, 0.15)",
+                            textAlign: "left",
+                            fontWeight: "600",
+                            color: "#e2e8f0",
+                            fontSize: "0.75rem",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            borderBottom: "2px solid rgba(102, 126, 234, 0.3)",
+                            whiteSpace: "nowrap"
+                          }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              📅 Date
+                            </span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leadsData.map((lead, index) => (
+                          <tr 
+                            key={lead._id || index}
+                            style={{ 
+                              background: index % 2 === 0 ? "rgba(255, 255, 255, 0.03)" : "transparent",
+                              transition: "all 0.2s ease"
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = "rgba(102, 126, 234, 0.1)";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = index % 2 === 0 ? "rgba(255, 255, 255, 0.03)" : "transparent";
+                            }}
+                          >
+                            <td style={{ 
+                              padding: "1rem", 
+                              color: "#e2e8f0",
+                              fontWeight: "500",
+                              borderBottom: "1px solid rgba(255, 255, 255, 0.05)"
+                            }}>
+                              {lead.name || <span style={{ color: "#64748b", fontStyle: "italic" }}>N/A</span>}
+                            </td>
+                            <td style={{ 
+                              padding: "1rem",
+                              borderBottom: "1px solid rgba(255, 255, 255, 0.05)"
+                            }}>
+                              {lead.email ? (
+                                <a 
+                                  href={`mailto:${lead.email}`} 
+                                  style={{ 
+                                    color: "#818cf8",
+                                    textDecoration: "none",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "0.25rem",
+                                    padding: "0.25rem 0.5rem",
+                                    borderRadius: "4px",
+                                    transition: "all 0.2s ease"
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.target.style.background = "rgba(129, 140, 248, 0.2)";
+                                    e.target.style.color = "#a5b4fc";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.target.style.background = "transparent";
+                                    e.target.style.color = "#818cf8";
+                                  }}
+                                >
+                                  {lead.email}
+                                </a>
+                              ) : (
+                                <span style={{ color: "#64748b", fontStyle: "italic" }}>N/A</span>
+                              )}
+                            </td>
+                            <td style={{ 
+                              padding: "1rem",
+                              borderBottom: "1px solid rgba(255, 255, 255, 0.05)"
+                            }}>
+                              {lead.phone ? (
+                                <a 
+                                  href={`tel:${lead.phone}`} 
+                                  style={{ 
+                                    color: "#818cf8",
+                                    textDecoration: "none",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "0.25rem",
+                                    padding: "0.25rem 0.5rem",
+                                    borderRadius: "4px",
+                                    transition: "all 0.2s ease"
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.target.style.background = "rgba(129, 140, 248, 0.2)";
+                                    e.target.style.color = "#a5b4fc";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.target.style.background = "transparent";
+                                    e.target.style.color = "#818cf8";
+                                  }}
+                                >
+                                  {lead.phone}
+                                </a>
+                              ) : (
+                                <span style={{ color: "#64748b", fontStyle: "italic" }}>N/A</span>
+                              )}
+                            </td>
+                            <td style={{ 
+                              padding: "1rem", 
+                              color: "#94a3b8",
+                              maxWidth: "300px",
+                              borderBottom: "1px solid rgba(255, 255, 255, 0.05)"
+                            }}>
+                              <div 
+                                style={{ 
+                                  overflow: "hidden", 
+                                  textOverflow: "ellipsis", 
+                                  whiteSpace: "nowrap" 
+                                }} 
+                                title={lead.originalQuestion || lead.original_question || ""}
+                              >
+                                {lead.originalQuestion || lead.original_question || <span style={{ color: "#64748b", fontStyle: "italic" }}>N/A</span>}
+                              </div>
+                            </td>
+                            <td style={{ 
+                              padding: "1rem", 
+                              color: "#94a3b8",
+                              whiteSpace: "nowrap",
+                              fontSize: "0.8125rem",
+                              borderBottom: "1px solid rgba(255, 255, 255, 0.05)"
+                            }}>
+                              {lead.createdAt
+                                ? new Date(lead.createdAt).toLocaleString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                                : <span style={{ color: "#64748b", fontStyle: "italic" }}>N/A</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ 
+                borderTop: "1px solid rgba(102, 126, 234, 0.2)", 
+                padding: "1.25rem 2rem",
+                background: "rgba(102, 126, 234, 0.05)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center"
+              }}>
+                <div style={{ fontSize: "0.875rem", color: "#94a3b8" }}>
+                  Total: <span style={{ fontWeight: "600", color: "#e2e8f0" }}>{leadsData.length}</span> lead{leadsData.length !== 1 ? 's' : ''}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLeadsModal(false);
+                    setLeadsData([]);
+                    setLeadsError("");
+                  }}
                   style={{
-                    padding: "0.75rem",
-                    background: "#fee2e2",
-                    border: "1px solid #ef4444",
-                    borderRadius: "4px",
-                    color: "#991b1b",
-                    marginBottom: "1rem",
+                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                    border: "none",
+                    color: "#fff",
+                    padding: "0.625rem 1.5rem",
+                    borderRadius: "8px",
+                    cursor: "pointer",
                     fontSize: "0.875rem",
+                    fontWeight: "600",
+                    transition: "all 0.2s ease",
+                    boxShadow: "0 4px 12px rgba(102, 126, 234, 0.3)"
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.transform = "translateY(-2px)";
+                    e.target.style.boxShadow = "0 6px 20px rgba(102, 126, 234, 0.4)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.transform = "translateY(0)";
+                    e.target.style.boxShadow = "0 4px 12px rgba(102, 126, 234, 0.3)";
                   }}
                 >
-                  {leadsError}
-                </div>
-              )}
-
-              {!leadsLoading && !leadsError && leadsData.length === 0 && (
-                <div style={{ textAlign: "center", padding: "2rem", color: "#64748b" }}>
-                  No leads captured yet for this website.
-                </div>
-              )}
-
-              {!leadsLoading && !leadsError && leadsData.length > 0 && (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
-                    <thead>
-                      <tr style={{ background: "#f1f5f9", textAlign: "left" }}>
-                        <th style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", fontWeight: "600", color: "#334155" }}>Name</th>
-                        <th style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", fontWeight: "600", color: "#334155" }}>Email</th>
-                        <th style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", fontWeight: "600", color: "#334155" }}>Phone</th>
-                        <th style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", fontWeight: "600", color: "#334155" }}>Question</th>
-                        <th style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", fontWeight: "600", color: "#334155" }}>Date</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leadsData.map((lead, index) => (
-                        <tr key={lead._id || index} style={{ borderBottom: "1px solid #e2e8f0" }}>
-                          <td style={{ padding: "0.75rem", color: "#1e293b" }}>{lead.name || "—"}</td>
-                          <td style={{ padding: "0.75rem", color: "#1e293b" }}>
-                            {lead.email ? (
-                              <a href={`mailto:${lead.email}`} style={{ color: "#3b82f6", textDecoration: "none" }}>
-                                {lead.email}
-                              </a>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
-                          <td style={{ padding: "0.75rem", color: "#1e293b" }}>
-                            {lead.phone ? (
-                              <a href={`tel:${lead.phone}`} style={{ color: "#3b82f6", textDecoration: "none" }}>
-                                {lead.phone}
-                              </a>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
-                          <td style={{ padding: "0.75rem", color: "#64748b", maxWidth: "250px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={lead.originalQuestion || lead.original_question || ""}>
-                            {lead.originalQuestion || lead.original_question || "—"}
-                          </td>
-                          <td style={{ padding: "0.75rem", color: "#64748b", whiteSpace: "nowrap" }}>
-                            {lead.createdAt
-                              ? new Date(lead.createdAt).toLocaleString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                              : "—"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            <div className="scrape-modal-actions" style={{ borderTop: "1px solid #e2e8f0", padding: "1rem" }}>
-              <button
-                type="button"
-                className="scrape-btn-neutral"
-                onClick={() => {
-                  setShowLeadsModal(false);
-                  setLeadsData([]);
-                  setLeadsError("");
-                }}
-              >
-                Close
-              </button>
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
