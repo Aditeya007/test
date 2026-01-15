@@ -70,7 +70,6 @@ function CreateEditUserPage() {
           password: values.password,
           maxBots: values.maxBots,
           maxAgents: values.maxAgents || 0,
-          apiKey: values.apiKey || undefined,
         },
       });
 
@@ -116,10 +115,6 @@ function CreateEditUserPage() {
     // Include maxAgents if changed
     if (values.maxAgents !== editingUser.maxAgents) {
       payload.maxAgents = values.maxAgents;
-    }
-    // Include apiKey if changed
-    if (values.apiKey !== editingUser.apiKey) {
-      payload.apiKey = values.apiKey;
     }
     if (Object.keys(payload).length === 0) {
       setErrorMessage("No changes detected to update.");

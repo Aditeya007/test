@@ -9,7 +9,6 @@ const defaultValues = {
   password: "",
   maxBots: 1,
   maxAgents: 0,
-  apiKey: "",
 };
 
 function UserForm({
@@ -158,38 +157,6 @@ function UserForm({
           {fieldErrors.username && (
             <span className="field-error">{fieldErrors.username}</span>
           )}
-        </div>
-
-        <div>
-          <label htmlFor="api-key">Gemini API Key (Optional)</label>
-          <input
-            id="api-key"
-            name="apiKey"
-            type="text"
-            placeholder="AIzaSy... (Get from Google AI Studio)"
-            value={values.apiKey}
-            onChange={handleChange}
-            disabled={loading}
-            className={fieldErrors.apiKey ? "input-error" : ""}
-            style={{ fontFamily: "monospace", fontSize: "0.9em" }}
-          />
-          {fieldErrors.apiKey && (
-            <span className="field-error">{fieldErrors.apiKey}</span>
-          )}
-          <small
-            style={{ display: "block", marginTop: "0.3em", color: "#666" }}
-          >
-            Get your API key from{" "}
-            <a
-              href="https://makersuite.google.com/app/apikey"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: "#0066cc" }}
-            >
-              Google AI Studio
-            </a>
-            . This key will be used for all chatbots under this user.
-          </small>
         </div>
       </div>
 
