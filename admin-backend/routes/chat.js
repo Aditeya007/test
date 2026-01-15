@@ -95,18 +95,14 @@ router.post('/chat/end-session', chatController.endSession);
 
 /**
  * @route   POST /api/chat/session/close
- * @desc    Close a chat session and queue lead data for server-side dispatch
+ * @desc    Close a chat session
  * @access  Public (widget API access)
  * @body    { session_id: string, resource_id: string }
- * @returns { success: boolean, message: string, lead_queued: boolean }
+ * @returns { success: boolean, message: string }
  * 
- * Triggered when user closes the widget. Fetches any lead data for the session
- * and queues it in LeadQueue collection. A server-side cron job processes
- * unsent leads every 30 minutes and sends batch emails to configured recipients.
- * 
- * IMPORTANT: This endpoint NO LONGER sends emails directly. All email delivery
- * is handled server-side via the Lead Dispatch System (leadDispatchJob.js).
- * This guarantees delivery even if the user closes their browser.
+ * Triggered when user closes the widget.
+ * NOTE: Lead email delivery has been removed. Leads are now viewed
+ * only in the admin dashboard per website.
  */
 router.post('/chat/session/close', chatController.closeSessionAndDeliverLead);
 

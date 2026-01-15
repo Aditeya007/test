@@ -82,11 +82,12 @@ function WebsitesPage() {
   const [addKnowledgeError, setAddKnowledgeError] = useState("");
   const [addKnowledgeSuccess, setAddKnowledgeSuccess] = useState("");
 
-  // Lead Delivery Email state
-  const [leadDeliveryEmail, setLeadDeliveryEmail] = useState("");
-  const [leadEmailError, setLeadEmailError] = useState("");
-  const [leadEmailSuccess, setLeadEmailSuccess] = useState("");
-  const [leadEmailSaving, setLeadEmailSaving] = useState(false);
+  // Leads modal state
+  const [showLeadsModal, setShowLeadsModal] = useState(false);
+  const [leadsData, setLeadsData] = useState([]);
+  const [leadsLoading, setLeadsLoading] = useState(false);
+  const [leadsError, setLeadsError] = useState("");
+  const [leadsWebsiteId, setLeadsWebsiteId] = useState(null);
 
   // Handle Add Knowledge
   async function handleAddKnowledge() {
@@ -238,10 +239,6 @@ function WebsitesPage() {
     if (selectedWebsite) {
       fetchSchedulerStatus();
       fetchScrapeHistory();
-      // Prefill lead delivery email
-      setLeadDeliveryEmail(selectedWebsite.lead_delivery_email || "");
-      setLeadEmailError("");
-      setLeadEmailSuccess("");
     }
   }, [selectedWebsite, fetchSchedulerStatus, fetchScrapeHistory]);
 
@@ -405,43 +402,31 @@ function WebsitesPage() {
     }
   }
 
-  // Handle Lead Delivery Email Save
-  async function handleSaveLeadEmail() {
-    if (!selectedWebsite || !token) return;
+  // Handle View Leads
+  async function handleViewLeads(websiteId) {
+    if (!token) return;
 
-    const trimmedEmail = leadDeliveryEmail.trim();
-
-    // Validate email format if not empty
-    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setLeadEmailError("Please enter a valid email address");
-      return;
-    }
-
-    setLeadEmailSaving(true);
-    setLeadEmailError("");
-    setLeadEmailSuccess("");
-
-    const botId = selectedWebsite._id || selectedWebsite.id;
+    setLeadsWebsiteId(websiteId);
+    setShowLeadsModal(true);
+    setLeadsLoading(true);
+    setLeadsError("");
+    setLeadsData([]);
 
     try {
-      const { updateBot } = await import("../api");
-      await updateBot(botId, { lead_delivery_email: trimmedEmail || null }, token);
+      const response = await apiRequest(`/bot/${websiteId}/leads`, {
+        method: "GET",
+        token,
+      });
 
-      // Update local state
-      setWebsites((prev) =>
-        prev.map((w) =>
-          (w._id || w.id) === botId
-            ? { ...w, lead_delivery_email: trimmedEmail || null }
-            : w
-        )
-      );
-
-      setLeadEmailSuccess("Lead delivery email saved successfully!");
-      setTimeout(() => setLeadEmailSuccess(""), 3000);
+      if (response.success && response.leads) {
+        setLeadsData(response.leads);
+      } else {
+        setLeadsData([]);
+      }
     } catch (err) {
-      setLeadEmailError(err.message || "Failed to save email");
+      setLeadsError(err.message || "Failed to load leads");
     } finally {
-      setLeadEmailSaving(false);
+      setLeadsLoading(false);
     }
   }
 
@@ -492,14 +477,14 @@ function WebsitesPage() {
               }
               return maxWebsites > 0 && websites.length < maxWebsites;
             })() && (
-              <button
-                type="button"
-                className="auth-btn auth-btn--success"
-                onClick={() => setAddWebsiteModalOpen(true)}
-              >
-                ➕ Add Website
-              </button>
-            )}
+                <button
+                  type="button"
+                  className="auth-btn auth-btn--success"
+                  onClick={() => setAddWebsiteModalOpen(true)}
+                >
+                  ➕ Add Website
+                </button>
+              )}
           </div>
         </div>
       </header>
@@ -556,11 +541,10 @@ function WebsitesPage() {
                       </td>
                       <td>
                         <span
-                          className={`status-badge ${
-                            website.botReady
-                              ? "status-badge--ready"
-                              : "status-badge--pending"
-                          }`}
+                          className={`status-badge ${website.botReady
+                            ? "status-badge--ready"
+                            : "status-badge--pending"
+                            }`}
                         >
                           {website.botReady ? "✓ Ready" : "⏳ Pending"}
                         </span>
@@ -568,58 +552,87 @@ function WebsitesPage() {
                       <td style={{ fontSize: "0.85rem" }}>
                         {website.lastScrapeAt
                           ? new Date(website.lastScrapeAt).toLocaleString(
-                              "en-US",
-                              {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              }
-                            )
+                            "en-US",
+                            {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }
+                          )
                           : "Never"}
                       </td>
                       <td style={{ fontSize: "0.85rem" }}>
                         {website.createdAt
                           ? new Date(website.createdAt).toLocaleString(
-                              "en-US",
-                              {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              }
-                            )
+                            "en-US",
+                            {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }
+                          )
                           : "—"}
                       </td>
                       <td>
-                        <button
-                          type="button"
-                          onClick={() => handleWebsiteSelect(website)}
-                          style={{
-                            background: "transparent",
-                            border: "none",
-                            cursor: "pointer",
-                            fontSize: "1.2rem",
-                            padding: "0.25rem",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            transition: "transform 0.2s",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = "scale(1.1)";
-                            e.currentTarget.style.opacity = "0.8";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = "scale(1)";
-                            e.currentTarget.style.opacity = "1";
-                          }}
-                          title="View Details"
-                        >
-                          📋
-                        </button>
+                        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                          <button
+                            type="button"
+                            onClick={() => handleViewLeads(websiteId)}
+                            style={{
+                              background: "#10b981",
+                              border: "none",
+                              cursor: "pointer",
+                              fontSize: "0.75rem",
+                              padding: "0.35rem 0.75rem",
+                              borderRadius: "4px",
+                              color: "#ffffff",
+                              fontWeight: "500",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.25rem",
+                              transition: "background 0.2s",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = "#059669";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = "#10b981";
+                            }}
+                            title="View Leads"
+                          >
+                            📋 Leads
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleWebsiteSelect(website)}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              cursor: "pointer",
+                              fontSize: "1.2rem",
+                              padding: "0.25rem",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              transition: "transform 0.2s",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.transform = "scale(1.1)";
+                              e.currentTarget.style.opacity = "0.8";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.transform = "scale(1)";
+                              e.currentTarget.style.opacity = "1";
+                            }}
+                            title="View Details"
+                          >
+                            ⚙️
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -708,7 +721,7 @@ function WebsitesPage() {
             Manage chatbot for:{" "}
             <strong>
               {selectedWebsite.scrapedWebsites &&
-              selectedWebsite.scrapedWebsites[0]
+                selectedWebsite.scrapedWebsites[0]
                 ? selectedWebsite.scrapedWebsites[0]
                 : "this website"}
             </strong>
@@ -833,15 +846,15 @@ function WebsitesPage() {
                 <div style={{ color: "#1e293b", fontWeight: "500" }}>
                   {selectedWebsite.lastScrapeAt
                     ? new Date(selectedWebsite.lastScrapeAt).toLocaleString(
-                        "en-US",
-                        {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        }
-                      )
+                      "en-US",
+                      {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }
+                    )
                     : "Never"}
                 </div>
               </div>
@@ -998,118 +1011,7 @@ function WebsitesPage() {
             )}
           </div>
 
-          {/* Lead Delivery Email Section */}
-          <div
-            style={{
-              padding: "1rem",
-              background: "#ffffff",
-              border: "1px solid #cbd5e1",
-              borderRadius: "6px",
-              marginBottom: "1rem",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "0.875rem",
-                fontWeight: "600",
-                color: "#334155",
-                marginBottom: "0.75rem",
-              }}
-            >
-              📧 Lead Delivery Email
-            </div>
-            <div
-              style={{
-                fontSize: "0.75rem",
-                color: "#64748b",
-                marginBottom: "0.75rem",
-              }}
-            >
-              Receive lead notifications when users provide contact information
-            </div>
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
-              <div style={{ flex: 1 }}>
-                <input
-                  type="email"
-                  value={leadDeliveryEmail}
-                  onChange={(e) => {
-                    setLeadDeliveryEmail(e.target.value);
-                    setLeadEmailError("");
-                  }}
-                  placeholder="sales@example.com"
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem 0.75rem",
-                    border: `1px solid ${leadEmailError ? "#ef4444" : "#cbd5e1"}`,
-                    borderRadius: "4px",
-                    fontSize: "0.875rem",
-                    outline: "none",
-                    transition: "border-color 0.2s",
-                  }}
-                  onFocus={(e) => {
-                    if (!leadEmailError) {
-                      e.target.style.borderColor = "#3b82f6";
-                    }
-                  }}
-                  onBlur={(e) => {
-                    if (!leadEmailError) {
-                      e.target.style.borderColor = "#cbd5e1";
-                    }
-                  }}
-                />
-                {leadEmailError && (
-                  <div
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "#dc2626",
-                      marginTop: "0.25rem",
-                    }}
-                  >
-                    {leadEmailError}
-                  </div>
-                )}
-                {leadEmailSuccess && (
-                  <div
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "#059669",
-                      marginTop: "0.25rem",
-                    }}
-                  >
-                    ✓ {leadEmailSuccess}
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={handleSaveLeadEmail}
-                disabled={leadEmailSaving}
-                style={{
-                  padding: "0.5rem 1rem",
-                  background: leadEmailSaving ? "#94a3b8" : "#0ea5e9",
-                  color: "#ffffff",
-                  border: "none",
-                  borderRadius: "4px",
-                  fontSize: "0.875rem",
-                  fontWeight: "500",
-                  cursor: leadEmailSaving ? "not-allowed" : "pointer",
-                  transition: "background 0.2s",
-                  whiteSpace: "nowrap",
-                }}
-                onMouseEnter={(e) => {
-                  if (!leadEmailSaving) {
-                    e.currentTarget.style.background = "#0284c7";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!leadEmailSaving) {
-                    e.currentTarget.style.background = "#0ea5e9";
-                  }
-                }}
-              >
-                {leadEmailSaving ? "Saving..." : "Save"}
-              </button>
-            </div>
-          </div>
+
 
           {scrapeSuccess && (
             <div
@@ -1160,12 +1062,12 @@ function WebsitesPage() {
               style={{
                 opacity:
                   scrapeLoading ||
-                  selectedWebsite.schedulerConfig?.status === "running"
+                    selectedWebsite.schedulerConfig?.status === "running"
                     ? 0.6
                     : 1,
                 cursor:
                   scrapeLoading ||
-                  selectedWebsite.schedulerConfig?.status === "running"
+                    selectedWebsite.schedulerConfig?.status === "running"
                     ? "not-allowed"
                     : "pointer",
                 flex: "1 1 200px",
@@ -1174,8 +1076,8 @@ function WebsitesPage() {
               {scrapeLoading
                 ? "⏳ Running..."
                 : selectedWebsite.schedulerConfig?.status === "running"
-                ? "⏳ Crawling..."
-                : "🔄 Run Crawl"}
+                  ? "⏳ Crawling..."
+                  : "🔄 Run Crawl"}
             </button>
             <button
               className="dashboard-action-btn"
@@ -1371,13 +1273,13 @@ function WebsitesPage() {
                   <div style={{ fontWeight: "500", color: "#1e293b" }}>
                     {schedulerConfig?.lastScrapeCompleted
                       ? new Date(
-                          schedulerConfig.lastScrapeCompleted
-                        ).toLocaleString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
+                        schedulerConfig.lastScrapeCompleted
+                      ).toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
                       : "Never"}
                   </div>
                 </div>
@@ -1559,6 +1461,139 @@ function WebsitesPage() {
                 }}
               >
                 {addKnowledgeLoading ? "⏳ Adding..." : "✅ Add Knowledge"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leads Modal */}
+      {showLeadsModal && (
+        <div
+          className="scrape-modal-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowLeadsModal(false);
+              setLeadsData([]);
+              setLeadsError("");
+            }
+          }}
+        >
+          <div
+            className="scrape-modal-content"
+            style={{ maxWidth: "900px", maxHeight: "80vh", overflow: "hidden", display: "flex", flexDirection: "column" }}
+          >
+            <div className="scrape-modal-header">
+              <h3>📋 Leads</h3>
+              <button
+                type="button"
+                className="scrape-modal-close"
+                onClick={() => {
+                  setShowLeadsModal(false);
+                  setLeadsData([]);
+                  setLeadsError("");
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflow: "auto", padding: "1rem" }}>
+              {leadsLoading && (
+                <div style={{ textAlign: "center", padding: "2rem", color: "#64748b" }}>
+                  ⏳ Loading leads...
+                </div>
+              )}
+
+              {leadsError && (
+                <div
+                  style={{
+                    padding: "0.75rem",
+                    background: "#fee2e2",
+                    border: "1px solid #ef4444",
+                    borderRadius: "4px",
+                    color: "#991b1b",
+                    marginBottom: "1rem",
+                    fontSize: "0.875rem",
+                  }}
+                >
+                  {leadsError}
+                </div>
+              )}
+
+              {!leadsLoading && !leadsError && leadsData.length === 0 && (
+                <div style={{ textAlign: "center", padding: "2rem", color: "#64748b" }}>
+                  No leads captured yet for this website.
+                </div>
+              )}
+
+              {!leadsLoading && !leadsError && leadsData.length > 0 && (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
+                    <thead>
+                      <tr style={{ background: "#f1f5f9", textAlign: "left" }}>
+                        <th style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", fontWeight: "600", color: "#334155" }}>Name</th>
+                        <th style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", fontWeight: "600", color: "#334155" }}>Email</th>
+                        <th style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", fontWeight: "600", color: "#334155" }}>Phone</th>
+                        <th style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", fontWeight: "600", color: "#334155" }}>Question</th>
+                        <th style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", fontWeight: "600", color: "#334155" }}>Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leadsData.map((lead, index) => (
+                        <tr key={lead._id || index} style={{ borderBottom: "1px solid #e2e8f0" }}>
+                          <td style={{ padding: "0.75rem", color: "#1e293b" }}>{lead.name || "—"}</td>
+                          <td style={{ padding: "0.75rem", color: "#1e293b" }}>
+                            {lead.email ? (
+                              <a href={`mailto:${lead.email}`} style={{ color: "#3b82f6", textDecoration: "none" }}>
+                                {lead.email}
+                              </a>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td style={{ padding: "0.75rem", color: "#1e293b" }}>
+                            {lead.phone ? (
+                              <a href={`tel:${lead.phone}`} style={{ color: "#3b82f6", textDecoration: "none" }}>
+                                {lead.phone}
+                              </a>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td style={{ padding: "0.75rem", color: "#64748b", maxWidth: "250px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={lead.originalQuestion || lead.original_question || ""}>
+                            {lead.originalQuestion || lead.original_question || "—"}
+                          </td>
+                          <td style={{ padding: "0.75rem", color: "#64748b", whiteSpace: "nowrap" }}>
+                            {lead.createdAt
+                              ? new Date(lead.createdAt).toLocaleString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                              : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="scrape-modal-actions" style={{ borderTop: "1px solid #e2e8f0", padding: "1rem" }}>
+              <button
+                type="button"
+                className="scrape-btn-neutral"
+                onClick={() => {
+                  setShowLeadsModal(false);
+                  setLeadsData([]);
+                  setLeadsError("");
+                }}
+              >
+                Close
               </button>
             </div>
           </div>

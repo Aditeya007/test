@@ -80,23 +80,23 @@ const jwt = require('jsonwebtoken');
 io.use((socket, next) => {
   try {
     const token = socket.handshake.auth.token;
-    
+
     // If no token provided, allow connection as anonymous widget
     if (!token) {
       socket.user = { role: 'widget' };
       console.log(`✅ Socket ${socket.id} connected as widget (anonymous)`);
       return next();
     }
-    
+
     // Token exists - verify it
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET, {
         algorithms: ['HS256'] // Prevent algorithm confusion attacks
       });
-      
+
       // Attach decoded token info to socket object for later use
       socket.user = decoded;
-      
+
       console.log(`✅ Socket ${socket.id} authenticated as user ${decoded.username || decoded._id} (role: ${decoded.role})`);
       next();
     } catch (verifyError) {
@@ -183,7 +183,7 @@ app.use(generalLimiter);
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
   const logMessage = `${timestamp} - ${req.method} ${req.path}`;
-  
+
   // Log different levels based on environment
   if (process.env.NODE_ENV === 'development') {
     console.log(`${logMessage} - IP: ${req.ip}`);
@@ -199,13 +199,6 @@ app.use((req, res, next) => {
 // =============================================================================
 dbConnect();
 
-// =============================================================================
-// START LEAD DISPATCH CRON JOB
-// =============================================================================
-const leadDispatchJob = require('./jobs/leadDispatchJob');
-leadDispatchJob.start();
-console.log('🚀 Lead Dispatch System initialized (server-side batch email delivery)');
-
 // API Routes (order matters: specific before chat)
 app.use('/api/auth', authRoutes);          // Register, login
 app.use('/api/user', userRoutes);          // Current user info
@@ -217,7 +210,7 @@ app.use('/api', chatRoutes);               // Chat conversation and message endp
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ 
+  res.json({
     status: 'OK',
     timestamp: new Date().toISOString(),
     service: 'admin-backend',
@@ -227,7 +220,7 @@ app.get('/api/health', (req, res) => {
 
 // Root endpoint
 app.get('/', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'Admin Backend API',
     version: '1.0.0',
     endpoints: [
@@ -235,10 +228,10 @@ app.get('/', (req, res) => {
       'POST /api/auth/login',
       'GET /api/user/me',
       'PUT /api/user/me',
-  'GET /api/users',
-  'POST /api/users',
-  'PUT /api/users/:id',
-  'DELETE /api/users/:id',
+      'GET /api/users',
+      'POST /api/users',
+      'PUT /api/users/:id',
+      'DELETE /api/users/:id',
       'POST /api/bot/run',
       'POST /api/scrape/run',
       'POST /api/scrape/update',
@@ -253,7 +246,7 @@ app.get('/', (req, res) => {
 
 // 404 handler for undefined routes
 app.use((req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'Route not found',
     path: req.path,
     method: req.method
@@ -269,24 +262,24 @@ app.use((err, req, res, next) => {
     path: req.path,
     method: req.method
   });
-  
+
   // Determine status code
   const statusCode = err.statusCode || err.status || 500;
-  
+
   // Prepare error response
   const errorResponse = {
-    error: process.env.NODE_ENV === 'production' 
+    error: process.env.NODE_ENV === 'production'
       ? (statusCode === 500 ? 'Internal server error' : err.message)
       : err.message,
     status: statusCode
   };
-  
+
   // Include stack trace only in development
   if (process.env.NODE_ENV === 'development') {
     errorResponse.stack = err.stack;
     errorResponse.details = err.details;
   }
-  
+
   res.status(statusCode).json(errorResponse);
 });
 
@@ -310,7 +303,7 @@ io.on('connection', (socket) => {
     const agentRoomName = `agents:${socket.user.tenantId}`;
     socket.join(agentRoomName);
     console.log(`👤 Agent ${socket.user.agentId} (${socket.user.username}) joined room: ${agentRoomName}`);
-    
+
     // Track this socket for the agent (for targeted messaging on accept/assign)
     const trackAgentSocket = app.locals.trackAgentSocket;
     if (trackAgentSocket) {
@@ -333,7 +326,7 @@ io.on('connection', (socket) => {
       const agentRoomName = `agents:${socket.user.tenantId}`;
       socket.join(agentRoomName);
       console.log(`Agent joined room: ${agentRoomName}`);
-      
+
       // Track this socket for the agent
       const trackAgentSocket = app.locals.trackAgentSocket;
       if (trackAgentSocket) {
@@ -374,7 +367,7 @@ io.on('connection', (socket) => {
       console.warn(`⚠️  Socket ${socket.id} attempted to join without conversationId`);
       return;
     }
-    
+
     socket.join(conversationId);
     console.log(`📥 Socket ${socket.id} joined room: ${conversationId}`);
   });
@@ -382,7 +375,7 @@ io.on('connection', (socket) => {
   // Handle leaving a conversation room
   socket.on('leave:conversation', (conversationId) => {
     if (!conversationId) return;
-    
+
     socket.leave(conversationId);
     console.log(`📤 Socket ${socket.id} left room: ${conversationId}`);
   });
@@ -502,7 +495,7 @@ io.on('connection', (socket) => {
         // Check if in human-only mode
         if (conversation.status === 'human') {
           console.log(`👤 Conversation ${conversationId} in human mode - sending placeholder`);
-          
+
           const agentMessage = 'A human agent will join shortly.';
           const placeholderMessage = await Message.createMessage(
             conversationId,
@@ -640,7 +633,7 @@ io.on('connection', (socket) => {
 
     } catch (error) {
       console.error('❌ Error handling message:send:', error);
-      socket.emit('message:error', { 
+      socket.emit('message:error', {
         error: 'Failed to process message',
         details: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
@@ -702,7 +695,7 @@ server.listen(PORT, () => {
   console.log(`🔒 Security: Helmet enabled, Rate limiting active`);
   console.log(`💬 Socket.IO: Real-time messaging enabled on same port`);
   console.log('='.repeat(70));
-  
+
   // Warn if critical optional configs are missing
   if (!process.env.FASTAPI_BOT_URL) {
     console.warn('⚠️  WARNING: FASTAPI_BOT_URL not set. Bot endpoints will fail.');
@@ -742,31 +735,27 @@ const gracefulShutdown = async (signal) => {
     console.log(`⚠️  Shutdown already in progress, ignoring ${signal}`);
     return;
   }
-  
+
   isShuttingDown = true;
   console.log(`\n🛑 ${signal} signal received: initiating graceful shutdown`);
-  
-  // Step 1: Stop lead dispatch cron job
-  console.log('⏸️  Stopping lead dispatch cron job...');
-  leadDispatchJob.stop();
-  
-  // Step 2: Wait for active jobs to complete
+
+  // Step 1: Wait for active jobs to complete
   if (activeJobCount > 0) {
     console.log(`⏳ Waiting for ${activeJobCount} active job(s) to complete...`);
     const maxWaitTime = 60000; // 60 seconds
     const startTime = Date.now();
-    
+
     while (activeJobCount > 0 && (Date.now() - startTime) < maxWaitTime) {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
-    
+
     if (activeJobCount > 0) {
       console.warn(`⚠️  Forcing shutdown with ${activeJobCount} job(s) still running`);
     } else {
       console.log('✅ All jobs completed');
     }
   }
-  
+
   // Step 2: Close HTTP server (stop accepting new connections)
   await new Promise((resolve) => {
     server.close(() => {
@@ -774,7 +763,7 @@ const gracefulShutdown = async (signal) => {
       resolve();
     });
   });
-  
+
   // Step 3: Close MongoDB connection (outside server.close callback)
   try {
     await mongoose.connection.close();

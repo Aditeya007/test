@@ -38,7 +38,7 @@ async function getTenantConnection(databaseUri) {
 async function getAgentModel(databaseUri) {
   const connection = await getTenantConnection(databaseUri);
   const AgentSchema = require('../models/Agent');
-  
+
   // Return model from tenant connection
   return connection.models.Agent || connection.model('Agent', AgentSchema);
 }
@@ -105,19 +105,19 @@ async function getTenantModels(databaseUri) {
   ConversationSchema.index({ botId: 1, sessionId: 1 }, { unique: true });
   ConversationSchema.index({ status: 1, lastActiveAt: -1 });
 
-  ConversationSchema.pre('save', function(next) {
+  ConversationSchema.pre('save', function (next) {
     this.lastActiveAt = new Date();
     next();
   });
 
-  ConversationSchema.methods.updateActivity = function() {
+  ConversationSchema.methods.updateActivity = function () {
     this.lastActiveAt = new Date();
     return this.save();
   };
 
-  ConversationSchema.statics.findOrCreate = async function(botId, sessionId) {
+  ConversationSchema.statics.findOrCreate = async function (botId, sessionId) {
     let conversation = await this.findOne({ botId, sessionId });
-    
+
     if (!conversation) {
       conversation = new this({
         botId,
@@ -130,7 +130,7 @@ async function getTenantModels(databaseUri) {
     } else {
       await conversation.updateActivity();
     }
-    
+
     return conversation;
   };
 
@@ -173,7 +173,7 @@ async function getTenantModels(databaseUri) {
 
   MessageSchema.index({ conversationId: 1, createdAt: 1 });
 
-  MessageSchema.statics.getConversationMessages = async function(conversationId, limit = 100) {
+  MessageSchema.statics.getConversationMessages = async function (conversationId, limit = 100) {
     return this.find({ conversationId })
       .sort({ createdAt: 1 })
       .limit(limit)
@@ -181,7 +181,7 @@ async function getTenantModels(databaseUri) {
       .lean();
   };
 
-  MessageSchema.statics.createMessage = async function(conversationId, sender, text, options = {}) {
+  MessageSchema.statics.createMessage = async function (conversationId, sender, text, options = {}) {
     const message = new this({
       conversationId,
       sender,
@@ -190,7 +190,7 @@ async function getTenantModels(databaseUri) {
       sources: options.sources,
       metadata: options.metadata
     });
-    
+
     await message.save();
     return message;
   };
@@ -533,7 +533,7 @@ exports.sendMessage = async (req, res) => {
     if (conversation.status === 'human') {
       // Human agent mode - save message but don't call bot
       const agentMessage = 'A human agent will join shortly.';
-      
+
       // Save agent placeholder message to tenant database
       const placeholderMessage = await Message.createMessage(conversation._id, 'agent', agentMessage);
 
@@ -898,7 +898,7 @@ exports.requestAgentByConversationId = async (req, res) => {
         status: conversation.status,
         createdAt: conversation.createdAt
       };
-      
+
       io.to(agentRoomName).emit('conversation:queued', lightweightSummary);
       console.log(`📡 Emitted conversation:queued to ${agentRoomName}:`, lightweightSummary);
     }
@@ -968,11 +968,11 @@ exports.requestAgent = async (req, res) => {
 
     // Load Agent model to check availability
     const Agent = await getAgentModel(tenantContext.databaseUri);
-    
+
     // Check agent availability
     const availableCount = await Agent.countDocuments({ status: 'available' });
     const busyCount = await Agent.countDocuments({ status: 'busy' });
-    
+
     // If no agents are online at all (neither available nor busy)
     if (availableCount === 0 && busyCount === 0) {
       console.log(`📞 Agent request denied - no agents online (session: ${sessionId})`);
@@ -1019,7 +1019,7 @@ exports.requestAgent = async (req, res) => {
         createdAt: conversation.createdAt,
         requestedAt: conversation.requestedAt
       };
-      
+
       io.to(agentRoomName).emit('conversation:queued', lightweightSummary);
       console.log(`📡 Emitted conversation:queued to ${agentRoomName}:`, lightweightSummary);
     }
@@ -1128,17 +1128,15 @@ exports.endSession = async (req, res) => {
 
 /**
  * POST /api/chat/session/close
- * Close a chat session and queue lead data for server-side dispatch
+ * Close a chat session
  * 
- * This endpoint NO LONGER sends emails directly.
- * Instead, it queues the lead for batch processing by the server-side cron job.
+ * NOTE: Lead email delivery has been removed.
+ * Leads are now viewed only in the admin dashboard per website.
  * 
  * @body { session_id: string, resource_id: string }
- * @returns { success: boolean, message: string, lead_queued?: boolean }
+ * @returns { success: boolean, message: string }
  */
 exports.closeSessionAndDeliverLead = async (req, res) => {
-  const LeadQueue = require('../models/LeadQueue');
-  
   try {
     const { session_id, resource_id } = req.body;
 
@@ -1150,82 +1148,18 @@ exports.closeSessionAndDeliverLead = async (req, res) => {
       });
     }
 
-    // Get user by resource_id to find their database
-    const User = require('../models/User');
-    const user = await User.findOne({ resourceId: resource_id });
-    
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        error: 'Resource not found'
-      });
-    }
-
-    // Load models from user's tenant database
-    const { Conversation, Lead } = await getTenantModels(user.databaseUri);
-
-    // Find lead for this session in the Python bot's Lead collection
-    let lead = await Lead.findOne({ session_id });
-
-    // If no lead exists, silently succeed
-    if (!lead) {
-      console.log(`ℹ️ No lead data found for session ${session_id}`);
-      return res.json({
-        success: true,
-        message: 'Session closed - no lead data to queue',
-        lead_queued: false
-      });
-    }
-
-    // Find the conversation to get botId
-    const conversation = await Conversation.findOne({ sessionId: session_id });
-    if (!conversation) {
-      console.log(`⚠️ No conversation found for session ${session_id}`);
-      return res.json({
-        success: true,
-        message: 'Session closed - conversation not found',
-        lead_queued: false
-      });
-    }
-
-    const Bot = require('../models/Bot');
-    const bot = await Bot.findById(conversation.botId);
-    
-    // Only queue lead if bot has lead_delivery_email configured
-    if (!bot || !bot.lead_delivery_email) {
-      console.log(`ℹ️ No lead delivery email configured for bot ${conversation.botId} - skipping queue`);
-      return res.json({
-        success: true,
-        message: 'Session closed - lead delivery not configured',
-        lead_queued: false
-      });
-    }
-
-    // Queue the lead for server-side batch processing
-    await LeadQueue.queueLead({
-      tenantId: user._id,
-      botId: conversation.botId,
-      conversationId: conversation._id,
-      sessionId: session_id,
-      name: lead.name || null,
-      email: lead.email || null,
-      phone: lead.phone || null,
-      originalQuestion: lead.original_question || null
-    });
-
-    console.log(`✅ Lead queued for server-side dispatch (session: ${session_id}, tenant: ${user._id})`);
+    console.log(`✅ Session closed (session: ${session_id})`);
 
     return res.json({
       success: true,
-      message: 'Lead queued successfully',
-      lead_queued: true
+      message: 'Session closed successfully'
     });
 
   } catch (err) {
-    console.error('❌ Failed to close session and queue lead:', err.message);
+    console.error('❌ Failed to close session:', err.message);
     res.status(500).json({
       success: false,
-      error: 'Failed to close session and queue lead',
+      error: 'Failed to close session',
       details: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
