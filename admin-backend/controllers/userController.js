@@ -131,12 +131,16 @@ exports.getMe = async (req, res) => {
  */
 exports.updateMe = async (req, res) => {
   const updates = {};
-  const { name, email, username, password } = req.body;
+  const { name, email, username, password, apiKey } = req.body;
 
-  // Build updates object
   if (name) updates.name = name.trim();
   if (email) updates.email = email.toLowerCase().trim();
   if (username) updates.username = username.trim();
+
+  // Allow admins to update their API key
+  if (typeof apiKey !== "undefined") {
+    updates.apiKey = apiKey ? apiKey.trim() : null;
+  }
 
   // Hash password if provided
   if (password) {
