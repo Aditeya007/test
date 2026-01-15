@@ -378,6 +378,7 @@ class QuestionRequest(BaseModel):
     resource_id: Optional[str] = None
     database_uri: Optional[str] = None
     vector_store_path: Optional[str] = None
+    bot_id: Optional[str] = None
 
 class AnswerResponse(BaseModel):
     answer: str
@@ -547,6 +548,7 @@ class SemanticIntelligentRAG:
         if self.leads_collection is not None:
             try:
                 lead_document = {
+                    "botId": self.get_bot_id(session_id),
                     "name": name,
                     "phone": "",  # Empty initially
                     "email": "",  # Empty initially
@@ -573,6 +575,11 @@ class SemanticIntelligentRAG:
         """Get stored user name for session"""
         context = self.conversation_contexts.get(session_id, {})
         return context.get('username')
+
+    def get_bot_id(self, session_id: str) -> Optional[str]:
+        """Get stored bot_id for session"""
+        context = self.conversation_contexts.get(session_id, {})
+        return context.get('bot_id')
 
     def should_ask_for_name(self, session_id: str) -> bool:
         """Determine if we should ask for the user's name"""
@@ -725,13 +732,18 @@ class SemanticIntelligentRAG:
         print(f"🔍 DATABASE DEBUG - About to save leaddata: {leaddata}")
 
         try:
+            # Get bot_id from session context if available
+            session_id = leaddata.get("session_id")
+            bot_id = self.get_bot_id(session_id) if session_id else None
+            
             # Prepare document for MongoDB
             lead_document = {
+                "botId": bot_id,
                 "name": leaddata["name"],
                 "phone": leaddata["phone"], 
                 "email": leaddata["email"],
                 "original_question": leaddata["original_question"],
-                "session_id": leaddata.get("session_id"),
+                "session_id": session_id,
                 "created_at": datetime.datetime.utcnow(),
                 "source": "pricing_inquiry",
                 "status": "new",
@@ -745,14 +757,17 @@ class SemanticIntelligentRAG:
         except DuplicateKeyError:
             print(f"⚠️ Lead with email {leaddata['email']} already exists")
             # Update existing lead instead
+            session_id = leaddata.get("session_id")
+            bot_id = self.get_bot_id(session_id) if session_id else None
             self.leads_collection.update_one(
                 {"email": leaddata["email"]},
                 {
                     "$set": {
+                        "botId": bot_id,
                         "name": leaddata["name"],
                         "phone": leaddata["phone"],
                         "original_question": leaddata["original_question"],
-                        "session_id": leaddata.get("session_id"),
+                        "session_id": session_id,
                         "last_contact": datetime.datetime.utcnow(),
                         "status": "updated"
                     }
@@ -837,11 +852,13 @@ class SemanticIntelligentRAG:
                     return True, "Thank you! We'll follow up soon."
 
                 existing_lead = self.leads_collection.find_one({"session_id": session_id})
+                bot_id = self.get_bot_id(session_id)
 
                 if existing_lead:
                     # Update existing record with phone and email
                     update_data = {
                         "$set": {
+                            "botId": bot_id,
                             "phone": state["phone"],
                             "email": state["email"],
                             "original_question": state["original_question"],
@@ -854,6 +871,7 @@ class SemanticIntelligentRAG:
                 else:
                     # Fallback: create new complete record
                     lead_document = {
+                        "botId": bot_id,
                         "name": state["name"],
                         "phone": state["phone"],
                         "email": state["email"],
@@ -1543,6 +1561,7 @@ ANSWER (be concise and factual):"""
                             result = self.leads_collection.update_one(
                                 {"session_id": session_id, "status": "partial"},
                                 {"$set": {
+                                    "botId": self.get_bot_id(session_id),
                                     "phone": phone,
                                     "original_question": original_pricing_q,
                                     "status": "phone_collected",
@@ -1577,6 +1596,7 @@ ANSWER (be concise and factual):"""
                             result = self.leads_collection.update_one(
                                 {"session_id": session_id},
                                 {"$set": {
+                                    "botId": self.get_bot_id(session_id),
                                     "email": email,
                                     "original_question": original_pricing_q,
                                     "status": "complete",
@@ -2004,6 +2024,7 @@ async def health_check():
 async def _handle_chat_request(request: QuestionRequest) -> AnswerResponse:
     print(f"🔍 DEBUG - Received session_id: '{request.session_id}'")
     print(f"🔍 DEBUG - Query: '{request.query}'")
+    print(f"🔍 DEBUG - bot_id: '{request.bot_id}'")
     query_text = (request.query or "").strip()
     if not query_text:
         raise HTTPException(status_code=400, detail="Query text is required")
@@ -2022,6 +2043,13 @@ async def _handle_chat_request(request: QuestionRequest) -> AnswerResponse:
         resource_id=request.resource_id,
         user_id=request.user_id
     )
+    
+    # Store bot_id in session context for lead creation
+    if request.bot_id:
+        if session_identifier not in chatbot_instance.conversation_contexts:
+            chatbot_instance.conversation_contexts[session_identifier] = {}
+        chatbot_instance.conversation_contexts[session_identifier]["bot_id"] = request.bot_id
+    
     try:
         answer = chatbot_instance.chat(query_text, session_identifier)
 

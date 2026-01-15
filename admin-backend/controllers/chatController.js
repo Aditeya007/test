@@ -604,7 +604,8 @@ exports.sendMessage = async (req, res) => {
           botEndpoint: tenantContext.botEndpoint,
           resourceId: tenantContext.resourceId,
           vectorStorePath: bot.vectorStorePath,
-          databaseUri: tenantContext.databaseUri
+          databaseUri: tenantContext.databaseUri,
+          botId: bot._id.toString()
         },
         sanitizedMessage,
         { sessionId }

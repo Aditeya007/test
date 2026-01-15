@@ -70,7 +70,8 @@ exports.runBotForUser = async (tenantContext, userInput, options = {}) => {
         user_id: userId,
         resource_id: effectiveResourceId,
         vector_store_path: effectiveVectorPath,
-        database_uri: effectiveDatabaseUri
+        database_uri: effectiveDatabaseUri,
+        bot_id: tenantContext.botId || null
       },
       {
         timeout,
@@ -213,7 +214,7 @@ exports.reloadVectors = async (tenantContext) => {
 
     const docCount = response.data.document_count;
     const actionTaken = response.data.action_taken;
-    
+
     console.log(`✅ Vector reload successful!`);
     console.log(`   Action: ${actionTaken}`);
     if (docCount !== undefined) {
