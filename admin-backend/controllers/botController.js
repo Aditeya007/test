@@ -296,11 +296,23 @@ exports.updateBot = async (req, res) => {
     const currentUserRole = req.user.role;
 
     // Validate input
-    if (!scrapedWebsites || !Array.isArray(scrapedWebsites)) {
+    if (scrapedWebsites && !Array.isArray(scrapedWebsites)) {
       return res.status(400).json({
         success: false,
         error: 'scrapedWebsites must be an array'
       });
+    }
+
+    // Validate lead_delivery_email format if provided
+    const { lead_delivery_email } = req.body;
+    if (lead_delivery_email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(lead_delivery_email)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid email format for lead_delivery_email'
+        });
+      }
     }
 
     // Find the bot
@@ -339,7 +351,12 @@ exports.updateBot = async (req, res) => {
     }
 
     // Update the bot
-    bot.scrapedWebsites = scrapedWebsites;
+    if (scrapedWebsites) {
+      bot.scrapedWebsites = scrapedWebsites;
+    }
+    if (lead_delivery_email !== undefined) {
+      bot.lead_delivery_email = lead_delivery_email || null;
+    }
     await bot.save();
 
     console.log(`✅ Bot ${botId} updated by ${currentUserRole} ${currentUserId}`);

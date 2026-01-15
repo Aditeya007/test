@@ -82,6 +82,12 @@ function WebsitesPage() {
   const [addKnowledgeError, setAddKnowledgeError] = useState("");
   const [addKnowledgeSuccess, setAddKnowledgeSuccess] = useState("");
 
+  // Lead Delivery Email state
+  const [leadDeliveryEmail, setLeadDeliveryEmail] = useState("");
+  const [leadEmailError, setLeadEmailError] = useState("");
+  const [leadEmailSuccess, setLeadEmailSuccess] = useState("");
+  const [leadEmailSaving, setLeadEmailSaving] = useState(false);
+
   // Handle Add Knowledge
   async function handleAddKnowledge() {
     if (!selectedWebsite || !token) return;
@@ -232,6 +238,10 @@ function WebsitesPage() {
     if (selectedWebsite) {
       fetchSchedulerStatus();
       fetchScrapeHistory();
+      // Prefill lead delivery email
+      setLeadDeliveryEmail(selectedWebsite.lead_delivery_email || "");
+      setLeadEmailError("");
+      setLeadEmailSuccess("");
     }
   }, [selectedWebsite, fetchSchedulerStatus, fetchScrapeHistory]);
 
@@ -392,6 +402,46 @@ function WebsitesPage() {
       setTimeout(() => setSchedulerError(""), 5000);
     } finally {
       setSchedulerLoading(false);
+    }
+  }
+
+  // Handle Lead Delivery Email Save
+  async function handleSaveLeadEmail() {
+    if (!selectedWebsite || !token) return;
+
+    const trimmedEmail = leadDeliveryEmail.trim();
+
+    // Validate email format if not empty
+    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setLeadEmailError("Please enter a valid email address");
+      return;
+    }
+
+    setLeadEmailSaving(true);
+    setLeadEmailError("");
+    setLeadEmailSuccess("");
+
+    const botId = selectedWebsite._id || selectedWebsite.id;
+
+    try {
+      const { updateBot } = await import("../api");
+      await updateBot(botId, { lead_delivery_email: trimmedEmail || null }, token);
+
+      // Update local state
+      setWebsites((prev) =>
+        prev.map((w) =>
+          (w._id || w.id) === botId
+            ? { ...w, lead_delivery_email: trimmedEmail || null }
+            : w
+        )
+      );
+
+      setLeadEmailSuccess("Lead delivery email saved successfully!");
+      setTimeout(() => setLeadEmailSuccess(""), 3000);
+    } catch (err) {
+      setLeadEmailError(err.message || "Failed to save email");
+    } finally {
+      setLeadEmailSaving(false);
     }
   }
 
@@ -946,6 +996,119 @@ function WebsitesPage() {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Lead Delivery Email Section */}
+          <div
+            style={{
+              padding: "1rem",
+              background: "#ffffff",
+              border: "1px solid #cbd5e1",
+              borderRadius: "6px",
+              marginBottom: "1rem",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "0.875rem",
+                fontWeight: "600",
+                color: "#334155",
+                marginBottom: "0.75rem",
+              }}
+            >
+              📧 Lead Delivery Email
+            </div>
+            <div
+              style={{
+                fontSize: "0.75rem",
+                color: "#64748b",
+                marginBottom: "0.75rem",
+              }}
+            >
+              Receive lead notifications when users provide contact information
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+              <div style={{ flex: 1 }}>
+                <input
+                  type="email"
+                  value={leadDeliveryEmail}
+                  onChange={(e) => {
+                    setLeadDeliveryEmail(e.target.value);
+                    setLeadEmailError("");
+                  }}
+                  placeholder="sales@example.com"
+                  style={{
+                    width: "100%",
+                    padding: "0.5rem 0.75rem",
+                    border: `1px solid ${leadEmailError ? "#ef4444" : "#cbd5e1"}`,
+                    borderRadius: "4px",
+                    fontSize: "0.875rem",
+                    outline: "none",
+                    transition: "border-color 0.2s",
+                  }}
+                  onFocus={(e) => {
+                    if (!leadEmailError) {
+                      e.target.style.borderColor = "#3b82f6";
+                    }
+                  }}
+                  onBlur={(e) => {
+                    if (!leadEmailError) {
+                      e.target.style.borderColor = "#cbd5e1";
+                    }
+                  }}
+                />
+                {leadEmailError && (
+                  <div
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "#dc2626",
+                      marginTop: "0.25rem",
+                    }}
+                  >
+                    {leadEmailError}
+                  </div>
+                )}
+                {leadEmailSuccess && (
+                  <div
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "#059669",
+                      marginTop: "0.25rem",
+                    }}
+                  >
+                    ✓ {leadEmailSuccess}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={handleSaveLeadEmail}
+                disabled={leadEmailSaving}
+                style={{
+                  padding: "0.5rem 1rem",
+                  background: leadEmailSaving ? "#94a3b8" : "#0ea5e9",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "4px",
+                  fontSize: "0.875rem",
+                  fontWeight: "500",
+                  cursor: leadEmailSaving ? "not-allowed" : "pointer",
+                  transition: "background 0.2s",
+                  whiteSpace: "nowrap",
+                }}
+                onMouseEnter={(e) => {
+                  if (!leadEmailSaving) {
+                    e.currentTarget.style.background = "#0284c7";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!leadEmailSaving) {
+                    e.currentTarget.style.background = "#0ea5e9";
+                  }
+                }}
+              >
+                {leadEmailSaving ? "Saving..." : "Save"}
+              </button>
+            </div>
           </div>
 
           {scrapeSuccess && (

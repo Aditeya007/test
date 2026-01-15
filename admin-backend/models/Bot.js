@@ -60,6 +60,17 @@ const botSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  // Lead delivery configuration
+  lead_delivery_email: {
+    type: String,
+    default: null,
+    trim: true,
+    lowercase: true,
+    match: [
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$|^$/,
+      'Please provide a valid email address'
+    ]
+  },
   createdAt: {
     type: Date,
     default: Date.now

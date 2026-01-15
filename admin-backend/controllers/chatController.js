@@ -195,11 +195,64 @@ async function getTenantModels(databaseUri) {
     return message;
   };
 
+  // Load Lead schema for lead delivery tracking
+  const LeadSchema = new mongoose.Schema(
+    {
+      name: {
+        type: String,
+        default: null,
+        trim: true
+      },
+      phone: {
+        type: String,
+        default: null,
+        trim: true
+      },
+      email: {
+        type: String,
+        default: null,
+        lowercase: true,
+        trim: true
+      },
+      original_question: {
+        type: String,
+        default: null,
+        trim: true
+      },
+      session_id: {
+        type: String,
+        required: true,
+        index: true,
+        trim: true
+      },
+      delivered: {
+        type: Boolean,
+        default: false,
+        index: true
+      },
+      delivered_at: {
+        type: Date,
+        default: null
+      },
+      created_at: {
+        type: Date,
+        default: Date.now,
+        index: true
+      }
+    },
+    { timestamps: false }
+  );
+
+  // Index for efficient session lookup
+  LeadSchema.index({ session_id: 1 }, { unique: true });
+  LeadSchema.index({ delivered: 1, created_at: -1 });
+
   // Return models from tenant connection
   const Conversation = connection.models.Conversation || connection.model('Conversation', ConversationSchema);
   const Message = connection.models.Message || connection.model('Message', MessageSchema);
+  const Lead = connection.models.Lead || connection.model('Lead', LeadSchema);
 
-  return { Conversation, Message };
+  return { Conversation, Message, Lead };
 }
 
 /**
@@ -1068,6 +1121,135 @@ exports.endSession = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to end session',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
+/**
+ * POST /api/chat/session/close
+ * Close a chat session and deliver any lead data to configured email
+ * 
+ * @body { session_id: string, resource_id: string }
+ * @returns { success: boolean, message: string, lead_sent?: boolean }
+ */
+exports.closeSessionAndDeliverLead = async (req, res) => {
+  const emailService = require('../services/emailService');
+  
+  try {
+    const { session_id, resource_id } = req.body;
+
+    // Validate input
+    if (!session_id || !resource_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'session_id and resource_id are required'
+      });
+    }
+
+    // Get user by resource_id to find their database
+    const User = require('../models/User');
+    const user = await User.findOne({ resourceId: resource_id });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'Resource not found'
+      });
+    }
+
+    // Load models from user's tenant database
+    const { Conversation, Lead } = await getTenantModels(user.databaseUri);
+
+    // Find lead for this session
+    let lead = await Lead.findOne({ session_id });
+
+    // If no lead exists, silently succeed
+    if (!lead) {
+      console.log(`ℹ️ No lead data found for session ${session_id}`);
+      return res.json({
+        success: true,
+        message: 'Session closed - no lead data to deliver',
+        lead_sent: false
+      });
+    }
+
+    // Check if already delivered
+    if (lead.delivered) {
+      console.log(`⚠️ Lead for session ${session_id} already delivered at ${lead.delivered_at}`);
+      return res.json({
+        success: true,
+        message: 'Lead already delivered',
+        lead_sent: false
+      });
+    }
+
+    // Find the bot to get lead_delivery_email configuration
+    const conversation = await Conversation.findOne({ sessionId: session_id });
+    if (!conversation) {
+      console.log(`⚠️ No conversation found for session ${session_id}`);
+      return res.json({
+        success: true,
+        message: 'Session closed - conversation not found',
+        lead_sent: false
+      });
+    }
+
+    const Bot = require('../models/Bot');
+    const bot = await Bot.findById(conversation.botId);
+    
+    // If no bot or no delivery email configured, silently skip
+    if (!bot || !bot.lead_delivery_email) {
+      console.log(`ℹ️ No lead delivery email configured for bot ${conversation.botId}`);
+      return res.json({
+        success: true,
+        message: 'Session closed - lead delivery not configured',
+        lead_sent: false
+      });
+    }
+
+    // Prepare lead data for email
+    const leadData = {
+      name: lead.name,
+      phone: lead.phone,
+      email: lead.email,
+      original_question: lead.original_question,
+      session_id: lead.session_id,
+      created_at: lead.created_at,
+      website_url: user.name // Use user's name as website identifier
+    };
+
+    // Send email
+    const emailSent = await emailService.sendLeadEmail(leadData, bot.lead_delivery_email);
+
+    if (emailSent) {
+      // Mark lead as delivered
+      lead.delivered = true;
+      lead.delivered_at = new Date();
+      await lead.save();
+
+      console.log(`✅ Lead delivered for session ${session_id}`);
+
+      return res.json({
+        success: true,
+        message: 'Lead delivered successfully',
+        lead_sent: true
+      });
+    } else {
+      // Email sending failed
+      console.warn(`⚠️ Failed to send lead email for session ${session_id}`);
+      return res.json({
+        success: false,
+        error: 'Failed to send lead email',
+        lead_sent: false
+      });
+    }
+
+  } catch (err) {
+    console.error('❌ Failed to close session and deliver lead:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to close session and deliver lead',
       details: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }

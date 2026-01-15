@@ -93,4 +93,19 @@ router.post('/chat/request-agent', chatController.requestAgent);
  */
 router.post('/chat/end-session', chatController.endSession);
 
+/**
+ * @route   POST /api/chat/session/close
+ * @desc    Close a chat session and deliver any lead data via email
+ * @access  Public (widget API access)
+ * @body    { session_id: string, resource_id: string }
+ * @returns { success: boolean, message: string, lead_sent: boolean }
+ * 
+ * Triggered when user closes the widget. Fetches any lead data for the session
+ * and sends it to the configured lead_delivery_email for that bot, if set.
+ * Always returns success even if no lead or email not configured.
+ */
+router.post('/chat/session/close', chatController.closeSessionAndDeliverLead);
+
+module.exports = router;
+
 module.exports = router;
