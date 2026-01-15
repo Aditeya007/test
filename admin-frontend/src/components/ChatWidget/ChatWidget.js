@@ -31,39 +31,6 @@ const ChatWidget = ({ toggleChatbot, onSessionIdUpdate }) => {
     const activeTenantId = activeTenant?.id || activeTenant?._id || null;
     const effectiveTenantId = isUser ? (user?.id || user?._id) : activeTenantId;
 
-    // Close session and deliver lead data
-    const closeSession = useCallback(() => {
-        if (!sessionId || !selectedBotId) {
-            return;
-        }
-
-        const payload = {
-            session_id: sessionId,
-            resource_id: selectedBotId
-        };
-
-        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-        const url = `${apiUrl}/api/chat/session/close`;
-
-        // Prefer sendBeacon for reliability during page unload
-        if (navigator.sendBeacon) {
-            const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-            navigator.sendBeacon(url, blob);
-            console.log('ChatWidget: Session close sent via sendBeacon');
-        } else {
-            // Fallback to fetch with keepalive
-            fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-                keepalive: true
-            }).catch(err => {
-                console.error('ChatWidget: Failed to close session:', err);
-            });
-            console.log('ChatWidget: Session close sent via fetch with keepalive');
-        }
-    }, [sessionId, selectedBotId]);
-
     // CRITICAL FIX #1: Validate botId on mount
     useEffect(() => {
         if (!selectedBotId) {
@@ -176,21 +143,6 @@ const ChatWidget = ({ toggleChatbot, onSessionIdUpdate }) => {
         };
     }, [conversationId]);
 
-    // Handle page unload and component unmount - close session
-    useEffect(() => {
-        const handleBeforeUnload = () => {
-            closeSession();
-        };
-
-        window.addEventListener('beforeunload', handleBeforeUnload);
-
-        return () => {
-            // Call on unmount
-            closeSession();
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-        };
-    }, [closeSession]);
-
     // This is the function that sends the request to the backend.
     const handleSend = useCallback(async () => {
         if (input.trim() === '' || loading) return;
@@ -288,9 +240,8 @@ const ChatWidget = ({ toggleChatbot, onSessionIdUpdate }) => {
         }
     };
 
-    // Handle close button click
+    // Handle close button click - only hide widget, do NOT close session
     const handleClose = () => {
-        closeSession();
         toggleChatbot();
     };
 

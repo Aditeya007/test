@@ -899,7 +899,7 @@
     }
   }
 
-  // Close session and deliver lead data
+  // Close session and deliver lead data - ONLY called on tab close
   function closeSession() {
     if (!state.sessionId || !config.botId) {
       return;
@@ -910,13 +910,14 @@
       resource_id: config.botId
     };
 
-    const url = `${config.apiBase}/chat/session/close`;
+    // Use absolute URL for production
+    const url = 'https://chatbot.excellisit.net/api/chat/session/close';
 
     // Prefer sendBeacon for reliability during page unload
     if (navigator.sendBeacon) {
       const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
       navigator.sendBeacon(url, blob);
-      console.log('RAG Widget: Session close sent via sendBeacon');
+      console.log('RAG Widget: Session close sent via sendBeacon on tab close');
     } else {
       // Fallback to fetch with keepalive
       fetch(url, {
@@ -927,11 +928,11 @@
       }).catch(err => {
         console.error('RAG Widget: Failed to close session:', err);
       });
-      console.log('RAG Widget: Session close sent via fetch with keepalive');
+      console.log('RAG Widget: Session close sent via fetch on tab close');
     }
   }
 
-  // Toggle widget visibility
+  // Toggle widget visibility (no session close on toggle)
   function toggleWidget() {
     const widgetWindow = document.getElementById('rag-widget-window');
     const widgetToggle = document.getElementById('rag-widget-toggle');
@@ -950,8 +951,6 @@
         if (input) input.focus();
       }, 100);
     } else {
-      // Closing widget - deliver lead data
-      closeSession();
       widgetWindow.style.display = 'none';
       widgetToggle.classList.remove('hidden');
     }
@@ -1079,7 +1078,12 @@
       requestAgentBtn.addEventListener('click', requestAgent);
     }
 
-    // Handle page unload - close session and deliver lead
+    // Handle tab/page close - send lead data ONLY on actual tab close
+    // pagehide is more reliable than beforeunload, especially on mobile Safari
+    window.addEventListener('pagehide', () => {
+      closeSession();
+    });
+    // beforeunload for older browsers
     window.addEventListener('beforeunload', () => {
       closeSession();
     });

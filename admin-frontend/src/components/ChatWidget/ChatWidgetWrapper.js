@@ -1,6 +1,6 @@
 // src/components/ChatWidget/ChatWidgetWrapper.js
 
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import ChatWidget from './ChatWidget';
 import { useChatWidget } from '../../context/ChatWidgetContext';
 import './ChatWidgetWrapper.css';
@@ -25,32 +25,8 @@ function ChatWidgetWrapper() {
   const { isWidgetActive, isWidgetOpen, selectedBotId, toggleWidget } = useChatWidget();
   const sessionIdRef = useRef(null);
 
-  // Close session and hide widget - guarantees lead delivery
+  // Toggle widget visibility (no session close on toggle)
   const handleToggleWidget = () => {
-    if (isWidgetOpen && sessionIdRef.current && selectedBotId) {
-      // Widget is closing - send session close IMMEDIATELY
-      const payload = {
-        session_id: sessionIdRef.current,
-        resource_id: selectedBotId
-      };
-
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-      const url = `${apiUrl}/api/chat/session/close`;
-
-      if (navigator.sendBeacon) {
-        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-        navigator.sendBeacon(url, blob);
-      } else {
-        fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          keepalive: true
-        }).catch(() => {});
-      }
-    }
-
-    // Then toggle widget visibility
     toggleWidget();
   };
 
@@ -58,6 +34,49 @@ function ChatWidgetWrapper() {
   const handleSessionIdUpdate = (sessionId) => {
     sessionIdRef.current = sessionId;
   };
+
+  // Browser-level tab/page close detection - send lead data ONLY on tab close
+  useEffect(() => {
+    const sendSessionClose = () => {
+      if (!sessionIdRef.current || !selectedBotId) {
+        return;
+      }
+
+      const payload = {
+        session_id: sessionIdRef.current,
+        resource_id: selectedBotId
+      };
+
+      // Use absolute URL for production
+      const url = 'https://chatbot.excellisit.net/api/chat/session/close';
+
+      // sendBeacon is the most reliable for page unload
+      if (navigator.sendBeacon) {
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        navigator.sendBeacon(url, blob);
+        console.log('ChatWidgetWrapper: Session close sent via sendBeacon on tab close');
+      } else {
+        // Fallback to fetch with keepalive
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          keepalive: true
+        }).catch(() => {});
+        console.log('ChatWidgetWrapper: Session close sent via fetch on tab close');
+      }
+    };
+
+    // pagehide is more reliable than beforeunload, especially on mobile
+    window.addEventListener('pagehide', sendSessionClose);
+    // beforeunload for older browsers
+    window.addEventListener('beforeunload', sendSessionClose);
+
+    return () => {
+      window.removeEventListener('pagehide', sendSessionClose);
+      window.removeEventListener('beforeunload', sendSessionClose);
+    };
+  }, [selectedBotId]);
 
   // CRITICAL FIX #2: Don't render anything if widget hasn't been activated
   if (!isWidgetActive) {
