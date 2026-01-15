@@ -1054,6 +1054,90 @@ class SemanticIntelligentRAG:
             print(f"❌ Error in comprehensive semantic retrieval: {e}")
             return [], []
 
+    def retrieve_candidates(self, question: str, question_embedding: np.ndarray) -> Tuple[List[str], List[np.ndarray]]:
+        """
+        Single semantic recall pass with strong retrieval.
+        
+        Args:
+            question: The user's question
+            question_embedding: Pre-computed embedding for the question
+        
+        Returns:
+            Tuple of (documents, embeddings) where embeddings are numpy arrays
+        """
+        try:
+            # Call Chroma once with embeddings - request 60 candidates
+            results = self.collection.query(
+                query_embeddings=[question_embedding.tolist()],
+                n_results=60,
+                include=["documents", "embeddings"]
+            )
+            
+            docs = results.get('documents', [[]])[0]
+            embeddings_list = results.get('embeddings', [[]])[0]
+            
+            # If Chroma returns embeddings directly, use them; otherwise compute
+            if embeddings_list:
+                # Convert to numpy arrays
+                doc_embeddings = [np.array(emb, dtype=np.float32) for emb in embeddings_list]
+            else:
+                # Fallback: encode documents if embeddings not returned
+                doc_embeddings = [self.embedding_model.encode(doc, convert_to_numpy=True) for doc in docs]
+            
+            print(f"🔍 Single semantic recall: retrieved {len(docs)} candidates from Chroma")
+            
+            return docs, doc_embeddings
+            
+        except Exception as e:
+            print(f"❌ Error in retrieve_candidates: {e}")
+            return [], []
+
+    def vector_prefilter(self, question_embedding: np.ndarray, docs: List[str], doc_embeddings: List[np.ndarray], topk: int = 20) -> Tuple[List[str], List[np.ndarray]]:
+        """
+        In-memory vector similarity pre-filter using cosine similarity.
+        
+        Args:
+            question_embedding: Embedding of the question
+            docs: List of candidate documents
+            doc_embeddings: List of document embeddings as numpy arrays
+            topk: Number of top candidates to return (default 20)
+        
+        Returns:
+            Tuple of (filtered_docs, filtered_embeddings)
+        """
+        if not docs or not doc_embeddings:
+            return [], []
+        
+        if len(docs) <= topk:
+            # Already smaller than threshold
+            return docs, doc_embeddings
+        
+        try:
+            # Compute cosine similarity between question and each document
+            # Normalize embeddings for cosine similarity
+            question_norm = question_embedding / (np.linalg.norm(question_embedding) + 1e-10)
+            
+            similarities = []
+            for doc_emb in doc_embeddings:
+                doc_norm = doc_emb / (np.linalg.norm(doc_emb) + 1e-10)
+                sim = np.dot(question_norm, doc_norm)
+                similarities.append(sim)
+            
+            # Sort by similarity (descending) and get top-k indices
+            top_indices = np.argsort(similarities)[-topk:][::-1]
+            
+            filtered_docs = [docs[i] for i in top_indices]
+            filtered_embeddings = [doc_embeddings[i] for i in top_indices]
+            
+            print(f"🔍 Vector pre-filter: reduced {len(docs)} → {len(filtered_docs)} candidates")
+            
+            return filtered_docs, filtered_embeddings
+            
+        except Exception as e:
+            print(f"❌ Error in vector_prefilter: {e}")
+            # Fallback: return top-k by index if cosine similarity fails
+            return docs[:topk], doc_embeddings[:topk]
+
     def smart_rerank_candidates(self, question: str, docs: List[str], topn: Optional[int] = None) -> List[str]:
         """Hybrid reranking: CrossEncoder semantic scoring + keyword match boosting"""
         if not docs:
@@ -1094,8 +1178,8 @@ class SemanticIntelligentRAG:
             return "I couldn't find relevant information to answer your question."
 
         try:
-            # Use top 12 documents for better context
-            combined_context = "\n".join(docs[:12])
+            # Use optimized retrieved documents (filtered to 6 via vector_prefilter + reranking)
+            combined_context = "\n".join(docs)
 
             # Strong instruction: NEVER include URLs or source links unless the user explicitly
             # asked for page locations / links. When the user asks for links, only use URLs
@@ -1543,62 +1627,47 @@ ANSWER (be concise and factual):"""
                     return self.get_lead_collection_request(session_id)
 
             # ============================================================================
-            # IMPROVED RETRIEVAL: Multi-pass aggregation for consistency
+            # OPTIMIZED RETRIEVAL: Single semantic recall + vector pre-filter + reranking
             # ============================================================================
 
-            # Normalize query by removing trailing punctuation for better retrieval
-            normalized_query = question_analysis['original_question'].rstrip('?.!,;')
-
-            all_docs = []
-            seen_docs = set()
-
-            # Pass 1: Primary semantic search with embeddings
-            print("🔍 Pass 1: Semantic embedding search...")
-            docs1, dist1 = self.comprehensive_semantic_retrieval(question_analysis)
-            for doc in docs1[:50]:
-                if doc not in seen_docs:
-                    all_docs.append(doc)
-                    seen_docs.add(doc)
-
-            # Pass 2: Direct text query (different retrieval path)
-            print("🔍 Pass 2: Direct text query...")
-            try:
-                results2 = self.collection.query(
-                    query_texts=[normalized_query],
-                    n_results=50
-                )
-                if results2['documents'] and results2['documents'][0]:
-                    for doc in results2['documents'][0]:
-                        if doc not in seen_docs:
-                            all_docs.append(doc)
-                            seen_docs.add(doc)
-            except Exception as e:
-                print(f"⚠️ Pass 2 failed: {e}")
-
-            # Pass 3: Entity-based search
-            print("🔍 Pass 3: Entity-based search...")
-            entities = question_analysis.get('entity_mentions', [])
-            if entities:
-                entity_query = ' '.join(entities[:5])
-                try:
-                    results3 = self.collection.query(
-                        query_texts=[entity_query],
-                        n_results=30
-                    )
-                    if results3['documents'] and results3['documents'][0]:
-                        for doc in results3['documents'][0]:
-                            if doc not in seen_docs:
-                                all_docs.append(doc)
-                                seen_docs.add(doc)
-                except Exception as e:
-                    print(f"⚠️ Pass 3 failed: {e}")
-
-            print(f"✅ Retrieved {len(all_docs)} unique documents from all passes")
-
-            # Rerank the aggregated results
-            print("🎯 Reranking aggregated documents...")
-            reranked_docs = self.smart_rerank_candidates(normalized_query, all_docs, topn=40) 
+            # Step 1: Single strong semantic recall (60 candidates)
+            print("🔍 Step 1: Single semantic recall with 60 candidates...")
+            candidates, candidate_embeddings = self.retrieve_candidates(
+                question_analysis['original_question'],
+                question_analysis['question_embedding']
+            )
             
+            if not candidates:
+                print("⚠️ No candidates retrieved from semantic recall")
+                return "I couldn't find relevant information to answer your question."
+            
+            # Step 2: In-memory vector similarity pre-filter (60 → 20)
+            print("🔍 Step 2: Vector pre-filter...")
+            filtered_docs, filtered_embeddings = self.vector_prefilter(
+                question_analysis['question_embedding'],
+                candidates,
+                candidate_embeddings,
+                topk=20
+            )
+            
+            if not filtered_docs:
+                print("⚠️ No documents after vector pre-filter")
+                return "I couldn't find relevant information to answer your question."
+            
+            # Step 3: CrossEncoder reranking on filtered documents (20 → 6)
+            print("🎯 Step 3: CrossEncoder reranking on filtered documents...")
+            reranked_docs = self.smart_rerank_candidates(
+                question_analysis['original_question'],
+                filtered_docs,
+                topn=6
+            )
+            
+            if not reranked_docs:
+                print("⚠️ No documents after reranking")
+                return "I couldn't find relevant information to answer your question."
+            
+            print(f"✅ Final candidate set: {len(reranked_docs)} documents ready for Gemini")
+
             # Backend-only RAG observability: log top chunks sent to LLM
             print(f"\n{'='*80}")
             print(f"RAG RETRIEVAL — TOP CHUNKS USED FOR ANSWER")
