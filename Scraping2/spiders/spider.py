@@ -100,6 +100,18 @@ class FixedUniversalSpider(scrapy.Spider):
         self.max_links_per_page = int(max_links_per_page)
         self.respect_robots = respect_robots
         self.aggressive_discovery = aggressive_discovery
+        
+        # Extract base path from start URL for scoped crawling
+        self.base_path = None
+        if self.start_urls:
+            try:
+                parsed_start = urlparse(self.start_urls[0])
+                # Get base path (e.g. /lion-roaring-org from /lion-roaring-org/page.html)
+                path_parts = [p for p in parsed_start.path.split('/') if p]
+                if path_parts:
+                    self.base_path = '/' + path_parts[0]
+            except Exception:
+                pass
 
         # Tracking
         self.urls_processed = 0
@@ -336,6 +348,34 @@ class FixedUniversalSpider(scrapy.Spider):
         text = text.strip()
         
         return text
+    
+    def _extract_clean_text(self, response) -> str:
+        """Extract clean text from HTML response, enforcing text/html Content-Type."""
+        # Enforce Content-Type starts with text/html
+        ctype = (response.headers.get("Content-Type") or b"").decode("latin1").lower()
+        if not ctype.startswith("text/html"):
+            return ""
+        
+        # Use response.text (NOT response.body) for text extraction
+        text = getattr(response, "text", "")
+        if not text:
+            return ""
+        
+        # Strip <script> and <style> tags
+        text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+        
+        # HARD GUARD: Check for mostly non-printable characters (binary content)
+        # Check entire text if small, or first 2000 chars if large
+        sample_size = min(len(text), 2000)
+        if sample_size > 50:
+            printable_chars = sum(1 for c in text[:sample_size] if c.isprintable() or c.isspace())
+            printable_ratio = printable_chars / sample_size
+            if printable_ratio < 0.7:  # Less than 70% printable - SKIP PAGE
+                logger.warning(f"Skipping page with {printable_ratio*100:.1f}% printable chars: {response.url}")
+                return ""  # Skip - binary garbage
+        
+        return text
 
     async def start(self):
         for req in self.start_requests():
@@ -388,7 +428,7 @@ class FixedUniversalSpider(scrapy.Spider):
         return {
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Encoding": "gzip, deflate",  # Removed "br" to disable Brotli compression
             "Cache-Control": "no-cache",
             "Pragma": "no-cache",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
@@ -555,6 +595,12 @@ class FixedUniversalSpider(scrapy.Spider):
 
     def parse_page(self, response):
         try:
+            # Skip non-HTML responses (JS, fonts, binary assets)
+            ctype = (response.headers.get("Content-Type") or b"").decode("latin1").lower()
+            if not ctype.startswith("text/html"):
+                logger.debug(f"Skipping non-HTML response: {response.url} ({ctype})")
+                return
+            
             # Check if already processed before doing any work
             if self._is_url_already_processed(response.url):
                 logger.info(f"🔄 Skipping already processed page: {response.url}")
@@ -585,11 +631,10 @@ class FixedUniversalSpider(scrapy.Spider):
                 self.items_extracted += 1
                 yield item
 
-            # FIX #2: Moved _mark_url_as_fully_processed to execute AFTER link discovery AND Playwright fallback
-            # This prevents premature "fully processed" status that collapses crawl discovery
-
-            # Discover links and pagination
-            yield from self._discover_and_follow_links(response)
+            # Discover links and pagination - must complete BEFORE marking URL as fully processed
+            link_requests = list(self._discover_and_follow_links(response))
+            for req in link_requests:
+                yield req
 
             # FIX #5: Redefine Playwright trigger based on meaningful content presence
             # Old logic: extracted_count < 3 (but full-page body text inflated count)
@@ -603,6 +648,7 @@ class FixedUniversalSpider(scrapy.Spider):
             )
             
             if not has_meaningful_content and not response.meta.get("playwright", False) and PLAYWRIGHT_AVAILABLE:
+                # Don't mark as fully processed yet - let parse_rendered do it after extraction
                 logger.info(f"🎭 Triggering Playwright for thin content: {response.url}")
                 yield scrapy.Request(
                     response.url,
@@ -611,20 +657,27 @@ class FixedUniversalSpider(scrapy.Spider):
                     meta={
                         "playwright": True,
                         "playwright_page_methods": [
-                            PageMethod("wait_for_timeout", 1500),
-                            PageMethod("wait_for_load_state", "networkidle"),
+                            PageMethod("wait_for_load_state", "domcontentloaded"),
+                            PageMethod("evaluate", """() => {
+                                const btn = Array.from(document.querySelectorAll('button, a, [role="button"]'))
+                                    .find(el => {
+                                        const text = el.textContent.trim().toLowerCase();
+                                        return text.includes('continue') || text.includes('agree');
+                                    });
+                                if (btn) btn.click();
+                            }"""),
+                            PageMethod("wait_for_function", "() => document.body.innerText.length > 500"),
                         ],
+                        "playwright_include_page": True,
                         "depth": current_depth,
                         "from_sitemap": response.meta.get("from_sitemap", False),
                     },
                     priority=50,
                     dont_filter=True,
                 )
-            else:
-                # FIX #2 (continued): Mark as fully processed ONLY if no Playwright fallback is triggered
-                self._mark_url_as_fully_processed(response.url)
         except Exception as e:
-            logger.error(f"Critical error processing page {response.url}: {e}")
+            # Only log URL and error type to prevent raw response content from being printed
+            logger.error(f"Critical error processing page {response.url}: {type(e).__name__}: {str(e)[:200]}")
 
     def _discover_and_follow_links(self, response):
         try:
@@ -716,7 +769,8 @@ class FixedUniversalSpider(scrapy.Spider):
                 if followed >= self.max_links_per_page:
                     break
         except Exception as e:
-            logger.warning(f"Link discovery error for {response.url}: {e}")
+            # Only log URL and error type to prevent raw response content from being printed
+            logger.warning(f"Link discovery error for {response.url}: {type(e).__name__}: {str(e)[:200]}")
 
     def _generate_pagination_candidates(self, response) -> List[str]:
         url = response.url
@@ -765,16 +819,14 @@ class FixedUniversalSpider(scrapy.Spider):
     def _should_follow_link(self, url: str) -> bool:
         try:
             parsed = urlparse(url)
-            # FIX #3: Use normalized domain comparison for internal links
-            netloc_normalized = parsed.netloc.lower().replace('www.', '')
-            domain_match = False
-            for allowed in self.allowed_domains:
-                allowed_normalized = allowed.lower().replace('www.', '')
-                if netloc_normalized == allowed_normalized or netloc_normalized.endswith('.' + allowed_normalized):
-                    domain_match = True
-                    break
-            if not domain_match:
+            # Check domain - must match allowed domains
+            if not any(d in parsed.netloc for d in self.allowed_domains):
                 return False
+            
+            # Check base path - if set, URL must share the same base path
+            if self.base_path:
+                if not parsed.path.startswith(self.base_path):
+                    return False
             
             # Only exclude obvious non-content patterns
             exclude_patterns = [
@@ -795,6 +847,19 @@ class FixedUniversalSpider(scrapy.Spider):
 
     def _extract_content_from_page(self, response):
         items = []
+        
+        # Extract clean text using helper (validates Content-Type, strips scripts/styles, checks for binary)
+        clean_html = self._extract_clean_text(response)
+        if not clean_html:
+            return items  # Skip if binary or non-HTML
+        
+        # Create NEW HtmlResponse from clean_html - use THIS for all extraction
+        from scrapy.http import HtmlResponse
+        response = HtmlResponse(
+            url=response.url,
+            body=clean_html.encode('utf-8'),
+            encoding='utf-8'
+        )
 
         def mk(text: str, ctype: str):
             if not text or not text.strip():
@@ -813,9 +878,10 @@ class FixedUniversalSpider(scrapy.Spider):
                 except ValueError as e:
                     logger.debug(f"Skipping content from {response.url}: {e}")
 
-        # FIX #1: REMOVED full-page body text extraction
-        # This was incorrectly incrementing extracted_count and preventing Playwright fallback
-        # Only count meaningful content blocks below
+        # Extract full page text first (most comprehensive)
+        full_text = response.css("body").xpath("normalize-space(string(.))").get()
+        if full_text and len(full_text.strip()) > 50:
+            mk(full_text.strip(), "full_page_text")
 
         # Title (clean but don't over-process titles)
         title = response.css("title::text").get()
@@ -1003,8 +1069,14 @@ class FixedUniversalSpider(scrapy.Spider):
         except Exception as e:
             logger.debug(f"JSON parse error at {response.url}: {e}")
 
-    def parse_rendered(self, response):
+    async def parse_rendered(self, response):
         try:
+            # Skip non-HTML responses (JS, fonts, binary assets)
+            ctype = (response.headers.get("Content-Type") or b"").decode("latin1").lower()
+            if not ctype.startswith("text/html"):
+                logger.debug(f"Skipping non-HTML rendered response: {response.url} ({ctype})")
+                return
+            
             # Check if already processed before doing any work
             if self._is_url_already_processed(response.url):
                 logger.info(f"🔄 Skipping already processed rendered page: {response.url}")
@@ -1013,25 +1085,70 @@ class FixedUniversalSpider(scrapy.Spider):
             # Mark as currently being processed (if not already)
             self._mark_url_as_processing(response.url)
             
-            if not getattr(response, "text", ""):
-                return
+            # Get final HTML from Playwright page if available (use page.content(), NOT response.body)
+            page = response.meta.get("playwright_page")
+            if page:
+                final_html = await page.content()
+                # Create a response-like object with the rendered HTML
+                from scrapy.http import HtmlResponse
+                response = HtmlResponse(
+                    url=response.url,
+                    body=final_html.encode('utf-8'),
+                    encoding='utf-8'
+                )
+            
+            # Extract clean text (validates Content-Type, strips scripts/styles, checks for binary)
+            clean_html = self._extract_clean_text(response)
+            if not clean_html:
+                return  # Skip if binary or non-HTML
+            
+            # Create NEW HtmlResponse from clean_html - use THIS for all extraction
+            from scrapy.http import HtmlResponse
+            response = HtmlResponse(
+                url=response.url,
+                body=clean_html.encode('utf-8'),
+                encoding='utf-8'
+            )
             
             extracted_any = False
-            for text in response.xpath('//text()[normalize-space() and string-length(normalize-space()) > 10]').getall():
-                clean = re.sub(r"\s+", " ", text.strip())
-                if 20 < len(clean) < 50000:
-                    item = self._build_item(response, clean, content_type="rendered_text")
-                    yield item
-                    extracted_any = True
             
-            # FIX #2: Mark Playwright-rendered page as fully processed after extraction
+            # Extract from readable content elements first (preferred)
+            content_selectors = ['main', 'article', 'section', '[role="main"]', '.content', '#content']
+            for sel in content_selectors:
+                for elem in response.css(sel):
+                    text = elem.xpath('normalize-space(string(.))').get()
+                    if text and len(text.strip()) > 50:
+                        clean = re.sub(r"\s+", " ", text.strip())
+                        if len(clean) < 50000:
+                            item = self._build_item(response, clean, content_type="rendered_content")
+                            yield item
+                            extracted_any = True
+            
+            # Extract headings and paragraphs
+            for sel in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p']:
+                for elem in response.css(sel):
+                    text = elem.xpath('normalize-space(string(.))').get()
+                    if text and len(text.strip()) > 10:
+                        clean = re.sub(r"\s+", " ", text.strip())
+                        if 20 < len(clean) < 50000:
+                            item = self._build_item(response, clean, content_type=f"rendered_{sel}")
+                            yield item
+                            extracted_any = True
+            
+            # Discover links from rendered page BEFORE marking as fully processed
+            link_requests = list(self._discover_and_follow_links(response))
+            for req in link_requests:
+                yield req
+            
+            # Mark as fully processed AFTER extraction AND link discovery are complete
             if extracted_any:
                 self._mark_url_as_fully_processed(response.url)
             
             # Also discover links from the rendered page
             yield from self._discover_and_follow_links(response)
         except Exception as e:
-            logger.error(f"Playwright rendered parse error {response.url}: {e}")
+            # Only log URL and error type to prevent raw response content from being printed
+            logger.error(f"Playwright rendered parse error {response.url}: {type(e).__name__}: {str(e)[:200]}")
 
     def handle_sitemap_error(self, failure):
         logger.warning(f"Sitemap failed: {getattr(failure, 'request', None) and failure.request.url}")
