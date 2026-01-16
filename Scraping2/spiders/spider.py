@@ -1038,7 +1038,8 @@ class FixedUniversalSpider(scrapy.Spider):
                             extracted_any = True
             
             # Discover and follow links from rendered DOM (enables crawl expansion on JS-gated sites)
-            yield from self._discover_and_follow_links(response)
+            for request in self._discover_and_follow_links(response):
+                yield request
             
             # Mark as fully processed after content extraction and link discovery
             if extracted_any:
