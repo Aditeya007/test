@@ -60,6 +60,8 @@ function AdminLayout({ children }) {
       dispatch(setActiveMenuItem("dashboard"));
     } else if (path === "/admin/users") {
       dispatch(setActiveMenuItem("users"));
+    } else if (path === "/admin/settings") {
+      dispatch(setActiveMenuItem("settings"));
     } else if (path === "/websites" || path.startsWith("/websites/")) {
       dispatch(setActiveMenuItem("websites"));
     } else if (path === "/agents" || path.startsWith("/agents/")) {
@@ -147,6 +149,13 @@ function AdminLayout({ children }) {
       adminOnly: true,
     },
     {
+      id: "settings",
+      label: "Site Settings",
+      icon: "⚙️",
+      path: "/admin/settings",
+      adminOnly: true,
+    },
+    {
       id: "websites",
       label: "Websites",
       icon: "🌐",
@@ -207,7 +216,7 @@ function AdminLayout({ children }) {
               if (isAgent) {
                 return item.agentOnly === true;
               }
-              
+
               // For admins: show Dashboard and Manage Users
               if (isAdmin) {
                 if (item.userOnly) return false; // Hide user-only items (Websites, Agents)
@@ -215,7 +224,7 @@ function AdminLayout({ children }) {
                 // Show adminOnly items (Manage Users) and items with no restrictions (Dashboard)
                 return true;
               }
-              
+
               // For regular users: show Dashboard, Websites, and Agents
               if (item.adminOnly) return false; // Hide admin-only items (Manage Users)
               if (item.agentOnly) return false; // Hide agent-only items (Chat)
@@ -225,9 +234,8 @@ function AdminLayout({ children }) {
             .map((item) => (
               <button
                 key={item.id}
-                className={`nav-item ${
-                  activeMenuItem === item.id ? "active" : ""
-                }`}
+                className={`nav-item ${activeMenuItem === item.id ? "active" : ""
+                  }`}
                 onClick={() => handleMenuClick(item)}
               >
                 <span className="nav-icon">{item.icon}</span>
@@ -262,19 +270,18 @@ function AdminLayout({ children }) {
               </span>
               {user?.role && (
                 <span
-                  className={`user-badge ${
-                    user.role === "admin"
-                      ? "badge-admin"
-                      : user.role === "agent"
+                  className={`user-badge ${user.role === "admin"
+                    ? "badge-admin"
+                    : user.role === "agent"
                       ? "badge-agent"
                       : "badge-user"
-                  }`}
+                    }`}
                 >
                   {user.role === "admin"
                     ? "Admin"
                     : user.role === "agent"
-                    ? "Agent"
-                    : "User"}
+                      ? "Agent"
+                      : "User"}
                 </span>
               )}
               <div className="user-menu-container" ref={userMenuRef}>
