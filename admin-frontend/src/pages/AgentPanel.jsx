@@ -530,11 +530,17 @@ function AgentPanel() {
       setQueuedConversations(queued);
       setCompletedConversations(closed);
 
-      // Extract unique bot IDs and fetch bot details
-      const botIds = [
-        ...new Set(allConversations.map((c) => c.botId).filter(Boolean)),
-      ];
-      await fetchBotDetails(botIds);
+      // Build bot map from conversation data (websiteUrl and botName already included)
+      const botMap = {};
+      allConversations.forEach((conv) => {
+        if (conv.botId && !botMap[conv.botId]) {
+          botMap[conv.botId] = {
+            websiteUrl: conv.websiteUrl,
+            name: conv.botName
+          };
+        }
+      });
+      setBots(botMap);
     } catch (error) {
       console.error("Failed to fetch conversations:", error);
       setConversationsError(error.message || "Failed to load conversations");
@@ -664,7 +670,12 @@ function AgentPanel() {
     }
   };
 
-  const getBotName = (botId) => {
+  const getBotName = (botId, conversation = null) => {
+    // First try to get from conversation directly (if passed)
+    if (conversation) {
+      return conversation.websiteUrl || conversation.botName || "Unknown Website";
+    }
+    // Fallback to bots state
     if (!botId) return "Unknown Website";
     const bot = bots[botId];
     return bot ? bot.websiteUrl || bot.name || "Unknown Website" : "Loading...";
@@ -959,7 +970,7 @@ function AgentPanel() {
                                 {getVisitorName(conv)}
                               </div>
                               <div className="chat-list-bot">
-                                {getBotName(conv.botId)}
+                                {getBotName(conv.botId, conv)}
                               </div>
                               <div className="chat-list-status">
                                 {getStatusBadge(conv.status)}
@@ -1007,7 +1018,7 @@ function AgentPanel() {
                                 {getVisitorName(conv)}
                               </div>
                               <div className="chat-list-bot">
-                                {getBotName(conv.botId)}
+                                {getBotName(conv.botId, conv)}
                               </div>
                               <div className="chat-list-status">
                                 {getStatusBadge(conv.status)}
@@ -1042,7 +1053,7 @@ function AgentPanel() {
                               {getVisitorName(conv)}
                             </div>
                             <div className="chat-list-bot">
-                              {getBotName(conv.botId)}
+                              {getBotName(conv.botId, conv)}
                             </div>
                             <div className="chat-list-status">
                               {getStatusBadge(conv.status)}

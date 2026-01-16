@@ -191,11 +191,17 @@ function AgentChatsPage() {
         );
         setConversations(sorted);
 
-        // Fetch bot details
-        const botIds = [...new Set(sorted.map(c => c.botId).filter(Boolean))];
-        if (botIds.length > 0) {
-          await fetchBotDetails(botIds);
-        }
+        // Build bot map from conversation data (websiteUrl and botName already included)
+        const botMap = {};
+        sorted.forEach((conv) => {
+          if (conv.botId && !botMap[conv.botId]) {
+            botMap[conv.botId] = {
+              websiteUrl: conv.websiteUrl,
+              name: conv.botName
+            };
+          }
+        });
+        setBots(botMap);
       }
     } catch (error) {
       console.error('Failed to fetch conversations:', error);
@@ -313,7 +319,12 @@ function AgentChatsPage() {
   };
 
   // Get bot name
-  const getBotName = (botId) => {
+  const getBotName = (botId, conversation = null) => {
+    // First try to get from conversation directly (if passed)
+    if (conversation) {
+      return conversation.websiteUrl || conversation.botName || 'Unknown Website';
+    }
+    // Fallback to bots state
     if (!botId) return 'Unknown Website';
     const bot = bots[botId];
     return bot ? (bot.websiteUrl || bot.name || 'Unknown Website') : 'Loading...';
@@ -387,7 +398,7 @@ function AgentChatsPage() {
                         {getVisitorName(conv)}
                       </div>
                       <div className="chat-list-bot">
-                        {getBotName(conv.botId)}
+                        {getBotName(conv.botId, conv)}
                       </div>
                       <div className="chat-list-status">
                         {getStatusBadge(conv.status)}
@@ -420,7 +431,7 @@ function AgentChatsPage() {
                     {getVisitorName(selectedConversation)}
                   </div>
                   <div className="chat-window-agent">
-                    {getBotName(selectedConversation?.botId)}
+                    {getBotName(selectedConversation?.botId, selectedConversation)}
                   </div>
                 </div>
               </div>
