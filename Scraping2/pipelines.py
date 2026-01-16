@@ -51,9 +51,30 @@ class ChunkingPipeline:
         self.min_chunk_size = 250   
         self.overlap_size = 1000
         self.processed_count = 0
+    
+    @staticmethod
+    def is_probably_binary(text: str) -> bool:
+        """Detect if text is likely binary/corrupted data."""
+        if not text or not isinstance(text, str):
+            return True
+        sample = text[:500]
+        if not sample:
+            return True
+        printable = sum(1 for c in sample if c.isprintable() or c.isspace())
+        return printable / len(sample) < 0.7
 
     def process_item(self, item, spider):
         text = item.get("text", "")
+        
+        # FIX #3: CRITICAL - Binary detection guard before chunking
+        if self.is_probably_binary(text):
+            logger.warning(f"REJECTED binary/corrupted text from {item.get('url', 'unknown')}")
+            logger.debug(f"Binary sample: {repr(text[:100])}")
+            raise DropItem(f"Binary or corrupted text detected")
+        
+        # FIX #5: Temporary validation log
+        logger.debug(f"TEXT SAMPLE: {repr(text[:200])}")
+        
         if not text or len(text.strip()) < 10:  # Very minimal filter
             raise DropItem(f"Text too short")
         
@@ -271,6 +292,19 @@ class ChromaDBPipeline:
         for i, text in enumerate(texts):
             if not text.strip():
                 continue
+            
+            # FIX #4: CRITICAL - Final binary check before embedding
+            if not isinstance(text, str):
+                logger.error(f"Non-str text in ChromaDB pipeline: {type(text)}")
+                continue
+            
+            # Binary detection
+            sample = text[:500] if text else ""
+            if sample:
+                printable = sum(1 for c in sample if c.isprintable() or c.isspace())
+                if printable / len(sample) < 0.7:
+                    logger.error(f"Rejecting binary chunk before embedding: {repr(text[:100])}")
+                    continue
                 
             url = item.get("url", "unknown")
             

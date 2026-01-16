@@ -51,6 +51,17 @@ class ScrapedContentItem(scrapy.Item):
     def from_response(cls, response, text, **kwargs):
         from urllib.parse import urlparse
         from datetime import datetime
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # FIX #2: CRITICAL - Ensure text is str, not bytes
+        if isinstance(text, (bytes, bytearray)):
+            logger.warning(f"Converting bytes to str in from_response: {response.url}")
+            text = text.decode("utf-8", errors="ignore")
+        
+        if not isinstance(text, str):
+            raise ValueError(f"Text must be str, got {type(text)}")
+        
         item = cls()
         item['url'] = response.url
         item['text'] = text

@@ -306,6 +306,25 @@ class FixedUniversalSpider(scrapy.Spider):
 
     def _build_item(self, response, text: str, **kwargs):
         """Helper to construct items with tenant metadata automatically attached."""
+        # FIX #1: CRITICAL - Ban bytes at item creation
+        # Decode bytes to UTF-8, reject anything that's not str
+        if isinstance(text, (bytes, bytearray)):
+            logger.warning(f"Detected bytes in text, decoding: {response.url}")
+            text = text.decode("utf-8", errors="ignore")
+        
+        if not isinstance(text, str):
+            logger.error(f"Text is not str type after decoding: {type(text)} from {response.url}")
+            return None
+        
+        # Additional binary content guard - reject if mostly non-printable
+        if text:
+            sample = text[:500]
+            if sample:
+                printable = sum(1 for c in sample if c.isprintable() or c.isspace())
+                if printable / len(sample) < 0.7:
+                    logger.warning(f"Rejecting binary content (only {printable/len(sample)*100:.1f}% printable): {response.url}")
+                    return None
+        
         item_kwargs = {
             'resource_id': self.resource_id,
             'tenant_user_id': self.tenant_user_id
@@ -852,7 +871,9 @@ class FixedUniversalSpider(scrapy.Spider):
             if len(text) >= 2:  # Very low threshold
                 try:
                     item = self._build_item(response, text, content_type=ctype)
-                    items.append(item)
+                    # FIX #1: Handle None return when binary content is rejected
+                    if item is not None:
+                        items.append(item)
                 except ValueError as e:
                     logger.debug(f"Skipping content from {response.url}: {e}")
 
