@@ -295,28 +295,14 @@ class FixedUniversalSpider(scrapy.Spider):
             if re.search(pattern, text_lower):
                 return True
         
-        # Check for repetitive patterns (same word repeated)
-        # But be more lenient - Elementor content can have repeated styling words
-        words = text_lower.split()
-        if len(words) > 2:
-            word_counts = Counter(words)
-            most_common_count = word_counts.most_common(1)[0][1]
-            if most_common_count / len(words) > 0.7:  # Increased from 0.5 to 0.7
-                return True
+        # FIX #4: REMOVED sentence-level deduplication (repetition ratio logic)
+        # Deduplication belongs at embedding/chunking stage, NOT at crawl time
         
         return False
     
     def _has_good_word_variety(self, words: List[str]) -> bool:
-        """Check if the words show good variety (not too repetitive)."""
-        if len(words) < 4:
-            return False
-        
-        # Count unique words
-        unique_words = set(word.lower() for word in words)
-        variety_ratio = len(unique_words) / len(words)
-        
-        # We want at least 60% unique words for good variety
-        return variety_ratio >= 0.6
+        """FIX #4: REMOVED - word variety check belongs at embedding stage, not crawl time."""
+        return True  # Always return True - no crawl-time deduplication
 
     def _build_item(self, response, text: str, **kwargs):
         """Helper to construct items with tenant metadata automatically attached."""
@@ -636,14 +622,12 @@ class FixedUniversalSpider(scrapy.Spider):
             for req in link_requests:
                 yield req
 
-            # FIX #5: Redefine Playwright trigger based on meaningful content presence
-            # Old logic: extracted_count < 3 (but full-page body text inflated count)
-            # New logic: Check for actual semantic content selectors
+            # FIX #5: Playwright trigger MUST stay semantic - NOT influenced by extracted_count
+            # Check for actual semantic content selectors only
             has_meaningful_content = (
                 response.css('article').get() or
                 response.css('.entry-content').get() or
                 response.css('.elementor-widget-text-editor').get() or
-                response.css('.elementor-widget-container').get() or
                 (len(response.css('h1, h2, h3').getall()) > 0 and len(response.css('p').getall()) > 2)
             )
             
@@ -675,6 +659,9 @@ class FixedUniversalSpider(scrapy.Spider):
                     priority=50,
                     dont_filter=True,
                 )
+            else:
+                # FIX #7: Mark URL as fully processed ONLY after extraction AND link discovery complete
+                self._mark_url_as_fully_processed(response.url)
         except Exception as e:
             # Only log URL and error type to prevent raw response content from being printed
             logger.error(f"Critical error processing page {response.url}: {type(e).__name__}: {str(e)[:200]}")
@@ -846,21 +833,12 @@ class FixedUniversalSpider(scrapy.Spider):
             return True  # Default to True - be aggressive
 
     def _extract_content_from_page(self, response):
+        """FIX #1, #2, #6: Extract ONLY semantic + CMS content. NO full-page body. NO HtmlResponse re-wrapping."""
         items = []
         
-        # Extract clean text using helper (validates Content-Type, strips scripts/styles, checks for binary)
-        clean_html = self._extract_clean_text(response)
-        if not clean_html:
-            return items  # Skip if binary or non-HTML
+        # FIX #6: REMOVED HtmlResponse re-wrapping - causes selector breakage
+        # Use response directly - Scrapy handles encoding internally
         
-        # Create NEW HtmlResponse from clean_html - use THIS for all extraction
-        from scrapy.http import HtmlResponse
-        response = HtmlResponse(
-            url=response.url,
-            body=clean_html.encode('utf-8'),
-            encoding='utf-8'
-        )
-
         def mk(text: str, ctype: str):
             if not text or not text.strip():
                 return
@@ -878,10 +856,7 @@ class FixedUniversalSpider(scrapy.Spider):
                 except ValueError as e:
                     logger.debug(f"Skipping content from {response.url}: {e}")
 
-        # Extract full page text first (most comprehensive)
-        full_text = response.css("body").xpath("normalize-space(string(.))").get()
-        if full_text and len(full_text.strip()) > 50:
-            mk(full_text.strip(), "full_page_text")
+        # FIX #1: REMOVED full-page body extraction - causes junk content and disables Playwright fallback
 
         # Title (clean but don't over-process titles)
         title = response.css("title::text").get()
@@ -895,41 +870,31 @@ class FixedUniversalSpider(scrapy.Spider):
                 except ValueError:
                     pass
 
-        # COMPREHENSIVE content extraction - get everything possible
+        # FIX #2, #3: ONLY semantic + CMS content selectors allowed
+        # REMOVED: div, span, header, footer, nav, menu, section, aside (generate massive noise)
         all_selectors = [
-            # Main content areas
-            "article", "main", "[role='main']", ".content", "#content", 
-            ".post-content", ".entry-content", ".article-content", ".page-content",
-            ".rich-text", ".prose", ".text-content", ".body-content",
+            # Semantic content areas
+            "article",
+            "main",
+            "[role='main']",
             
-            # FIX #6: Add Elementor-specific selectors as FIRST-CLASS content sources
-            ".elementor-widget-container",
+            # CMS content classes
+            ".entry-content",
+            ".post-content",
+            ".page-content",
+            
+            # Elementor-specific selectors (first-class content sources)
             ".elementor-widget-text-editor",
             ".elementor-heading-title",
-            ".elementor-text-editor",
             ".elementor-widget-theme-post-content",
-            ".elementor-shortcode",
             
-            # All text containers
-            "p", "div", "span", "section", "aside", "header", "footer",
-            
-            # Lists and navigation
-            "ul", "ol", "li", "nav", "menu",
-            
-            # Text elements
-            "h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "b", "i",
-            
-            # Form elements
-            "label", "button", "input[type=submit]", "input[type=button]",
-            
-            # Tables
-            "table", "td", "th", "caption",
-            
-            # Media captions
-            "figcaption", "caption", "[alt]",
+            # Text elements only
+            "p",
+            "h1", "h2", "h3", "h4", "h5", "h6",
+            "li",
         ]
         
-        # Extract from ALL possible selectors
+        # Extract from semantic selectors only
         for sel in all_selectors:
             try:
                 for el in response.css(sel):
@@ -1097,18 +1062,8 @@ class FixedUniversalSpider(scrapy.Spider):
                     encoding='utf-8'
                 )
             
-            # Extract clean text (validates Content-Type, strips scripts/styles, checks for binary)
-            clean_html = self._extract_clean_text(response)
-            if not clean_html:
-                return  # Skip if binary or non-HTML
-            
-            # Create NEW HtmlResponse from clean_html - use THIS for all extraction
-            from scrapy.http import HtmlResponse
-            response = HtmlResponse(
-                url=response.url,
-                body=clean_html.encode('utf-8'),
-                encoding='utf-8'
-            )
+            # FIX #6: REMOVED HtmlResponse re-wrapping - use response directly
+            # Scrapy handles encoding internally, re-wrapping breaks selectors
             
             extracted_any = False
             
@@ -1135,17 +1090,14 @@ class FixedUniversalSpider(scrapy.Spider):
                             yield item
                             extracted_any = True
             
-            # Discover links from rendered page BEFORE marking as fully processed
+            # FIX #7: Discover links from rendered page BEFORE marking as fully processed
             link_requests = list(self._discover_and_follow_links(response))
             for req in link_requests:
                 yield req
             
-            # Mark as fully processed AFTER extraction AND link discovery are complete
+            # FIX #7: Mark as fully processed ONLY AFTER extraction AND link discovery complete
             if extracted_any:
                 self._mark_url_as_fully_processed(response.url)
-            
-            # Also discover links from the rendered page
-            yield from self._discover_and_follow_links(response)
         except Exception as e:
             # Only log URL and error type to prevent raw response content from being printed
             logger.error(f"Playwright rendered parse error {response.url}: {type(e).__name__}: {str(e)[:200]}")
