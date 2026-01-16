@@ -361,11 +361,15 @@ class FixedUniversalSpider(scrapy.Spider):
         text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
         text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
         
-        # Check for mostly non-printable characters (binary content)
-        if len(text) > 100:
-            printable_chars = sum(1 for c in text[:1000] if c.isprintable() or c.isspace())
-            if printable_chars / min(len(text), 1000) < 0.7:  # Less than 70% printable
-                return ""  # Skip - likely binary
+        # HARD GUARD: Check for mostly non-printable characters (binary content)
+        # Check entire text if small, or first 2000 chars if large
+        sample_size = min(len(text), 2000)
+        if sample_size > 50:
+            printable_chars = sum(1 for c in text[:sample_size] if c.isprintable() or c.isspace())
+            printable_ratio = printable_chars / sample_size
+            if printable_ratio < 0.7:  # Less than 70% printable - SKIP PAGE
+                logger.warning(f"Skipping page with {printable_ratio*100:.1f}% printable chars: {response.url}")
+                return ""  # Skip - binary garbage
         
         return text
 
@@ -420,7 +424,7 @@ class FixedUniversalSpider(scrapy.Spider):
         return {
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Encoding": "gzip, deflate",  # Removed "br" to disable Brotli compression
             "Cache-Control": "no-cache",
             "Pragma": "no-cache",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
@@ -829,6 +833,14 @@ class FixedUniversalSpider(scrapy.Spider):
         clean_html = self._extract_clean_text(response)
         if not clean_html:
             return items  # Skip if binary or non-HTML
+        
+        # Create NEW HtmlResponse from clean_html - use THIS for all extraction
+        from scrapy.http import HtmlResponse
+        response = HtmlResponse(
+            url=response.url,
+            body=clean_html.encode('utf-8'),
+            encoding='utf-8'
+        )
 
         def mk(text: str, ctype: str):
             if not text or not text.strip():
@@ -1061,6 +1073,14 @@ class FixedUniversalSpider(scrapy.Spider):
             clean_html = self._extract_clean_text(response)
             if not clean_html:
                 return  # Skip if binary or non-HTML
+            
+            # Create NEW HtmlResponse from clean_html - use THIS for all extraction
+            from scrapy.http import HtmlResponse
+            response = HtmlResponse(
+                url=response.url,
+                body=clean_html.encode('utf-8'),
+                encoding='utf-8'
+            )
             
             extracted_any = False
             
