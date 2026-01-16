@@ -6,7 +6,6 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');              // Allow frontend calls (React dev server)
 const helmet = require('helmet');          // Security headers
-const rateLimit = require('express-rate-limit'); // Rate limiting
 const dbConnect = require('./utils/db');   // Your MongoDB connection utility
 
 const authRoutes = require('./routes/auth');
@@ -165,17 +164,6 @@ if (process.env.NODE_ENV === 'development') {
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));                   // Parse JSON requests with size limit
 app.use(express.urlencoded({ extended: true, limit: '10mb' })); // Parse URL-encoded bodies
-
-// General rate limiter for all routes
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 100 : 1000, // Much higher limit in development
-  message: { error: 'Too many requests from this IP, please try again later.' },
-  standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
-  legacyHeaders: false, // Disable `X-RateLimit-*` headers
-});
-
-app.use(generalLimiter);
 
 // =============================================================================
 // REQUEST LOGGING

@@ -5,14 +5,14 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const userController = require('../controllers/userController');
 const { validateProfileUpdate } = require('../middleware/validate');
-const { userLimiter } = require('../middleware/rateLimiter');
+
 
 /**
  * @route   GET /api/user/me
  * @desc    Get current user's profile
  * @access  Protected (requires JWT)
  */
-router.get('/me', auth, userLimiter, userController.getMe);
+router.get('/me', auth, userController.getMe);
 
 /**
  * @route   PUT /api/user/me
@@ -20,7 +20,7 @@ router.get('/me', auth, userLimiter, userController.getMe);
  * @access  Protected (requires JWT)
  * @body    { name?, email?, username?, password? }
  */
-router.put('/me', auth, userLimiter, validateProfileUpdate, userController.updateMe);
+router.put('/me', auth, validateProfileUpdate, userController.updateMe);
 
 /**
  * @route   GET /api/user/api-token
@@ -28,7 +28,7 @@ router.put('/me', auth, userLimiter, validateProfileUpdate, userController.updat
  * @access  Protected (requires JWT)
  * @query   { regenerate?: boolean }
  */
-router.get('/api-token', auth, userLimiter, userController.getApiToken);
+router.get('/api-token', auth, userController.getApiToken);
 
 /**
  * @route   GET /api/user/conversations
@@ -36,7 +36,7 @@ router.get('/api-token', auth, userLimiter, userController.getApiToken);
  * @access  Protected (requires JWT)
  * @returns { success: boolean, conversations: Array }
  */
-router.get('/conversations', auth, userLimiter, userController.getConversations);
+router.get('/conversations', auth, userController.getConversations);
 
 /**
  * @route   GET /api/user/conversations/:conversationId/messages
@@ -45,7 +45,7 @@ router.get('/conversations', auth, userLimiter, userController.getConversations)
  * @param   conversationId - The conversation ID
  * @returns { success: boolean, messages: Array }
  */
-router.get('/conversations/:conversationId/messages', auth, userLimiter, userController.getConversationMessages);
+router.get('/conversations/:conversationId/messages', auth, userController.getConversationMessages);
 
 /**
  * @route   GET /api/user/agents/:agentId/conversations
@@ -54,6 +54,6 @@ router.get('/conversations/:conversationId/messages', auth, userLimiter, userCon
  * @param   agentId - The agent ID
  * @returns { success: boolean, conversations: Array }
  */
-router.get('/agents/:agentId/conversations', auth, userLimiter, userController.getAgentConversations);
+router.get('/agents/:agentId/conversations', auth, userController.getAgentConversations);
 
 module.exports = router;
