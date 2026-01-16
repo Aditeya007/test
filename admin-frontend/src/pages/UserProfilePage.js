@@ -1,5 +1,6 @@
 // src/pages/UserProfilePage.js
 import React, { useState, useEffect, useOptimistic, useTransition } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../api';
 import Loader from '../components/Loader';
@@ -7,6 +8,7 @@ import '../styles/index.css';
 
 function UserProfilePage() {
   const { user, token } = useAuth();
+  const navigate = useNavigate();
   const [isPending, startTransition] = useTransition();
   
   const [loading, setLoading] = useState(false);
@@ -154,6 +156,17 @@ function UserProfilePage() {
     }
   }, [success]);
 
+  const handleClose = () => {
+    // Navigate back based on user role
+    if (user?.role === 'admin') {
+      navigate('/dashboard');
+    } else if (user?.role === 'agent') {
+      navigate('/agent');
+    } else {
+      navigate('/dashboard');
+    }
+  };
+
   if (!user) {
     return <Loader message="Loading profile..." />;
   }
@@ -161,7 +174,18 @@ function UserProfilePage() {
   return (
     <div className="profile-container">
       <div className="profile-card">
-        <h2 className="profile-title">User Profile</h2>
+        <div className="profile-header">
+          <h2 className="profile-title">User Profile</h2>
+          <button
+            className="profile-close-btn"
+            onClick={handleClose}
+            type="button"
+            aria-label="Close profile"
+            title="Close"
+          >
+            ✕
+          </button>
+        </div>
         <p className="profile-subtitle">Update your account information</p>
 
         {error && <div className="dashboard-alert dashboard-alert--error">{error}</div>}

@@ -178,11 +178,11 @@ function CreateEditUserPage() {
             <h2 style={{ marginRight: "10px" }}>
               {isEditMode ? "Edit User" : "Create New User"}
             </h2>
-            <p>
+            {/* <p>
               {isEditMode
                 ? "Update user account information and settings."
                 : "Create a new tenant account for the RAG platform."}
-            </p>
+            </p> */}
           </div>
           <div className="admin-users-header-controls">
             <div className="admin-users-header-actions">

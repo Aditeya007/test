@@ -2813,13 +2813,49 @@ tbody td:first-child {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.profile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.4em;
+}
+
 .profile-title {
   color: #fff;
   font-size: 1.8rem;
   font-weight: 800;
-  margin-bottom: 0.4em;
+  margin: 0;
   letter-spacing: -0.03em;
   text-shadow: 0 2px 10px rgba(255, 131, 7, 0.3);
+  flex: 1;
+}
+
+.profile-close-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.3em 0.5em;
+  line-height: 1;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-left: 1em;
+}
+
+.profile-close-btn:hover {
+  color: #fff;
+  background: rgba(255, 131, 7, 0.15);
+  transform: scale(1.1);
+}
+
+.profile-close-btn:active {
+  transform: scale(0.95);
 }
 
 .profile-title::before {
@@ -3497,15 +3533,26 @@ tbody td:first-child {
     border-radius: 12px;
   }
 
+  .profile-header {
+    margin-bottom: 0.3em;
+  }
+
   .profile-title {
     font-size: 1.5rem;
-    margin-bottom: 0.3em;
+    margin: 0;
   }
 
   .profile-title::before {
     width: 5px;
     height: 1.5rem;
     margin-right: 0.3em;
+  }
+
+  .profile-close-btn {
+    font-size: 1.3rem;
+    width: 30px;
+    height: 30px;
+    margin-left: 0.75em;
   }
 
   .profile-subtitle {
@@ -3545,15 +3592,26 @@ tbody td:first-child {
     border-radius: 10px;
   }
 
+  .profile-header {
+    margin-bottom: 0.25em;
+  }
+
   .profile-title {
     font-size: 1.3rem;
-    margin-bottom: 0.25em;
+    margin: 0;
   }
 
   .profile-title::before {
     width: 4px;
     height: 1.3rem;
     margin-right: 0.3em;
+  }
+
+  .profile-close-btn {
+    font-size: 1.2rem;
+    width: 28px;
+    height: 28px;
+    margin-left: 0.5em;
   }
 
   .profile-subtitle {
