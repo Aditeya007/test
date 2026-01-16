@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import Swal from "sweetalert2";
 import { useAuth } from "../context/AuthContext";
 import { apiRequest } from "../api";
 import Loader from "../components/Loader";
@@ -112,8 +113,20 @@ function AdminUsersPage() {
       return;
     }
 
-    const message = `Delete user \"${userToDelete.username}\"? This cannot be undone.`;
-    if (!window.confirm(message)) {
+    const message = `Delete user "${userToDelete.username}"? This cannot be undone.`;
+
+    const result = await Swal.fire({
+      title: "Delete User?",
+      text: message,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete",
+      cancelButtonText: "Cancel",
+    });
+
+    if (!result.isConfirmed) {
       return;
     }
 
@@ -125,6 +138,13 @@ function AdminUsersPage() {
         token,
       });
       setSuccessMessage("User deleted successfully");
+      await Swal.fire({
+        title: "Deleted!",
+        text: "User has been deleted successfully.",
+        icon: "success",
+        timer: 1500,
+        showConfirmButton: false,
+      });
       if (activeTenantId === (userToDelete.id || userToDelete._id)) {
         setActiveTenant(null);
       }
