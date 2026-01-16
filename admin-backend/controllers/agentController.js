@@ -622,6 +622,17 @@ const getConversations = async (req, res) => {
       tenantConnection.models.Conversation ||
       tenantConnection.model("Conversation", ConversationSchema);
 
+    // Load Lead schema to fetch visitor names
+    const LeadSchema = new mongoose.Schema({
+      name: { type: String, default: null, trim: true },
+      phone: { type: String, default: null, trim: true },
+      email: { type: String, default: null, lowercase: true, trim: true },
+      session_id: { type: String, required: true, index: true, trim: true },
+      created_at: { type: Date, default: Date.now }
+    });
+
+    const Lead = tenantConnection.models.Lead || tenantConnection.model("Lead", LeadSchema);
+
     // Query conversations: show WAITING chats OR chats assigned to this agent (including closed ones)
     // Do NOT show chats taken by other agents
     const agentId = req.agent.agentId;
@@ -650,10 +661,18 @@ const getConversations = async (req, res) => {
       .lean();
     const botMap = Object.fromEntries(bots.map((b) => [b._id.toString(), b]));
 
+    // Fetch visitor names from Lead collection
+    const sessionIds = conversations.map((c) => c.sessionId).filter(Boolean);
+    const leads = await Lead.find({ session_id: { $in: sessionIds } })
+      .select("session_id name")
+      .lean();
+    const leadMap = Object.fromEntries(leads.map((l) => [l.session_id, l.name]));
+
     // Format conversations with details
     const conversationsWithDetails = conversations.map((conv) => {
       const bot = botMap[conv.botId.toString()];
       const websiteUrl = bot?.scrapedWebsites?.[0] || "N/A";
+      const visitorName = leadMap[conv.sessionId] || null;
 
       return {
         _id: conv._id, // Use _id for frontend compatibility
@@ -662,6 +681,7 @@ const getConversations = async (req, res) => {
         botName: bot?.name || "Unknown Bot",
         websiteUrl,
         sessionId: conv.sessionId,
+        visitorName: visitorName, // Add visitor name from Lead collection
         status: conv.status,
         assignedAgent: conv.assignedAgent,
         lastActiveAt: conv.lastActiveAt,

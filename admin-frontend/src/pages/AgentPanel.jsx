@@ -675,11 +675,12 @@ function AgentPanel() {
   );
 
   const getVisitorName = (conversation) => {
-    return (
-      conversation?.sessionId ||
-      conversation?.userId ||
-      `Visitor ${conversation?._id?.slice(-4)}`
-    );
+    // Use the visitorName from the conversation if available (fetched from Lead collection)
+    if (conversation?.visitorName) {
+      return conversation.visitorName;
+    }
+    // Fallback to a generic visitor label
+    return `Visitor ${conversation?._id?.slice(-4) || 'Unknown'}`;
   };
 
   const handleAcceptChat = async (conversationId, e) => {

@@ -1075,6 +1075,17 @@ exports.getConversations = async (req, res) => {
     const Conversation = tenantConn.models.Conversation ||
       tenantConn.model('Conversation', ConversationSchema);
 
+    // Load Lead model to fetch visitor names
+    const LeadSchema = new mongoose.Schema({
+      name: { type: String, default: null, trim: true },
+      phone: { type: String, default: null, trim: true },
+      email: { type: String, default: null, lowercase: true, trim: true },
+      session_id: { type: String, required: true, index: true, trim: true },
+      created_at: { type: Date, default: Date.now }
+    });
+
+    const Lead = tenantConn.models.Lead || tenantConn.model('Lead', LeadSchema);
+
     // Fetch all conversations for this tenant, sorted by most recent first
     const conversations = await Conversation.find({})
       .sort({ lastActiveAt: -1 })
@@ -1082,12 +1093,20 @@ exports.getConversations = async (req, res) => {
 
     console.log(`✅ Retrieved ${conversations.length} conversations for user ${userId}`);
 
+    // Fetch visitor names from Lead collection
+    const sessionIds = conversations.map((c) => c.sessionId).filter(Boolean);
+    const leads = await Lead.find({ session_id: { $in: sessionIds } })
+      .select("session_id name")
+      .lean();
+    const leadMap = Object.fromEntries(leads.map((l) => [l.session_id, l.name]));
+
     res.json({
       success: true,
       conversations: conversations.map(conv => ({
         _id: conv._id,
         botId: conv.botId,
         sessionId: conv.sessionId,
+        visitorName: leadMap[conv.sessionId] || null, // Add visitor name from Lead collection
         status: conv.status,
         assignedAgent: conv.assignedAgent,
         agentId: conv.agentId,
@@ -1195,6 +1214,17 @@ exports.getAgentConversations = async (req, res) => {
     const Conversation = tenantConn.models.Conversation ||
       tenantConn.model('Conversation', ConversationSchema);
 
+    // Load Lead model to fetch visitor names
+    const LeadSchema = new mongoose.Schema({
+      name: { type: String, default: null, trim: true },
+      phone: { type: String, default: null, trim: true },
+      email: { type: String, default: null, lowercase: true, trim: true },
+      session_id: { type: String, required: true, index: true, trim: true },
+      created_at: { type: Date, default: Date.now }
+    });
+
+    const Lead = tenantConn.models.Lead || tenantConn.model('Lead', LeadSchema);
+
     // Fetch conversations for this specific agent, sorted by most recent first
     // Match either assignedAgent or agentId to be safe
     const conversations = await Conversation.find({
@@ -1208,12 +1238,20 @@ exports.getAgentConversations = async (req, res) => {
 
     console.log(`✅ Retrieved ${conversations.length} conversations for agent ${agentId}`);
 
+    // Fetch visitor names from Lead collection
+    const sessionIds = conversations.map((c) => c.sessionId).filter(Boolean);
+    const leads = await Lead.find({ session_id: { $in: sessionIds } })
+      .select("session_id name")
+      .lean();
+    const leadMap = Object.fromEntries(leads.map((l) => [l.session_id, l.name]));
+
     res.json({
       success: true,
       conversations: conversations.map(conv => ({
         _id: conv._id,
         botId: conv.botId,
         sessionId: conv.sessionId,
+        visitorName: leadMap[conv.sessionId] || null, // Add visitor name from Lead collection
         status: conv.status,
         assignedAgent: conv.assignedAgent,
         agentId: conv.agentId,
