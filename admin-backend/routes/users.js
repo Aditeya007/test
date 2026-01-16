@@ -9,10 +9,10 @@ const {
   validateCreateUser,
   validateUpdateUser
 } = require('../middleware/validate');
-const { userLimiter } = require('../middleware/rateLimiter');
+
 
 // All routes require authentication and admin privileges
-router.use(auth, requireAdmin, userLimiter);
+router.use(auth, requireAdmin);
 
 /**
  * @route   GET /api/users

@@ -8,7 +8,7 @@ const botController = require('../controllers/botController');
 const botScrapeController = require('../controllers/botScrapeController');
 const userController = require('../controllers/userController');
 const { validateBotRun } = require('../middleware/validate');
-const { botLimiter } = require('../middleware/rateLimiter');
+
 
 // Middleware to accept either user auth or agent auth
 const authOrAgent = (req, res, next) => {
@@ -54,7 +54,7 @@ const authOrAgent = (req, res, next) => {
  * @returns { answer: string } - The bot's response
  * @security Rate limited to prevent API abuse
  */
-router.post('/run', authenticateBotToken, botLimiter, validateBotRun, botController.runBot);
+router.post('/run', authenticateBotToken, validateBotRun, botController.runBot);
 
 /**
  * @route   GET /api/bot
