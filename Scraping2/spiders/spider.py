@@ -65,8 +65,8 @@ class FixedUniversalSpider(scrapy.Spider):
         ".mp4", ".avi", ".mov", ".wmv", ".flv", ".mkv", ".webm",
         ".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma",
         
-        # Web assets
-        ".css", ".js", ".xml", ".json", ".rss", ".atom",
+        # Web assets (NOTE: .json removed from skip list to allow WP REST API endpoints)
+        ".css", ".js", ".xml", ".rss", ".atom",
         
         # Fonts
         ".ttf", ".otf", ".woff", ".woff2", ".eot"
@@ -229,6 +229,9 @@ class FixedUniversalSpider(scrapy.Spider):
         """Check if text appears to be navigation, boilerplate, or low-value content."""
         text_lower = text.lower().strip()
         
+        # FIX #6: EXCLUDE Elementor content from boilerplate filtering
+        # Elementor widgets contain real content, not navigation junk
+        
         # Navigation patterns
         nav_patterns = [
             r'\bhome\b.*\babout\b.*\bcontact\b',
@@ -281,11 +284,12 @@ class FixedUniversalSpider(scrapy.Spider):
                 return True
         
         # Check for repetitive patterns (same word repeated)
+        # But be more lenient - Elementor content can have repeated styling words
         words = text_lower.split()
         if len(words) > 2:
             word_counts = Counter(words)
             most_common_count = word_counts.most_common(1)[0][1]
-            if most_common_count / len(words) > 0.5:  # More than 50% repetition
+            if most_common_count / len(words) > 0.7:  # Increased from 0.5 to 0.7
                 return True
         
         return False
@@ -430,8 +434,16 @@ class FixedUniversalSpider(scrapy.Spider):
             
         try:
             parsed = urlparse(url)
-            # More lenient domain checking
-            if not any(d in parsed.netloc for d in self.allowed_domains):
+            # FIX #3: Normalized domain matching - strip www. and compare registrable domain
+            # Old unsafe logic: if not any(d in parsed.netloc for d in self.allowed_domains)
+            netloc_normalized = parsed.netloc.lower().replace('www.', '')
+            domain_match = False
+            for allowed in self.allowed_domains:
+                allowed_normalized = allowed.lower().replace('www.', '')
+                if netloc_normalized == allowed_normalized or netloc_normalized.endswith('.' + allowed_normalized):
+                    domain_match = True
+                    break
+            if not domain_match:
                 return False
             
             # Check against centralized skip extensions list
@@ -573,14 +585,25 @@ class FixedUniversalSpider(scrapy.Spider):
                 self.items_extracted += 1
                 yield item
 
-            # Mark as fully processed after content extraction
-            self._mark_url_as_fully_processed(response.url)
+            # FIX #2: Moved _mark_url_as_fully_processed to execute AFTER link discovery AND Playwright fallback
+            # This prevents premature "fully processed" status that collapses crawl discovery
 
             # Discover links and pagination
             yield from self._discover_and_follow_links(response)
 
-            # Fallback to Playwright if thin content
-            if extracted_count < 3 and not response.meta.get("playwright", False) and PLAYWRIGHT_AVAILABLE:
+            # FIX #5: Redefine Playwright trigger based on meaningful content presence
+            # Old logic: extracted_count < 3 (but full-page body text inflated count)
+            # New logic: Check for actual semantic content selectors
+            has_meaningful_content = (
+                response.css('article').get() or
+                response.css('.entry-content').get() or
+                response.css('.elementor-widget-text-editor').get() or
+                response.css('.elementor-widget-container').get() or
+                (len(response.css('h1, h2, h3').getall()) > 0 and len(response.css('p').getall()) > 2)
+            )
+            
+            if not has_meaningful_content and not response.meta.get("playwright", False) and PLAYWRIGHT_AVAILABLE:
+                logger.info(f"🎭 Triggering Playwright for thin content: {response.url}")
                 yield scrapy.Request(
                     response.url,
                     callback=self.parse_rendered,
@@ -597,6 +620,9 @@ class FixedUniversalSpider(scrapy.Spider):
                     priority=50,
                     dont_filter=True,
                 )
+            else:
+                # FIX #2 (continued): Mark as fully processed ONLY if no Playwright fallback is triggered
+                self._mark_url_as_fully_processed(response.url)
         except Exception as e:
             logger.error(f"Critical error processing page {response.url}: {e}")
 
@@ -653,23 +679,22 @@ class FixedUniversalSpider(scrapy.Spider):
                     continue
                 absolute_url = self._canonicalize_url(response.urljoin(href))
                 
+                # FIX #4: Allow WordPress JSON endpoints to be followed
+                # Check if this is a WP JSON endpoint we want to parse
+                is_wp_json = any(pattern in absolute_url.lower() for pattern in ALLOW_JSON_VALUE_PATTERNS)
+                
                 # Double-check URL filtering before yielding request
-                if not self._should_process_url(absolute_url):
+                # But SKIP the filter for allowed WP JSON endpoints
+                if not is_wp_json and not self._should_process_url(absolute_url):
                     logger.debug(f"Filtering out binary file URL in link discovery: {absolute_url}")
                     continue
                     
                 if not self._should_follow_link(absolute_url):
                     continue
                 
-                # Skip if already processed or currently being processed
-                if self._is_url_already_processed(absolute_url):
-                    logger.debug(f"🔄 Skipping already processed URL in link discovery: {absolute_url}")
-                    continue
-                
-                canonical_url = self._canonicalize_url(absolute_url)
-                if canonical_url in self.currently_processing_urls:
-                    logger.debug(f"⏳ Skipping currently processing URL: {absolute_url}")
-                    continue
+                # FIX #7: Remove deduplication from discovery phase
+                # Allow Scrapy's built-in dupefilter to handle this at request scheduling time
+                # Removed: self._is_url_already_processed() and self.currently_processing_urls checks
                     
                 self.discovered_urls.add(absolute_url)
                 yield scrapy.Request(
@@ -740,8 +765,15 @@ class FixedUniversalSpider(scrapy.Spider):
     def _should_follow_link(self, url: str) -> bool:
         try:
             parsed = urlparse(url)
-            # Very lenient - only basic domain check and obvious exclusions
-            if not any(d in parsed.netloc for d in self.allowed_domains):
+            # FIX #3: Use normalized domain comparison for internal links
+            netloc_normalized = parsed.netloc.lower().replace('www.', '')
+            domain_match = False
+            for allowed in self.allowed_domains:
+                allowed_normalized = allowed.lower().replace('www.', '')
+                if netloc_normalized == allowed_normalized or netloc_normalized.endswith('.' + allowed_normalized):
+                    domain_match = True
+                    break
+            if not domain_match:
                 return False
             
             # Only exclude obvious non-content patterns
@@ -781,10 +813,9 @@ class FixedUniversalSpider(scrapy.Spider):
                 except ValueError as e:
                     logger.debug(f"Skipping content from {response.url}: {e}")
 
-        # Extract full page text first (most comprehensive)
-        full_text = response.css("body").xpath("normalize-space(string(.))").get()
-        if full_text and len(full_text.strip()) > 50:
-            mk(full_text.strip(), "full_page_text")
+        # FIX #1: REMOVED full-page body text extraction
+        # This was incorrectly incrementing extracted_count and preventing Playwright fallback
+        # Only count meaningful content blocks below
 
         # Title (clean but don't over-process titles)
         title = response.css("title::text").get()
@@ -804,6 +835,14 @@ class FixedUniversalSpider(scrapy.Spider):
             "article", "main", "[role='main']", ".content", "#content", 
             ".post-content", ".entry-content", ".article-content", ".page-content",
             ".rich-text", ".prose", ".text-content", ".body-content",
+            
+            # FIX #6: Add Elementor-specific selectors as FIRST-CLASS content sources
+            ".elementor-widget-container",
+            ".elementor-widget-text-editor",
+            ".elementor-heading-title",
+            ".elementor-text-editor",
+            ".elementor-widget-theme-post-content",
+            ".elementor-shortcode",
             
             # All text containers
             "p", "div", "span", "section", "aside", "header", "footer",
@@ -934,9 +973,10 @@ class FixedUniversalSpider(scrapy.Spider):
                         yield from yield_text(excerpt, "meta_description")
                         extracted_any = True
                 
-                # Mark as fully processed after content extraction
+                # FIX #2: Mark JSON endpoint as fully processed after extraction completes
                 if extracted_any:
                     self._mark_url_as_fully_processed(response.url)
+                # Note: JSON endpoints don't need link discovery since they're data endpoints
                 return
 
             # Generic JSON string harvesting
@@ -984,9 +1024,12 @@ class FixedUniversalSpider(scrapy.Spider):
                     yield item
                     extracted_any = True
             
-            # Mark as fully processed after content extraction
+            # FIX #2: Mark Playwright-rendered page as fully processed after extraction
             if extracted_any:
                 self._mark_url_as_fully_processed(response.url)
+            
+            # Also discover links from the rendered page
+            yield from self._discover_and_follow_links(response)
         except Exception as e:
             logger.error(f"Playwright rendered parse error {response.url}: {e}")
 
