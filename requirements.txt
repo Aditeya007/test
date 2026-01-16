@@ -27,6 +27,7 @@ scrapy-playwright
 
 # Natural Language Processing
 nltk==3.8.1
+pyspellchecker==0.7.2
 
 # Scheduling & Background Tasks
 schedule==1.2.0

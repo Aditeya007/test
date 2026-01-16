@@ -18,6 +18,14 @@ import re
 import numpy as np
 from fastapi.middleware.cors import CORSMiddleware
 
+# Spelling correction for query normalization
+try:
+    from spellchecker import SpellChecker
+    SPELLCHECKER_AVAILABLE = True
+except ImportError:
+    SpellChecker = None
+    SPELLCHECKER_AVAILABLE = False
+
 # MongoDB imports are optional; gracefully degrade when unavailable.
 try:
     from pymongo import MongoClient  # type: ignore
@@ -460,6 +468,19 @@ class SemanticIntelligentRAG:
         print("🔄 Initializing contact information extractor...")
         self.contact_extractor = ContactInformationExtractor()
         print("✅ Contact information extractor loaded")
+
+        # Initialize Spell Checker for query normalization
+        self.spell_checker = None
+        if SPELLCHECKER_AVAILABLE and SpellChecker is not None:
+            try:
+                print("🔄 Initializing spell checker for query normalization...")
+                self.spell_checker = SpellChecker()
+                print("✅ Spell checker loaded for typo correction")
+            except Exception as e:
+                print(f"⚠️  Failed to initialize spell checker: {e}")
+                self.spell_checker = None
+        else:
+            print("ℹ️  Spell checker not available; query normalization disabled")
 
         # Configuration constants
         self.max_retrieval = 100
@@ -943,16 +964,107 @@ class SemanticIntelligentRAG:
         return "Error: Lead collection not initialized."
 
 
+    def normalize_query_spelling(self, query: str) -> str:
+        """
+        Normalize query spelling to fix obvious mistakes before embeddings and retrieval.
+        
+        Rules:
+        - Only correct words longer than 4 characters
+        - Only correct alphabetic-only words
+        - Preserve emails, phone numbers, URLs
+        - Preserve proper nouns (best-effort: words starting with uppercase)
+        - Only apply correction if confidence is high (single best candidate)
+        
+        Args:
+            query: Original user query
+            
+        Returns:
+            Normalized query with spelling corrections applied
+        """
+        if not self.spell_checker or not query or not query.strip():
+            return query
+        
+        try:
+            # Split query into words
+            words = query.split()
+            normalized_words = []
+            
+            for word in words:
+                # Clean word for analysis (remove trailing punctuation)
+                word_clean = word.rstrip('.,!?;:')
+                trailing_punct = word[len(word_clean):]
+                
+                # Skip if too short
+                if len(word_clean) <= 4:
+                    normalized_words.append(word)
+                    continue
+                
+                # Skip if not alphabetic (contains numbers or special chars)
+                if not word_clean.isalpha():
+                    normalized_words.append(word)
+                    continue
+                
+                # Skip if starts with uppercase (likely proper noun)
+                if word_clean[0].isupper():
+                    normalized_words.append(word)
+                    continue
+                
+                # Skip if contains @ or common URL/email patterns
+                if '@' in word or 'http' in word.lower() or 'www' in word.lower():
+                    normalized_words.append(word)
+                    continue
+                
+                # Check if word is misspelled
+                misspelled = self.spell_checker.unknown([word_clean.lower()])
+                
+                if misspelled:
+                    # Get correction candidates
+                    candidates = self.spell_checker.candidates(word_clean.lower())
+                    
+                    # Only apply correction if there's exactly one high-confidence candidate
+                    if candidates and len(candidates) == 1:
+                        corrected = list(candidates)[0]
+                        # Preserve original casing pattern
+                        if word_clean.isupper():
+                            corrected = corrected.upper()
+                        elif word_clean[0].isupper():
+                            corrected = corrected.capitalize()
+                        normalized_words.append(corrected + trailing_punct)
+                    else:
+                        # Multiple candidates or no candidates - keep original
+                        normalized_words.append(word)
+                else:
+                    # Word is correctly spelled
+                    normalized_words.append(word)
+            
+            normalized = ' '.join(normalized_words)
+            
+            # Log normalization if changes were made
+            if normalized != query:
+                print(f"✏️  Query normalized: '{query}' → '{normalized}'")
+            
+            return normalized
+            
+        except Exception as e:
+            print(f"⚠️  Error in spelling normalization: {e}")
+            # Fallback to original query on error
+            return query
+
+
     def analyze_question_semantically(self, question: str) -> Dict:
         words = question.split()
         entity_mentions = [word for word in words if len(word) > 2 and word[0].isupper()]
+
+        # Normalize query for better retrieval (fix typos)
+        normalized_question = self.normalize_query_spelling(question)
 
         return {
             'intent': 'general_inquiry',
             'intent_confidence': 0.5,
             'key_concepts': question.split(),
-            'question_embedding': self.embedding_model.encode(question),
-            'original_question': question
+            'question_embedding': self.embedding_model.encode(normalized_question),  # Use normalized for embeddings
+            'original_question': question,  # Preserve original for display/logs
+            'normalized_question': normalized_question  # Include normalized version
         }
 
     def comprehensive_semantic_retrieval(self, question_analysis: Dict) -> Tuple[List[str], List[float]]:
