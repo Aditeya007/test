@@ -1037,7 +1037,10 @@ class FixedUniversalSpider(scrapy.Spider):
                             yield item
                             extracted_any = True
             
-            # Mark as fully processed after content extraction
+            # Discover and follow links from rendered DOM (enables crawl expansion on JS-gated sites)
+            yield from self._discover_and_follow_links(response)
+            
+            # Mark as fully processed after content extraction and link discovery
             if extracted_any:
                 self._mark_url_as_fully_processed(response.url)
         except Exception as e:
