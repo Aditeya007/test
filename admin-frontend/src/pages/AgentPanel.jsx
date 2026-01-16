@@ -683,6 +683,10 @@ function AgentPanel() {
 
   const selectedConversation = conversations.find(
     (c) => c._id === selectedConversationId
+  ) || queuedConversations.find(
+    (c) => c._id === selectedConversationId
+  ) || completedConversations.find(
+    (c) => c._id === selectedConversationId
   );
 
   const getVisitorName = (conversation) => {

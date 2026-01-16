@@ -891,11 +891,28 @@ exports.requestAgentByConversationId = async (req, res) => {
     const io = req.app.locals.io;
     if (io) {
       const agentRoomName = `agents:${bot.userId}`;  // tenantId is bot.userId
+      
+      // Fetch visitor name from Lead collection
+      let visitorName = null;
+      try {
+        const lead = await Lead.findOne({ session_id: conversation.sessionId }).select("name").lean();
+        visitorName = lead?.name || null;
+      } catch (err) {
+        console.error("Failed to fetch visitor name for queued event:", err);
+      }
+
+      // Get bot details for websiteUrl and botName
+      const websiteUrl = bot.scrapedWebsites?.[0] || "N/A";
+      const botName = bot.name || "Unknown Bot";
+
       const lightweightSummary = {
         _id: conversation._id,
         conversationId: conversation._id,
         botId: conversation.botId,
+        botName: botName,
+        websiteUrl: websiteUrl,
         sessionId: conversation.sessionId,
+        visitorName: visitorName,
         status: conversation.status,
         createdAt: conversation.createdAt
       };
@@ -1011,11 +1028,29 @@ exports.requestAgent = async (req, res) => {
     const io = req.app.locals.io;
     if (io) {
       const agentRoomName = `agents:${bot.userId}`;  // tenantId is bot.userId
+      
+      // Fetch visitor name from Lead collection
+      const { Lead } = await getTenantModels(tenantContext.databaseUri);
+      let visitorName = null;
+      try {
+        const lead = await Lead.findOne({ session_id: conversation.sessionId }).select("name").lean();
+        visitorName = lead?.name || null;
+      } catch (err) {
+        console.error("Failed to fetch visitor name for queued event:", err);
+      }
+
+      // Get bot details for websiteUrl and botName
+      const websiteUrl = bot.scrapedWebsites?.[0] || "N/A";
+      const botName = bot.name || "Unknown Bot";
+
       const lightweightSummary = {
         _id: conversation._id,
         conversationId: conversation._id,
         botId: conversation.botId,
+        botName: botName,
+        websiteUrl: websiteUrl,
         sessionId: conversation.sessionId,
+        visitorName: visitorName,
         status: conversation.status,
         createdAt: conversation.createdAt,
         requestedAt: conversation.requestedAt

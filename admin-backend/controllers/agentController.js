@@ -1127,11 +1127,29 @@ const acceptConversation = async (req, res) => {
       if (getAgentSocket) {
         const agentSocketInfo = getAgentSocket(agentId);
         if (agentSocketInfo) {
+          // Fetch visitor name from Lead collection
+          const Lead = tenantConnection.models.Lead || tenantConnection.model("Lead", LeadSchema);
+          let visitorName = null;
+          try {
+            const lead = await Lead.findOne({ session_id: conversation.sessionId }).select("name").lean();
+            visitorName = lead?.name || null;
+          } catch (err) {
+            console.error("Failed to fetch visitor name for socket event:", err);
+          }
+
+          // Fetch bot details for websiteUrl and botName
+          const bot = await Bot.findById(conversation.botId).select("name scrapedWebsites").lean();
+          const websiteUrl = bot?.scrapedWebsites?.[0] || "N/A";
+          const botName = bot?.name || "Unknown Bot";
+
           io.to(agentSocketInfo.socketId).emit('conversation:assigned', {
             _id: conversation._id,
             conversationId: conversation._id,
             botId: conversation.botId,
+            botName: botName,
+            websiteUrl: websiteUrl,
             sessionId: conversation.sessionId,
+            visitorName: visitorName,
             status: conversation.status,
             agentId: conversation.agentId,
             assignedAgent: conversation.assignedAgent,
