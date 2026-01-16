@@ -235,17 +235,6 @@ function UserForm({
       </div>
 
       <div className="user-form-actions">
-        {isEditMode && (
-          <button
-            type="button"
-            className="auth-btn"
-            onClick={onCancel}
-            disabled={loading}
-            style={{ width: "auto", minWidth: "150px", padding: "0.85em 2em" }}
-          >
-            Cancel
-          </button>
-        )}
         <button
           type="submit"
           className="auth-btn"
@@ -255,8 +244,8 @@ function UserForm({
           {loading
             ? "⏳ Saving..."
             : isEditMode
-              ? "💾 Save Changes"
-              : "✨ Create User"}
+            ? "💾 Save Changes"
+            : "✨ Create User"}
         </button>
       </div>
     </form>

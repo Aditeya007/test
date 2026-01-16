@@ -118,7 +118,7 @@ function AdminLayout({ children }) {
       label: "Dashboard",
       icon: "📊",
       path: "/dashboard",
-      // Available for both admins and regular users, but not for agents
+      userOnly: true, // Only show for regular users, not admins
     },
     {
       id: "users",

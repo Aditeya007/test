@@ -80,7 +80,7 @@ function UserTable({ users, onEdit, onDelete, onSelect, activeTenantId, onViewAg
                 <td style={{ fontSize: '0.85rem' }}>{formatDate(user.createdAt)}</td>
                 <td>
                   <div className="action-buttons">
-                    {!isActive && (
+                    {/* {!isActive && (
                       <button
                         type="button"
                         className="action-btn action-btn-success"
@@ -94,7 +94,7 @@ function UserTable({ users, onEdit, onDelete, onSelect, activeTenantId, onViewAg
                       <span className="action-btn action-btn-primary" style={{ cursor: 'default', opacity: 0.7 }}>
                         Current
                       </span>
-                    )}
+                    )} */}
                     {onViewAgents && (user.maxAgents > 0) && (
                       <button
                         type="button"

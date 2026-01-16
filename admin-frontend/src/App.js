@@ -175,13 +175,35 @@ function AppContent() {
         {/* Default redirect */}
         <Route
           path="/"
-          element={<Navigate to={user?.role === 'agent' ? '/agent' : '/dashboard'} replace />}
+          element={
+            <Navigate
+              to={
+                user?.role === 'agent'
+                  ? '/agent'
+                  : user?.role === 'admin'
+                    ? '/admin/users'
+                    : '/dashboard'
+              }
+              replace
+            />
+          }
         />
 
         {/* 404 fallback */}
         <Route
           path="*"
-          element={<Navigate to={user?.role === 'agent' ? '/agent' : '/dashboard'} replace />}
+          element={
+            <Navigate
+              to={
+                user?.role === 'agent'
+                  ? '/agent'
+                  : user?.role === 'admin'
+                    ? '/admin/users'
+                    : '/dashboard'
+              }
+              replace
+            />
+          }
         />
       </Routes>
 

@@ -329,6 +329,9 @@ function WebsitesPage() {
       // Reset to first page to show the newly added website
       setCurrentPage(1);
 
+      // Refresh the websites list to show the newly added website instantly
+      await fetchWebsites(1);
+
       if (response.bot) {
         const websiteId = response.bot._id || response.bot.id;
         if (websiteId) {
