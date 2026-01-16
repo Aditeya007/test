@@ -543,6 +543,12 @@ class FixedUniversalSpider(scrapy.Spider):
 
     def parse_page(self, response):
         try:
+            # Skip non-HTML responses (JS, fonts, binary assets)
+            ctype = (response.headers.get("Content-Type") or b"").decode("latin1").lower()
+            if not ctype.startswith("text/html"):
+                logger.debug(f"Skipping non-HTML response: {response.url} ({ctype})")
+                return
+            
             # Check if already processed before doing any work
             if self._is_url_already_processed(response.url):
                 logger.info(f"🔄 Skipping already processed page: {response.url}")
@@ -974,6 +980,12 @@ class FixedUniversalSpider(scrapy.Spider):
 
     async def parse_rendered(self, response):
         try:
+            # Skip non-HTML responses (JS, fonts, binary assets)
+            ctype = (response.headers.get("Content-Type") or b"").decode("latin1").lower()
+            if not ctype.startswith("text/html"):
+                logger.debug(f"Skipping non-HTML rendered response: {response.url} ({ctype})")
+                return
+            
             # Check if already processed before doing any work
             if self._is_url_already_processed(response.url):
                 logger.info(f"🔄 Skipping already processed rendered page: {response.url}")
