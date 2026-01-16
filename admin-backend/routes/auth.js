@@ -22,6 +22,20 @@ router.post('/register', validateRegister, authController.registerUser);
  */
 router.post('/login', validateLogin, authController.loginUser);
 
-// (Optional) Logout or password reset can be added here
+/**
+ * @route   POST /api/auth/forgot-password
+ * @desc    Request password reset (forgot password)
+ * @access  Public
+ * @body    { email } or { username }
+ */
+router.post('/forgot-password', authController.forgotPassword);
+
+/**
+ * @route   POST /api/auth/reset-password
+ * @desc    Reset password with token
+ * @access  Public
+ * @body    { token, password }
+ */
+router.post('/reset-password', authController.resetPassword);
 
 module.exports = router;
