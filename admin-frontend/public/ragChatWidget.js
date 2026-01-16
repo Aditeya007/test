@@ -899,7 +899,41 @@
     }
   }
 
-  // Toggle widget visibility
+  // Close session and queue lead data - ONLY called on tab close
+  // This function NO LONGER sends email - it only queues the lead for server-side dispatch
+  function closeSession() {
+    if (!state.sessionId || !config.botId) {
+      return;
+    }
+
+    const payload = {
+      session_id: state.sessionId,
+      resource_id: config.botId
+    };
+
+    // Use absolute URL for production
+    const url = 'https://chatbot.excellisit.net/api/chat/session/close';
+
+    // Prefer sendBeacon for reliability during page unload
+    if (navigator.sendBeacon) {
+      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      navigator.sendBeacon(url, blob);
+      console.log('RAG Widget: Session close queued via sendBeacon (lead will be sent by server)');
+    } else {
+      // Fallback to fetch with keepalive
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        keepalive: true
+      }).catch(err => {
+        console.error('RAG Widget: Failed to close session:', err);
+      });
+      console.log('RAG Widget: Session close queued via fetch (lead will be sent by server)');
+    }
+  }
+
+  // Toggle widget visibility (no session close on toggle)
   function toggleWidget() {
     const widgetWindow = document.getElementById('rag-widget-window');
     const widgetToggle = document.getElementById('rag-widget-toggle');
@@ -1045,18 +1079,14 @@
       requestAgentBtn.addEventListener('click', requestAgent);
     }
 
-    // Handle widget unload - end session
-    window.addEventListener('beforeunload', async () => {
-      try {
-        // Use sendBeacon for reliable delivery during page unload
-        const blob = new Blob(
-          [JSON.stringify({ sessionId: state.sessionId, botId: config.botId })],
-          { type: 'application/json' }
-        );
-        navigator.sendBeacon(`${config.apiBase}/chat/end-session`, blob);
-      } catch (err) {
-        console.error('RAG Widget: Error ending session:', err);
-      }
+    // Handle tab/page close - send lead data ONLY on actual tab close
+    // pagehide is more reliable than beforeunload, especially on mobile Safari
+    window.addEventListener('pagehide', () => {
+      closeSession();
+    });
+    // beforeunload for older browsers
+    window.addEventListener('beforeunload', () => {
+      closeSession();
     });
 
     window.RAGWidget._initialized = true;

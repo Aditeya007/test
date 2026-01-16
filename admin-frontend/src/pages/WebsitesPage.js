@@ -75,6 +75,59 @@ function WebsitesPage() {
   // Widget installer
   const [isWidgetInstallerOpen, setWidgetInstallerOpen] = useState(false);
 
+  // Add knowledge modal state
+  const [addKnowledgeModalOpen, setAddKnowledgeModalOpen] = useState(false);
+  const [knowledgeContent, setKnowledgeContent] = useState("");
+  const [addKnowledgeLoading, setAddKnowledgeLoading] = useState(false);
+  const [addKnowledgeError, setAddKnowledgeError] = useState("");
+  const [addKnowledgeSuccess, setAddKnowledgeSuccess] = useState("");
+
+  // Leads modal state
+  const [showLeadsModal, setShowLeadsModal] = useState(false);
+  const [leadsData, setLeadsData] = useState([]);
+  const [leadsLoading, setLeadsLoading] = useState(false);
+  const [leadsError, setLeadsError] = useState("");
+  const [leadsWebsiteId, setLeadsWebsiteId] = useState(null);
+
+  // Handle Add Knowledge
+  async function handleAddKnowledge() {
+    if (!selectedWebsite || !token) return;
+
+    const trimmedContent = knowledgeContent.trim();
+
+    if (!trimmedContent) {
+      setAddKnowledgeError("Please enter some content");
+      return;
+    }
+
+    setAddKnowledgeLoading(true);
+    setAddKnowledgeError("");
+    setAddKnowledgeSuccess("");
+
+    const botId = selectedWebsite._id || selectedWebsite.id;
+
+    try {
+      await apiRequest(`/bot/${botId}/manual-knowledge`, {
+        method: "POST",
+        token,
+        data: { content: trimmedContent },
+      });
+
+      setAddKnowledgeSuccess("Knowledge added successfully!");
+
+      // Clear form and close modal after a short delay
+      setTimeout(() => {
+        setKnowledgeContent("");
+        setAddKnowledgeModalOpen(false);
+        setAddKnowledgeSuccess("");
+      }, 1500);
+    } catch (err) {
+      setAddKnowledgeError(err.message || "Failed to add knowledge");
+    } finally {
+      setAddKnowledgeLoading(false);
+    }
+  }
+
   // Fetch user details to get maxBots
   useEffect(() => {
     if (!token || !user || user.role !== "user") return;
@@ -349,6 +402,34 @@ function WebsitesPage() {
     }
   }
 
+  // Handle View Leads
+  async function handleViewLeads(websiteId) {
+    if (!token) return;
+
+    setLeadsWebsiteId(websiteId);
+    setShowLeadsModal(true);
+    setLeadsLoading(true);
+    setLeadsError("");
+    setLeadsData([]);
+
+    try {
+      const response = await apiRequest(`/bot/${websiteId}/leads`, {
+        method: "GET",
+        token,
+      });
+
+      if (response.success && response.leads) {
+        setLeadsData(response.leads);
+      } else {
+        setLeadsData([]);
+      }
+    } catch (err) {
+      setLeadsError(err.message || "Failed to load leads");
+    } finally {
+      setLeadsLoading(false);
+    }
+  }
+
   if (loading) {
     return <Loader message="Loading websites..." />;
   }
@@ -396,14 +477,14 @@ function WebsitesPage() {
               }
               return maxWebsites > 0 && websites.length < maxWebsites;
             })() && (
-              <button
-                type="button"
-                className="auth-btn auth-btn--success"
-                onClick={() => setAddWebsiteModalOpen(true)}
-              >
-                ➕ Add Website
-              </button>
-            )}
+                <button
+                  type="button"
+                  className="auth-btn auth-btn--success"
+                  onClick={() => setAddWebsiteModalOpen(true)}
+                >
+                  ➕ Add Website
+                </button>
+              )}
           </div>
         </div>
       </header>
@@ -460,11 +541,10 @@ function WebsitesPage() {
                       </td>
                       <td>
                         <span
-                          className={`status-badge ${
-                            website.botReady
-                              ? "status-badge--ready"
-                              : "status-badge--pending"
-                          }`}
+                          className={`status-badge ${website.botReady
+                            ? "status-badge--ready"
+                            : "status-badge--pending"
+                            }`}
                         >
                           {website.botReady ? "✓ Ready" : "⏳ Pending"}
                         </span>
@@ -472,58 +552,87 @@ function WebsitesPage() {
                       <td style={{ fontSize: "0.85rem" }}>
                         {website.lastScrapeAt
                           ? new Date(website.lastScrapeAt).toLocaleString(
-                              "en-US",
-                              {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              }
-                            )
+                            "en-US",
+                            {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }
+                          )
                           : "Never"}
                       </td>
                       <td style={{ fontSize: "0.85rem" }}>
                         {website.createdAt
                           ? new Date(website.createdAt).toLocaleString(
-                              "en-US",
-                              {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              }
-                            )
+                            "en-US",
+                            {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }
+                          )
                           : "—"}
                       </td>
                       <td>
-                        <button
-                          type="button"
-                          onClick={() => handleWebsiteSelect(website)}
-                          style={{
-                            background: "transparent",
-                            border: "none",
-                            cursor: "pointer",
-                            fontSize: "1.2rem",
-                            padding: "0.25rem",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            transition: "transform 0.2s",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = "scale(1.1)";
-                            e.currentTarget.style.opacity = "0.8";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = "scale(1)";
-                            e.currentTarget.style.opacity = "1";
-                          }}
-                          title="View Details"
-                        >
-                          📋
-                        </button>
+                        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                          <button
+                            type="button"
+                            onClick={() => handleViewLeads(websiteId)}
+                            style={{
+                              background: "#10b981",
+                              border: "none",
+                              cursor: "pointer",
+                              fontSize: "0.75rem",
+                              padding: "0.35rem 0.75rem",
+                              borderRadius: "4px",
+                              color: "#ffffff",
+                              fontWeight: "500",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.25rem",
+                              transition: "background 0.2s",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = "#059669";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = "#10b981";
+                            }}
+                            title="View Leads"
+                          >
+                            📋 Leads
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleWebsiteSelect(website)}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              cursor: "pointer",
+                              fontSize: "1.2rem",
+                              padding: "0.25rem",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              transition: "transform 0.2s",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.transform = "scale(1.1)";
+                              e.currentTarget.style.opacity = "0.8";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.transform = "scale(1)";
+                              e.currentTarget.style.opacity = "1";
+                            }}
+                            title="View Details"
+                          >
+                            ⚙️
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -612,7 +721,7 @@ function WebsitesPage() {
             Manage chatbot for:{" "}
             <strong>
               {selectedWebsite.scrapedWebsites &&
-              selectedWebsite.scrapedWebsites[0]
+                selectedWebsite.scrapedWebsites[0]
                 ? selectedWebsite.scrapedWebsites[0]
                 : "this website"}
             </strong>
@@ -737,15 +846,15 @@ function WebsitesPage() {
                 <div style={{ color: "#1e293b", fontWeight: "500" }}>
                   {selectedWebsite.lastScrapeAt
                     ? new Date(selectedWebsite.lastScrapeAt).toLocaleString(
-                        "en-US",
-                        {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        }
-                      )
+                      "en-US",
+                      {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }
+                    )
                     : "Never"}
                 </div>
               </div>
@@ -902,6 +1011,8 @@ function WebsitesPage() {
             )}
           </div>
 
+
+
           {scrapeSuccess && (
             <div
               style={{
@@ -951,12 +1062,12 @@ function WebsitesPage() {
               style={{
                 opacity:
                   scrapeLoading ||
-                  selectedWebsite.schedulerConfig?.status === "running"
+                    selectedWebsite.schedulerConfig?.status === "running"
                     ? 0.6
                     : 1,
                 cursor:
                   scrapeLoading ||
-                  selectedWebsite.schedulerConfig?.status === "running"
+                    selectedWebsite.schedulerConfig?.status === "running"
                     ? "not-allowed"
                     : "pointer",
                 flex: "1 1 200px",
@@ -965,14 +1076,12 @@ function WebsitesPage() {
               {scrapeLoading
                 ? "⏳ Running..."
                 : selectedWebsite.schedulerConfig?.status === "running"
-                ? "⏳ Crawling..."
-                : "🔄 Run Crawl"}
+                  ? "⏳ Crawling..."
+                  : "🔄 Run Crawl"}
             </button>
             <button
               className="dashboard-action-btn"
-              onClick={() =>
-                navigate(`/bot/${selectedWebsite._id || selectedWebsite.id}`)
-              }
+              onClick={() => setAddKnowledgeModalOpen(true)}
               style={{ flex: "1 1 200px" }}
             >
               📝 Add Knowledge
@@ -1164,13 +1273,13 @@ function WebsitesPage() {
                   <div style={{ fontWeight: "500", color: "#1e293b" }}>
                     {schedulerConfig?.lastScrapeCompleted
                       ? new Date(
-                          schedulerConfig.lastScrapeCompleted
-                        ).toLocaleString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
+                        schedulerConfig.lastScrapeCompleted
+                      ).toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
                       : "Never"}
                   </div>
                 </div>
@@ -1261,6 +1370,518 @@ function WebsitesPage() {
               >
                 {addWebsiteLoading ? "⏳ Adding..." : "➕ Add Website"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Knowledge Modal */}
+      {addKnowledgeModalOpen && (
+        <div className="scrape-modal-overlay" role="dialog" aria-modal="true">
+          <div className="scrape-modal">
+            <h3>Add Knowledge</h3>
+            <p className="scrape-modal-subtitle">
+              Add trusted information to your chatbot's knowledge base manually.
+            </p>
+
+            {addKnowledgeError && (
+              <p className="scrape-error">{addKnowledgeError}</p>
+            )}
+            {addKnowledgeSuccess && (
+              <div
+                style={{
+                  padding: "0.75rem",
+                  background: "#d1fae5",
+                  border: "1px solid #10b981",
+                  borderRadius: "4px",
+                  color: "#065f46",
+                  marginBottom: "1rem",
+                }}
+              >
+                ✅ {addKnowledgeSuccess}
+              </div>
+            )}
+
+            <div style={{ marginBottom: "1rem" }}>
+              <label
+                htmlFor="knowledge-content"
+                style={{
+                  display: "block",
+                  marginBottom: "0.5rem",
+                  fontWeight: "500",
+                }}
+              >
+                Content
+              </label>
+              <textarea
+                id="knowledge-content"
+                placeholder="Enter the information you want to add to the chatbot's knowledge base..."
+                value={knowledgeContent}
+                onChange={(e) => setKnowledgeContent(e.target.value)}
+                disabled={addKnowledgeLoading}
+                rows={10}
+                style={{
+                  width: "100%",
+                  padding: "0.75rem",
+                  border: "1px solid #d1d5db",
+                  borderRadius: "4px",
+                  fontSize: "1rem",
+                  fontFamily: "inherit",
+                  resize: "vertical",
+                }}
+              />
+            </div>
+
+            <div className="scrape-modal-actions">
+              <button
+                type="button"
+                className="scrape-btn-neutral"
+                onClick={() => {
+                  setAddKnowledgeModalOpen(false);
+                  setKnowledgeContent("");
+                  setAddKnowledgeError("");
+                  setAddKnowledgeSuccess("");
+                }}
+                disabled={addKnowledgeLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="scrape-btn-primary"
+                onClick={handleAddKnowledge}
+                disabled={addKnowledgeLoading || !knowledgeContent.trim()}
+                style={{
+                  opacity:
+                    addKnowledgeLoading || !knowledgeContent.trim() ? 0.6 : 1,
+                  cursor:
+                    addKnowledgeLoading || !knowledgeContent.trim()
+                      ? "not-allowed"
+                      : "pointer",
+                }}
+              >
+                {addKnowledgeLoading ? "⏳ Adding..." : "✅ Add Knowledge"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leads Modal */}
+      {showLeadsModal && (
+        <div
+          className="scrape-modal-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowLeadsModal(false);
+              setLeadsData([]);
+              setLeadsError("");
+            }
+          }}
+        >
+          <div
+            className="leads-modal-content"
+            style={{ 
+              maxWidth: "1100px", 
+              maxHeight: "85vh", 
+              overflow: "hidden", 
+              display: "flex", 
+              flexDirection: "column",
+              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+              padding: "2px",
+              borderRadius: "16px",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
+            }}
+          >
+            <div style={{
+              background: "#1a1d2e",
+              borderRadius: "14px",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              height: "100%"
+            }}>
+              <div style={{
+                padding: "1.5rem 2rem",
+                borderBottom: "1px solid rgba(102, 126, 234, 0.2)",
+                background: "linear-gradient(to right, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1))"
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <h3 style={{ 
+                      margin: 0, 
+                      fontSize: "1.5rem", 
+                      fontWeight: "700",
+                      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                      WebkitBackgroundClip: "text",
+                      WebkitTextFillColor: "transparent",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem"
+                    }}>
+                      <span style={{ fontSize: "1.75rem" }}>📊</span>
+                      Lead Contacts
+                    </h3>
+                    <p style={{ 
+                      margin: "0.25rem 0 0 0", 
+                      fontSize: "0.875rem", 
+                      color: "#94a3b8",
+                      fontWeight: "400"
+                    }}>
+                      {leadsData.length} {leadsData.length === 1 ? 'contact' : 'contacts'} collected
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLeadsModal(false);
+                      setLeadsData([]);
+                      setLeadsError("");
+                    }}
+                    style={{
+                      background: "rgba(255, 255, 255, 0.1)",
+                      border: "1px solid rgba(255, 255, 255, 0.2)",
+                      color: "#cbd5e1",
+                      width: "36px",
+                      height: "36px",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      fontSize: "1.25rem",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      transition: "all 0.2s ease"
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = "rgba(255, 255, 255, 0.15)";
+                      e.target.style.color = "#fff";
+                      e.target.style.transform = "scale(1.05)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = "rgba(255, 255, 255, 0.1)";
+                      e.target.style.color = "#cbd5e1";
+                      e.target.style.transform = "scale(1)";
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ flex: 1, overflow: "auto", padding: "1.5rem" }}>
+                {leadsLoading && (
+                  <div style={{ 
+                    textAlign: "center", 
+                    padding: "4rem 2rem", 
+                    color: "#94a3b8" 
+                  }}>
+                    <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>⏳</div>
+                    <div style={{ fontSize: "1.125rem", fontWeight: "500" }}>Loading leads...</div>
+                    <div style={{ fontSize: "0.875rem", marginTop: "0.5rem", opacity: 0.7 }}>
+                      Please wait while we fetch your data
+                    </div>
+                  </div>
+                )}
+
+                {leadsError && (
+                  <div
+                    style={{
+                      padding: "1rem 1.25rem",
+                      background: "rgba(239, 68, 68, 0.1)",
+                      border: "1px solid rgba(239, 68, 68, 0.3)",
+                      borderRadius: "8px",
+                      color: "#fca5a5",
+                      marginBottom: "1rem",
+                      fontSize: "0.875rem",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.75rem"
+                    }}
+                  >
+                    <span style={{ fontSize: "1.25rem" }}>⚠️</span>
+                    <span>{leadsError}</span>
+                  </div>
+                )}
+
+                {!leadsLoading && !leadsError && leadsData.length === 0 && (
+                  <div style={{ 
+                    textAlign: "center", 
+                    padding: "4rem 2rem",
+                    color: "#64748b"
+                  }}>
+                    <div style={{ fontSize: "4rem", marginBottom: "1rem", opacity: 0.5 }}>📭</div>
+                    <div style={{ fontSize: "1.25rem", fontWeight: "600", color: "#94a3b8", marginBottom: "0.5rem" }}>
+                      No Leads Yet
+                    </div>
+                    <div style={{ fontSize: "0.875rem", color: "#64748b" }}>
+                      Leads will appear here once visitors submit their contact information
+                    </div>
+                  </div>
+                )}
+
+                {!leadsLoading && !leadsError && leadsData.length > 0 && (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ 
+                      width: "100%", 
+                      borderCollapse: "separate",
+                      borderSpacing: "0",
+                      fontSize: "0.875rem"
+                    }}>
+                      <thead>
+                        <tr>
+                          <th style={{ 
+                            padding: "1rem", 
+                            background: "rgba(102, 126, 234, 0.15)",
+                            textAlign: "left",
+                            fontWeight: "600",
+                            color: "#e2e8f0",
+                            fontSize: "0.75rem",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            borderBottom: "2px solid rgba(102, 126, 234, 0.3)",
+                            whiteSpace: "nowrap"
+                          }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              👤 Name
+                            </span>
+                          </th>
+                          <th style={{ 
+                            padding: "1rem", 
+                            background: "rgba(102, 126, 234, 0.15)",
+                            textAlign: "left",
+                            fontWeight: "600",
+                            color: "#e2e8f0",
+                            fontSize: "0.75rem",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            borderBottom: "2px solid rgba(102, 126, 234, 0.3)",
+                            whiteSpace: "nowrap"
+                          }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              📧 Email
+                            </span>
+                          </th>
+                          <th style={{ 
+                            padding: "1rem", 
+                            background: "rgba(102, 126, 234, 0.15)",
+                            textAlign: "left",
+                            fontWeight: "600",
+                            color: "#e2e8f0",
+                            fontSize: "0.75rem",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            borderBottom: "2px solid rgba(102, 126, 234, 0.3)",
+                            whiteSpace: "nowrap"
+                          }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              📱 Phone
+                            </span>
+                          </th>
+                          <th style={{ 
+                            padding: "1rem", 
+                            background: "rgba(102, 126, 234, 0.15)",
+                            textAlign: "left",
+                            fontWeight: "600",
+                            color: "#e2e8f0",
+                            fontSize: "0.75rem",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            borderBottom: "2px solid rgba(102, 126, 234, 0.3)",
+                            whiteSpace: "nowrap"
+                          }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              💬 Question
+                            </span>
+                          </th>
+                          <th style={{ 
+                            padding: "1rem", 
+                            background: "rgba(102, 126, 234, 0.15)",
+                            textAlign: "left",
+                            fontWeight: "600",
+                            color: "#e2e8f0",
+                            fontSize: "0.75rem",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            borderBottom: "2px solid rgba(102, 126, 234, 0.3)",
+                            whiteSpace: "nowrap"
+                          }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              📅 Date
+                            </span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leadsData.map((lead, index) => (
+                          <tr 
+                            key={lead._id || index}
+                            style={{ 
+                              background: index % 2 === 0 ? "rgba(255, 255, 255, 0.03)" : "transparent",
+                              transition: "all 0.2s ease"
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = "rgba(102, 126, 234, 0.1)";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = index % 2 === 0 ? "rgba(255, 255, 255, 0.03)" : "transparent";
+                            }}
+                          >
+                            <td style={{ 
+                              padding: "1rem", 
+                              color: "#e2e8f0",
+                              fontWeight: "500",
+                              borderBottom: "1px solid rgba(255, 255, 255, 0.05)"
+                            }}>
+                              {lead.name || <span style={{ color: "#64748b", fontStyle: "italic" }}>N/A</span>}
+                            </td>
+                            <td style={{ 
+                              padding: "1rem",
+                              borderBottom: "1px solid rgba(255, 255, 255, 0.05)"
+                            }}>
+                              {lead.email ? (
+                                <a 
+                                  href={`mailto:${lead.email}`} 
+                                  style={{ 
+                                    color: "#818cf8",
+                                    textDecoration: "none",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "0.25rem",
+                                    padding: "0.25rem 0.5rem",
+                                    borderRadius: "4px",
+                                    transition: "all 0.2s ease"
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.target.style.background = "rgba(129, 140, 248, 0.2)";
+                                    e.target.style.color = "#a5b4fc";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.target.style.background = "transparent";
+                                    e.target.style.color = "#818cf8";
+                                  }}
+                                >
+                                  {lead.email}
+                                </a>
+                              ) : (
+                                <span style={{ color: "#64748b", fontStyle: "italic" }}>N/A</span>
+                              )}
+                            </td>
+                            <td style={{ 
+                              padding: "1rem",
+                              borderBottom: "1px solid rgba(255, 255, 255, 0.05)"
+                            }}>
+                              {lead.phone ? (
+                                <a 
+                                  href={`tel:${lead.phone}`} 
+                                  style={{ 
+                                    color: "#818cf8",
+                                    textDecoration: "none",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "0.25rem",
+                                    padding: "0.25rem 0.5rem",
+                                    borderRadius: "4px",
+                                    transition: "all 0.2s ease"
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.target.style.background = "rgba(129, 140, 248, 0.2)";
+                                    e.target.style.color = "#a5b4fc";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.target.style.background = "transparent";
+                                    e.target.style.color = "#818cf8";
+                                  }}
+                                >
+                                  {lead.phone}
+                                </a>
+                              ) : (
+                                <span style={{ color: "#64748b", fontStyle: "italic" }}>N/A</span>
+                              )}
+                            </td>
+                            <td style={{ 
+                              padding: "1rem", 
+                              color: "#94a3b8",
+                              maxWidth: "300px",
+                              borderBottom: "1px solid rgba(255, 255, 255, 0.05)"
+                            }}>
+                              <div 
+                                style={{ 
+                                  overflow: "hidden", 
+                                  textOverflow: "ellipsis", 
+                                  whiteSpace: "nowrap" 
+                                }} 
+                                title={lead.originalQuestion || lead.original_question || ""}
+                              >
+                                {lead.originalQuestion || lead.original_question || <span style={{ color: "#64748b", fontStyle: "italic" }}>N/A</span>}
+                              </div>
+                            </td>
+                            <td style={{ 
+                              padding: "1rem", 
+                              color: "#94a3b8",
+                              whiteSpace: "nowrap",
+                              fontSize: "0.8125rem",
+                              borderBottom: "1px solid rgba(255, 255, 255, 0.05)"
+                            }}>
+                              {lead.createdAt
+                                ? new Date(lead.createdAt).toLocaleString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                                : <span style={{ color: "#64748b", fontStyle: "italic" }}>N/A</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ 
+                borderTop: "1px solid rgba(102, 126, 234, 0.2)", 
+                padding: "1.25rem 2rem",
+                background: "rgba(102, 126, 234, 0.05)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center"
+              }}>
+                <div style={{ fontSize: "0.875rem", color: "#94a3b8" }}>
+                  Total: <span style={{ fontWeight: "600", color: "#e2e8f0" }}>{leadsData.length}</span> lead{leadsData.length !== 1 ? 's' : ''}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLeadsModal(false);
+                    setLeadsData([]);
+                    setLeadsError("");
+                  }}
+                  style={{
+                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                    border: "none",
+                    color: "#fff",
+                    padding: "0.625rem 1.5rem",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontSize: "0.875rem",
+                    fontWeight: "600",
+                    transition: "all 0.2s ease",
+                    boxShadow: "0 4px 12px rgba(102, 126, 234, 0.3)"
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.transform = "translateY(-2px)";
+                    e.target.style.boxShadow = "0 6px 20px rgba(102, 126, 234, 0.4)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.transform = "translateY(0)";
+                    e.target.style.boxShadow = "0 4px 12px rgba(102, 126, 234, 0.3)";
+                  }}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

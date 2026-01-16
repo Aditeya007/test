@@ -24,6 +24,11 @@ const CloseIcon = () => (
 function ChatWidgetWrapper() {
   const { isWidgetActive, isWidgetOpen, selectedBotId, toggleWidget } = useChatWidget();
 
+  // Toggle widget visibility
+  const handleToggleWidget = () => {
+    toggleWidget();
+  };
+
   // CRITICAL FIX #2: Don't render anything if widget hasn't been activated
   if (!isWidgetActive) {
     return null;
@@ -41,12 +46,14 @@ function ChatWidgetWrapper() {
       <div className={`chatbot-window-container ${isWidgetOpen ? 'open' : ''}`}>
         {/* We pass the toggle function down so the chatbot can close itself. */}
         {hasValidBot ? (
-          <ChatWidget toggleChatbot={toggleWidget} />
+          <ChatWidget 
+            toggleChatbot={handleToggleWidget}
+          />
         ) : (
           <div className="rag-chatbot-container">
             <div className="chatbot-header">
               <h3>AI Assistant</h3>
-              <button onClick={toggleWidget} className="close-chatbot-btn" aria-label="Close Chatbot">
+              <button onClick={handleToggleWidget} className="close-chatbot-btn" aria-label="Close Chatbot">
                 <HeaderCloseIcon />
               </button>
             </div>
@@ -60,7 +67,7 @@ function ChatWidgetWrapper() {
 
       {/* The Launcher Button */}
       {/* This is the entry point for the user. It floats on the page. */}
-      <button className="chatbot-launcher-button" onClick={toggleWidget} aria-label="Toggle Chatbot">
+      <button className="chatbot-launcher-button" onClick={handleToggleWidget} aria-label="Toggle Chatbot">
         {/* We conditionally render the icon based on the 'isOpen' state. */}
         {isWidgetOpen ? <CloseIcon /> : <ChatIcon />}
       </button>

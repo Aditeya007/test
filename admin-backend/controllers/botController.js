@@ -4,6 +4,9 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const http = require('http');
+const https = require('https');
+const url = require('url');
 const botJob = require('../jobs/botJob');
 const { getUserTenantContext } = require('../services/userContextService');
 const { provisionResourcesForBot } = require('../services/provisioningService');
@@ -33,7 +36,7 @@ const getPythonExecutable = () => {
 const resolveBotContext = async (req, res, next) => {
   try {
     const { botId } = req.params;
-    
+
     if (!botId) {
       return res.status(400).json({
         success: false,
@@ -43,7 +46,7 @@ const resolveBotContext = async (req, res, next) => {
 
     // Load bot
     const bot = await Bot.findById(botId);
-    
+
     if (!bot) {
       return res.status(404).json({
         success: false,
@@ -62,12 +65,12 @@ const resolveBotContext = async (req, res, next) => {
     // Validate ownership
     const authenticatedUserId = req.user.userId;
     const authenticatedUserRole = req.user.role;
-    
+
     // User must own the bot OR be an admin who created the bot owner
     const isOwner = bot.userId.toString() === authenticatedUserId;
-    
+
     let isAuthorized = isOwner;
-    
+
     if (!isOwner && authenticatedUserRole === 'admin') {
       // Check if admin created the user who owns this bot
       const botOwner = await User.findById(bot.userId);
@@ -75,7 +78,7 @@ const resolveBotContext = async (req, res, next) => {
         isAuthorized = true;
       }
     }
-    
+
     if (!isAuthorized) {
       return res.status(403).json({
         success: false,
@@ -85,9 +88,9 @@ const resolveBotContext = async (req, res, next) => {
 
     // Attach bot for downstream use
     req.bot = bot;
-    
+
     console.log(`✅ Bot context resolved: ${bot.name} (${botId}) for user ${bot.userId}`);
-    
+
     next();
   } catch (err) {
     console.error('❌ Failed to resolve bot context:', err.message);
@@ -113,7 +116,7 @@ exports.runBot = async (req, res) => {
   let bot = req.bot;
   const { botId, message, input, sessionId: clientSessionId } = req.body;
   const messageText = message || input;
-  
+
   // If bot not already set (dashboard case), resolve it from botId
   if (!bot && botId) {
     try {
@@ -141,7 +144,7 @@ exports.runBot = async (req, res) => {
       });
     }
   }
-  
+
   // Validate bot exists
   if (!bot) {
     return res.status(400).json({
@@ -165,7 +168,7 @@ exports.runBot = async (req, res) => {
   try {
     // Sanitize input
     const sanitizedInput = messageText.trim();
-    
+
     // Log request
     if (process.env.NODE_ENV === 'development') {
       console.log(`🤖 Bot request: ${bot._id}`);
@@ -173,10 +176,10 @@ exports.runBot = async (req, res) => {
     } else {
       console.log(`🤖 Bot request: ${bot._id}`);
     }
-    
+
     // Get userId from bot for tenant context
     const userId = bot.userId.toString();
-    
+
     // Load tenant-specific resource metadata for shared infrastructure
     // CRITICAL: tenantContext is for shared infrastructure ONLY (databaseUri, botEndpoint, resourceId).
     // NEVER use tenantContext.vectorStorePath - each bot has its own vectorStorePath.
@@ -213,15 +216,16 @@ exports.runBot = async (req, res) => {
         botEndpoint: tenantContext.botEndpoint,
         resourceId: tenantContext.resourceId,
         vectorStorePath: bot.vectorStorePath, // ✅ Use bot-specific path
-        databaseUri: tenantContext.databaseUri
+        databaseUri: tenantContext.databaseUri,
+        botId: bot._id.toString()
       },
       sanitizedInput,
       { sessionId: normalizedSessionId }
     );
-    
+
     // FastAPI returns answer, session identifier, and optional metadata
     console.log(`✅ Bot response received for bot: ${bot._id}`);
-    
+
     // Return comprehensive response matching widget expectations
     res.json({
       success: true,
@@ -239,12 +243,12 @@ exports.runBot = async (req, res) => {
       code: err.code,
       stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
-    
+
     // Determine appropriate status code and user-friendly message based on error
     let statusCode = err.statusCode || 500;
     let errorMessage = err.statusCode ? err.message : 'Failed to process your request';
     let errorType = err.statusCode ? 'REQUEST_REJECTED' : 'INTERNAL_ERROR';
-    
+
     if (err.message.includes('Cannot connect') || err.code === 'ECONNREFUSED') {
       statusCode = 503; // Service unavailable
       errorMessage = 'Bot service is currently unavailable. Please try again later.';
@@ -262,17 +266,17 @@ exports.runBot = async (req, res) => {
       errorMessage = 'Bot service error. Please try again later.';
       errorType = 'UPSTREAM_ERROR';
     }
-    
-    res.status(statusCode).json({ 
+
+    res.status(statusCode).json({
       success: false,
       error: errorMessage,
       errorType,
       widgetError: true,
       timestamp: new Date().toISOString(),
       // Include technical details only in development
-      ...(process.env.NODE_ENV === 'development' && { 
+      ...(process.env.NODE_ENV === 'development' && {
         details: err.message,
-        code: err.code 
+        code: err.code
       })
     });
   }
@@ -293,7 +297,7 @@ exports.updateBot = async (req, res) => {
     const currentUserRole = req.user.role;
 
     // Validate input
-    if (!scrapedWebsites || !Array.isArray(scrapedWebsites)) {
+    if (scrapedWebsites && !Array.isArray(scrapedWebsites)) {
       return res.status(400).json({
         success: false,
         error: 'scrapedWebsites must be an array'
@@ -336,7 +340,9 @@ exports.updateBot = async (req, res) => {
     }
 
     // Update the bot
-    bot.scrapedWebsites = scrapedWebsites;
+    if (scrapedWebsites) {
+      bot.scrapedWebsites = scrapedWebsites;
+    }
     await bot.save();
 
     console.log(`✅ Bot ${botId} updated by ${currentUserRole} ${currentUserId}`);
@@ -406,8 +412,8 @@ exports.getBots = async (req, res) => {
 
     const totalPages = Math.ceil(totalCount / limit);
 
-    res.json({ 
-      bots: botsWithId, 
+    res.json({
+      bots: botsWithId,
       count: botsWithId.length,
       totalCount,
       page,
@@ -453,7 +459,7 @@ exports.getBot = async (req, res) => {
       id: botObj._id
     };
 
-    res.json({ 
+    res.json({
       bot: botWithId
     });
   } catch (err) {
@@ -621,6 +627,78 @@ exports.getScrapeHistory = async (req, res) => {
 };
 
 /**
+ * Get leads for a specific bot
+ * @route   GET /api/bot/:botId/leads
+ * @access  Protected (requires JWT, validates bot ownership)
+ * @returns {Object} { success: boolean, leads: Array }
+ */
+exports.getLeadsByBot = async (req, res) => {
+  try {
+    const { botId } = req.params;
+    const userId = req.user.userId;
+
+    // Verify bot exists and belongs to user
+    const bot = await Bot.findById(botId);
+    if (!bot) {
+      return res.status(404).json({
+        success: false,
+        error: 'Bot not found'
+      });
+    }
+
+    if (bot.userId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied to this bot'
+      });
+    }
+
+    // Get tenant context for database URI
+    const tenantContext = await getUserTenantContext(bot.userId.toString());
+    if (!tenantContext.databaseUri) {
+      return res.status(503).json({
+        success: false,
+        error: 'Tenant database not provisioned'
+      });
+    }
+
+    // Get tenant models from chatController
+    const { getTenantModels } = require('./chatController');
+    const { Lead } = await getTenantModels(tenantContext.databaseUri);
+
+    // Fetch leads for this bot from tenant database
+    // The Lead collection stores leads with botId reference
+    const leads = await Lead.find({ botId: botId })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+
+    // Transform leads to match expected format
+    const formattedLeads = leads.map(lead => ({
+      _id: lead._id,
+      name: lead.name || null,
+      email: lead.email || null,
+      phone: lead.phone || null,
+      originalQuestion: lead.original_question || lead.originalQuestion || null,
+      createdAt: lead.createdAt || lead.created_at,
+      conversationId: lead.conversationId || lead.conversation_id
+    }));
+
+    res.json({
+      success: true,
+      leads: formattedLeads,
+      count: formattedLeads.length
+    });
+  } catch (err) {
+    console.error('❌ Error fetching leads:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch leads'
+    });
+  }
+};
+
+/**
  * Add manual knowledge to bot without crawling
  * @route   POST /api/bot/:botId/manual-knowledge
  * @access  Protected (requires JWT, validates bot ownership)
@@ -634,17 +712,17 @@ exports.addManualKnowledge = [
       const bot = req.bot;
       const botId = bot._id.toString();
       const vectorStorePath = bot.vectorStorePath;
-      
+
       // Extract and validate content
       const content = typeof req.body.content === 'string' ? req.body.content.trim() : '';
-      
+
       if (!content) {
         return res.status(400).json({
           success: false,
           error: 'content is required and cannot be empty or whitespace-only'
         });
       }
-      
+
       // Validate vector store exists
       if (!vectorStorePath) {
         return res.status(400).json({
@@ -652,23 +730,23 @@ exports.addManualKnowledge = [
           error: 'Bot vector store not initialized. Please scrape websites first.'
         });
       }
-      
+
       // Ensure vector store directory exists
       if (!fs.existsSync(vectorStorePath)) {
         fs.mkdirSync(vectorStorePath, { recursive: true });
         console.log(`📁 Created vector store directory: ${vectorStorePath}`);
       }
-      
+
       console.log('📝 Adding manual knowledge to bot', {
         botId,
         botName: bot.name,
         contentLength: content.length,
         vectorStorePath
       });
-      
+
       // Get Python executable
       const pythonExe = getPythonExecutable();
-      
+
       // Build arguments for the script (use -m module pattern like scraping)
       const args = [
         '-m',
@@ -677,7 +755,7 @@ exports.addManualKnowledge = [
         '--vector-store-path', vectorStorePath,
         '--bot-id', botId
       ];
-      
+
       // Spawn Python process (same pattern as scraping)
       // Note: Using synchronous execution for manual knowledge since it's user-initiated
       // and should provide immediate feedback
@@ -689,29 +767,84 @@ exports.addManualKnowledge = [
           PYTHONPATH: repoRoot
         }
       });
-      
+
       let stdout = '';
       let stderr = '';
-      
+
       child.stdout.on('data', (data) => {
         stdout += data.toString();
       });
-      
+
       child.stderr.on('data', (data) => {
         stderr += data.toString();
       });
-      
-      child.on('close', (code) => {
+
+      child.on('close', async (code) => {
         if (code === 0) {
           console.log('✅ Manual knowledge added successfully:', {
             botId,
             botName: bot.name,
             stdout: stdout.trim()
           });
-          
+
+          // Auto-restart bot to reload vector stores (same as after scraping)
+          console.log('🔄 Triggering bot restart to reload vector stores...');
+
+          try {
+            const botServiceUrl = process.env.BOT_SERVICE_URL || 'http://127.0.0.1:8000';
+            const fastApiSecret = process.env.FASTAPI_SHARED_SECRET || '';
+            const restartUrl = `${botServiceUrl}/system/restart`;
+            const parsedUrl = url.parse(restartUrl);
+
+            // Use http or https based on protocol
+            const protocol = parsedUrl.protocol === 'https:' ? https : http;
+
+            // Fix hostname to use 127.0.0.1 instead of localhost to avoid IPv6 issues
+            let hostname = parsedUrl.hostname;
+            if (hostname === 'localhost') {
+              hostname = '127.0.0.1';
+            }
+
+            const options = {
+              hostname: hostname,
+              port: parsedUrl.port,
+              path: parsedUrl.path,
+              method: 'POST',
+              timeout: 5000,
+              headers: {}
+            };
+
+            // Add service secret header if available
+            if (fastApiSecret && fastApiSecret.trim()) {
+              options.headers['X-Service-Secret'] = fastApiSecret;
+            }
+
+            // Non-blocking restart request (don't wait for response)
+            const req = protocol.request(options, (res) => {
+              if (res.statusCode >= 200 && res.statusCode < 300) {
+                console.log('✅ Bot restart requested successfully');
+              } else {
+                console.warn('⚠️  Bot restart returned status:', res.statusCode);
+              }
+            });
+
+            req.on('error', (err) => {
+              console.warn('⚠️  Failed to trigger bot restart:', err.message);
+            });
+
+            req.on('timeout', () => {
+              req.destroy();
+              console.warn('⚠️  Bot restart request timed out');
+            });
+
+            req.end();
+          } catch (err) {
+            console.warn('⚠️  Error preparing bot restart:', err.message);
+          }
+
           res.json({
             success: true,
-            message: 'Knowledge added successfully',
+            message: 'Knowledge added successfully. Bot is restarting to reload vector stores.',
             botId,
             botName: bot.name
           });
@@ -722,10 +855,10 @@ exports.addManualKnowledge = [
             stderr: stderr.trim(),
             stdout: stdout.trim()
           });
-          
+
           // Parse error message from stderr
           const errorMessage = stderr.trim() || stdout.trim() || 'Failed to add knowledge';
-          
+
           res.status(500).json({
             success: false,
             error: 'Failed to add knowledge to bot',
@@ -733,27 +866,27 @@ exports.addManualKnowledge = [
           });
         }
       });
-      
+
       child.on('error', (err) => {
         console.error('❌ Failed to spawn Python process:', {
           botId,
           error: err.message
         });
-        
+
         res.status(500).json({
           success: false,
           error: 'Failed to execute knowledge addition script',
           details: err.message
         });
       });
-      
+
     } catch (err) {
       console.error('❌ Failed to add manual knowledge:', {
         botId: req.bot?._id,
         error: err.message,
         stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
       });
-      
+
       const status = err.statusCode || 500;
       res.status(status).json({
         success: false,

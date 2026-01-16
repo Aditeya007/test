@@ -7,6 +7,7 @@ import { apiRequest } from "../api";
 import Loader from "../components/Loader";
 import UserTable from "../components/users/UserTable";
 import Pagination from "../components/Pagination";
+import AdminApiKeySection from "../components/users/AdminApiKeySection";
 import "../styles/index.css";
 
 function AdminUsersPage() {
@@ -210,6 +211,14 @@ function AdminUsersPage() {
           </div>
         </div>
       </header>
+
+      <AdminApiKeySection
+        currentUser={currentUser}
+        token={token}
+        onApiKeySaved={(newKey) => {
+          console.log("API Key updated:", newKey ? "Set" : "Cleared");
+        }}
+      />
 
       {errorMessage && <div className="admin-users-error">{errorMessage}</div>}
       {successMessage && (

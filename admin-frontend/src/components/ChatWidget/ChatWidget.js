@@ -231,11 +231,16 @@ const ChatWidget = ({ toggleChatbot }) => {
         }
     };
 
+    // Handle close button click - only hide widget, do NOT close session
+    const handleClose = () => {
+        toggleChatbot();
+    };
+
     return ( 
         <div className="rag-chatbot-container">
             <div className="chatbot-header">
                 <h3>AI Assistant</h3>
-                <button onClick={toggleChatbot} className="close-chatbot-btn" aria-label="Close Chatbot">
+                <button onClick={handleClose} className="close-chatbot-btn" aria-label="Close Chatbot">
                    <HeaderCloseIcon />
                 </button>
             </div>

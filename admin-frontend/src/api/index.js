@@ -34,7 +34,7 @@ export async function apiRequest(endpoint, { method = 'GET', token, data, params
 
   try {
     const res = await fetch(url, options);
-    
+
     // Parse response
     let result;
     const contentType = res.headers.get('content-type');
@@ -156,6 +156,19 @@ export async function stopBotScheduler(botId, token) {
  */
 export async function getBotSchedulerStatus(botId, token) {
   return apiRequest(`/bot/${botId}/scheduler/status`, {
+    method: 'GET',
+    token
+  });
+}
+
+/**
+ * Get leads for a specific bot
+ * @param {string} botId - Bot ID
+ * @param {string} token - JWT token
+ * @returns {Promise<Object>} { success: boolean, leads: Array, count: number }
+ */
+export async function getBotLeads(botId, token) {
+  return apiRequest(`/bot/${botId}/leads`, {
     method: 'GET',
     token
   });

@@ -93,4 +93,17 @@ router.post('/chat/request-agent', chatController.requestAgent);
  */
 router.post('/chat/end-session', chatController.endSession);
 
+/**
+ * @route   POST /api/chat/session/close
+ * @desc    Close a chat session
+ * @access  Public (widget API access)
+ * @body    { session_id: string, resource_id: string }
+ * @returns { success: boolean, message: string }
+ * 
+ * Triggered when user closes the widget.
+ * NOTE: Lead email delivery has been removed. Leads are now viewed
+ * only in the admin dashboard per website.
+ */
+router.post('/chat/session/close', chatController.closeSessionAndDeliverLead);
+
 module.exports = router;

@@ -38,7 +38,7 @@ async function getTenantConnection(databaseUri) {
 async function getAgentModel(databaseUri) {
   const connection = await getTenantConnection(databaseUri);
   const AgentSchema = require('../models/Agent');
-  
+
   // Return model from tenant connection
   return connection.models.Agent || connection.model('Agent', AgentSchema);
 }
@@ -105,19 +105,19 @@ async function getTenantModels(databaseUri) {
   ConversationSchema.index({ botId: 1, sessionId: 1 }, { unique: true });
   ConversationSchema.index({ status: 1, lastActiveAt: -1 });
 
-  ConversationSchema.pre('save', function(next) {
+  ConversationSchema.pre('save', function (next) {
     this.lastActiveAt = new Date();
     next();
   });
 
-  ConversationSchema.methods.updateActivity = function() {
+  ConversationSchema.methods.updateActivity = function () {
     this.lastActiveAt = new Date();
     return this.save();
   };
 
-  ConversationSchema.statics.findOrCreate = async function(botId, sessionId) {
+  ConversationSchema.statics.findOrCreate = async function (botId, sessionId) {
     let conversation = await this.findOne({ botId, sessionId });
-    
+
     if (!conversation) {
       conversation = new this({
         botId,
@@ -130,7 +130,7 @@ async function getTenantModels(databaseUri) {
     } else {
       await conversation.updateActivity();
     }
-    
+
     return conversation;
   };
 
@@ -173,7 +173,7 @@ async function getTenantModels(databaseUri) {
 
   MessageSchema.index({ conversationId: 1, createdAt: 1 });
 
-  MessageSchema.statics.getConversationMessages = async function(conversationId, limit = 100) {
+  MessageSchema.statics.getConversationMessages = async function (conversationId, limit = 100) {
     return this.find({ conversationId })
       .sort({ createdAt: 1 })
       .limit(limit)
@@ -181,7 +181,7 @@ async function getTenantModels(databaseUri) {
       .lean();
   };
 
-  MessageSchema.statics.createMessage = async function(conversationId, sender, text, options = {}) {
+  MessageSchema.statics.createMessage = async function (conversationId, sender, text, options = {}) {
     const message = new this({
       conversationId,
       sender,
@@ -190,16 +190,69 @@ async function getTenantModels(databaseUri) {
       sources: options.sources,
       metadata: options.metadata
     });
-    
+
     await message.save();
     return message;
   };
 
+  // Load Lead schema for lead delivery tracking
+  const LeadSchema = new mongoose.Schema(
+    {
+      name: {
+        type: String,
+        default: null,
+        trim: true
+      },
+      phone: {
+        type: String,
+        default: null,
+        trim: true
+      },
+      email: {
+        type: String,
+        default: null,
+        lowercase: true,
+        trim: true
+      },
+      original_question: {
+        type: String,
+        default: null,
+        trim: true
+      },
+      session_id: {
+        type: String,
+        required: true,
+        index: true,
+        trim: true
+      },
+      delivered: {
+        type: Boolean,
+        default: false,
+        index: true
+      },
+      delivered_at: {
+        type: Date,
+        default: null
+      },
+      created_at: {
+        type: Date,
+        default: Date.now,
+        index: true
+      }
+    },
+    { timestamps: false }
+  );
+
+  // Index for efficient session lookup
+  LeadSchema.index({ session_id: 1 }, { unique: true });
+  LeadSchema.index({ delivered: 1, created_at: -1 });
+
   // Return models from tenant connection
   const Conversation = connection.models.Conversation || connection.model('Conversation', ConversationSchema);
   const Message = connection.models.Message || connection.model('Message', MessageSchema);
+  const Lead = connection.models.Lead || connection.model('Lead', LeadSchema);
 
-  return { Conversation, Message };
+  return { Conversation, Message, Lead };
 }
 
 /**
@@ -480,7 +533,7 @@ exports.sendMessage = async (req, res) => {
     if (conversation.status === 'human') {
       // Human agent mode - save message but don't call bot
       const agentMessage = 'A human agent will join shortly.';
-      
+
       // Save agent placeholder message to tenant database
       const placeholderMessage = await Message.createMessage(conversation._id, 'agent', agentMessage);
 
@@ -551,7 +604,8 @@ exports.sendMessage = async (req, res) => {
           botEndpoint: tenantContext.botEndpoint,
           resourceId: tenantContext.resourceId,
           vectorStorePath: bot.vectorStorePath,
-          databaseUri: tenantContext.databaseUri
+          databaseUri: tenantContext.databaseUri,
+          botId: bot._id.toString()
         },
         sanitizedMessage,
         { sessionId }
@@ -845,7 +899,7 @@ exports.requestAgentByConversationId = async (req, res) => {
         status: conversation.status,
         createdAt: conversation.createdAt
       };
-      
+
       io.to(agentRoomName).emit('conversation:queued', lightweightSummary);
       console.log(`📡 Emitted conversation:queued to ${agentRoomName}:`, lightweightSummary);
     }
@@ -915,11 +969,11 @@ exports.requestAgent = async (req, res) => {
 
     // Load Agent model to check availability
     const Agent = await getAgentModel(tenantContext.databaseUri);
-    
+
     // Check agent availability
     const availableCount = await Agent.countDocuments({ status: 'available' });
     const busyCount = await Agent.countDocuments({ status: 'busy' });
-    
+
     // If no agents are online at all (neither available nor busy)
     if (availableCount === 0 && busyCount === 0) {
       console.log(`📞 Agent request denied - no agents online (session: ${sessionId})`);
@@ -966,7 +1020,7 @@ exports.requestAgent = async (req, res) => {
         createdAt: conversation.createdAt,
         requestedAt: conversation.requestedAt
       };
-      
+
       io.to(agentRoomName).emit('conversation:queued', lightweightSummary);
       console.log(`📡 Emitted conversation:queued to ${agentRoomName}:`, lightweightSummary);
     }
@@ -1068,6 +1122,45 @@ exports.endSession = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to end session',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
+/**
+ * POST /api/chat/session/close
+ * Close a chat session
+ * 
+ * NOTE: Lead email delivery has been removed.
+ * Leads are now viewed only in the admin dashboard per website.
+ * 
+ * @body { session_id: string, resource_id: string }
+ * @returns { success: boolean, message: string }
+ */
+exports.closeSessionAndDeliverLead = async (req, res) => {
+  try {
+    const { session_id, resource_id } = req.body;
+
+    // Validate input
+    if (!session_id || !resource_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'session_id and resource_id are required'
+      });
+    }
+
+    console.log(`✅ Session closed (session: ${session_id})`);
+
+    return res.json({
+      success: true,
+      message: 'Session closed successfully'
+    });
+
+  } catch (err) {
+    console.error('❌ Failed to close session:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to close session',
       details: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }

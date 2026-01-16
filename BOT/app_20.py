@@ -378,6 +378,8 @@ class QuestionRequest(BaseModel):
     resource_id: Optional[str] = None
     database_uri: Optional[str] = None
     vector_store_path: Optional[str] = None
+    bot_id: Optional[str] = None
+    api_key: Optional[str] = None  # Gemini API key from admin
 
 class AnswerResponse(BaseModel):
     answer: str
@@ -463,18 +465,9 @@ class SemanticIntelligentRAG:
         self.max_retrieval = 100
         self.max_passages = 10
 
-        # Initialize Gemini API client
-        print("🔄 Initializing Gemini API client...")
-        try:
-            api_key = os.getenv('GOOGLE_API_KEY')
-            if not api_key:
-                raise ValueError("GOOGLE_API_KEY not found in environment variables")
-            genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-2.5-flash')
-            print("✅ Gemini API client initialized successfully!")
-        except Exception as e:
-            print(f"❌ Error initializing Gemini API: {e}")
-            raise
+        # Gemini model will be initialized per-request with dynamic API key
+        self.model = None
+        print("ℹ️  Gemini API will be configured per-request using admin-provided API key")
 
         # Usage tracking
         self.daily_requests = 0
@@ -547,6 +540,7 @@ class SemanticIntelligentRAG:
         if self.leads_collection is not None:
             try:
                 lead_document = {
+                    "botId": self.get_bot_id(session_id),
                     "name": name,
                     "phone": "",  # Empty initially
                     "email": "",  # Empty initially
@@ -573,6 +567,11 @@ class SemanticIntelligentRAG:
         """Get stored user name for session"""
         context = self.conversation_contexts.get(session_id, {})
         return context.get('username')
+
+    def get_bot_id(self, session_id: str) -> Optional[str]:
+        """Get stored bot_id for session"""
+        context = self.conversation_contexts.get(session_id, {})
+        return context.get('bot_id')
 
     def should_ask_for_name(self, session_id: str) -> bool:
         """Determine if we should ask for the user's name"""
@@ -725,13 +724,18 @@ class SemanticIntelligentRAG:
         print(f"🔍 DATABASE DEBUG - About to save leaddata: {leaddata}")
 
         try:
+            # Get bot_id from session context if available
+            session_id = leaddata.get("session_id")
+            bot_id = self.get_bot_id(session_id) if session_id else None
+            
             # Prepare document for MongoDB
             lead_document = {
+                "botId": bot_id,
                 "name": leaddata["name"],
                 "phone": leaddata["phone"], 
                 "email": leaddata["email"],
                 "original_question": leaddata["original_question"],
-                "session_id": leaddata.get("session_id"),
+                "session_id": session_id,
                 "created_at": datetime.datetime.utcnow(),
                 "source": "pricing_inquiry",
                 "status": "new",
@@ -745,14 +749,17 @@ class SemanticIntelligentRAG:
         except DuplicateKeyError:
             print(f"⚠️ Lead with email {leaddata['email']} already exists")
             # Update existing lead instead
+            session_id = leaddata.get("session_id")
+            bot_id = self.get_bot_id(session_id) if session_id else None
             self.leads_collection.update_one(
                 {"email": leaddata["email"]},
                 {
                     "$set": {
+                        "botId": bot_id,
                         "name": leaddata["name"],
                         "phone": leaddata["phone"],
                         "original_question": leaddata["original_question"],
-                        "session_id": leaddata.get("session_id"),
+                        "session_id": session_id,
                         "last_contact": datetime.datetime.utcnow(),
                         "status": "updated"
                     }
@@ -837,11 +844,13 @@ class SemanticIntelligentRAG:
                     return True, "Thank you! We'll follow up soon."
 
                 existing_lead = self.leads_collection.find_one({"session_id": session_id})
+                bot_id = self.get_bot_id(session_id)
 
                 if existing_lead:
                     # Update existing record with phone and email
                     update_data = {
                         "$set": {
+                            "botId": bot_id,
                             "phone": state["phone"],
                             "email": state["email"],
                             "original_question": state["original_question"],
@@ -854,6 +863,7 @@ class SemanticIntelligentRAG:
                 else:
                     # Fallback: create new complete record
                     lead_document = {
+                        "botId": bot_id,
                         "name": state["name"],
                         "phone": state["phone"],
                         "email": state["email"],
@@ -1054,6 +1064,90 @@ class SemanticIntelligentRAG:
             print(f"❌ Error in comprehensive semantic retrieval: {e}")
             return [], []
 
+    def retrieve_candidates(self, question: str, question_embedding: np.ndarray) -> Tuple[List[str], List[np.ndarray]]:
+        """
+        Single semantic recall pass with strong retrieval.
+        
+        Args:
+            question: The user's question
+            question_embedding: Pre-computed embedding for the question
+        
+        Returns:
+            Tuple of (documents, embeddings) where embeddings are numpy arrays
+        """
+        try:
+            # Call Chroma once with embeddings - request 60 candidates
+            results = self.collection.query(
+                query_embeddings=[question_embedding.tolist()],
+                n_results=60,
+                include=["documents", "embeddings"]
+            )
+            
+            docs = results.get('documents', [[]])[0]
+            embeddings_list = results.get('embeddings', [[]])[0]
+            
+            # If Chroma returns embeddings directly, use them; otherwise compute
+            if embeddings_list:
+                # Convert to numpy arrays
+                doc_embeddings = [np.array(emb, dtype=np.float32) for emb in embeddings_list]
+            else:
+                # Fallback: encode documents if embeddings not returned
+                doc_embeddings = [self.embedding_model.encode(doc, convert_to_numpy=True) for doc in docs]
+            
+            print(f"🔍 Single semantic recall: retrieved {len(docs)} candidates from Chroma")
+            
+            return docs, doc_embeddings
+            
+        except Exception as e:
+            print(f"❌ Error in retrieve_candidates: {e}")
+            return [], []
+
+    def vector_prefilter(self, question_embedding: np.ndarray, docs: List[str], doc_embeddings: List[np.ndarray], topk: int = 20) -> Tuple[List[str], List[np.ndarray]]:
+        """
+        In-memory vector similarity pre-filter using cosine similarity.
+        
+        Args:
+            question_embedding: Embedding of the question
+            docs: List of candidate documents
+            doc_embeddings: List of document embeddings as numpy arrays
+            topk: Number of top candidates to return (default 20)
+        
+        Returns:
+            Tuple of (filtered_docs, filtered_embeddings)
+        """
+        if not docs or not doc_embeddings:
+            return [], []
+        
+        if len(docs) <= topk:
+            # Already smaller than threshold
+            return docs, doc_embeddings
+        
+        try:
+            # Compute cosine similarity between question and each document
+            # Normalize embeddings for cosine similarity
+            question_norm = question_embedding / (np.linalg.norm(question_embedding) + 1e-10)
+            
+            similarities = []
+            for doc_emb in doc_embeddings:
+                doc_norm = doc_emb / (np.linalg.norm(doc_emb) + 1e-10)
+                sim = np.dot(question_norm, doc_norm)
+                similarities.append(sim)
+            
+            # Sort by similarity (descending) and get top-k indices
+            top_indices = np.argsort(similarities)[-topk:][::-1]
+            
+            filtered_docs = [docs[i] for i in top_indices]
+            filtered_embeddings = [doc_embeddings[i] for i in top_indices]
+            
+            print(f"🔍 Vector pre-filter: reduced {len(docs)} → {len(filtered_docs)} candidates")
+            
+            return filtered_docs, filtered_embeddings
+            
+        except Exception as e:
+            print(f"❌ Error in vector_prefilter: {e}")
+            # Fallback: return top-k by index if cosine similarity fails
+            return docs[:topk], doc_embeddings[:topk]
+
     def smart_rerank_candidates(self, question: str, docs: List[str], topn: Optional[int] = None) -> List[str]:
         """Hybrid reranking: CrossEncoder semantic scoring + keyword match boosting"""
         if not docs:
@@ -1094,8 +1188,8 @@ class SemanticIntelligentRAG:
             return "I couldn't find relevant information to answer your question."
 
         try:
-            # Use top 12 documents for better context
-            combined_context = "\n".join(docs[:12])
+            # Use optimized retrieved documents (filtered to 6 via vector_prefilter + reranking)
+            combined_context = "\n".join(docs)
 
             # Strong instruction: NEVER include URLs or source links unless the user explicitly
             # asked for page locations / links. When the user asks for links, only use URLs
@@ -1459,6 +1553,7 @@ ANSWER (be concise and factual):"""
                             result = self.leads_collection.update_one(
                                 {"session_id": session_id, "status": "partial"},
                                 {"$set": {
+                                    "botId": self.get_bot_id(session_id),
                                     "phone": phone,
                                     "original_question": original_pricing_q,
                                     "status": "phone_collected",
@@ -1493,6 +1588,7 @@ ANSWER (be concise and factual):"""
                             result = self.leads_collection.update_one(
                                 {"session_id": session_id},
                                 {"$set": {
+                                    "botId": self.get_bot_id(session_id),
                                     "email": email,
                                     "original_question": original_pricing_q,
                                     "status": "complete",
@@ -1543,62 +1639,47 @@ ANSWER (be concise and factual):"""
                     return self.get_lead_collection_request(session_id)
 
             # ============================================================================
-            # IMPROVED RETRIEVAL: Multi-pass aggregation for consistency
+            # OPTIMIZED RETRIEVAL: Single semantic recall + vector pre-filter + reranking
             # ============================================================================
 
-            # Normalize query by removing trailing punctuation for better retrieval
-            normalized_query = question_analysis['original_question'].rstrip('?.!,;')
-
-            all_docs = []
-            seen_docs = set()
-
-            # Pass 1: Primary semantic search with embeddings
-            print("🔍 Pass 1: Semantic embedding search...")
-            docs1, dist1 = self.comprehensive_semantic_retrieval(question_analysis)
-            for doc in docs1[:50]:
-                if doc not in seen_docs:
-                    all_docs.append(doc)
-                    seen_docs.add(doc)
-
-            # Pass 2: Direct text query (different retrieval path)
-            print("🔍 Pass 2: Direct text query...")
-            try:
-                results2 = self.collection.query(
-                    query_texts=[normalized_query],
-                    n_results=50
-                )
-                if results2['documents'] and results2['documents'][0]:
-                    for doc in results2['documents'][0]:
-                        if doc not in seen_docs:
-                            all_docs.append(doc)
-                            seen_docs.add(doc)
-            except Exception as e:
-                print(f"⚠️ Pass 2 failed: {e}")
-
-            # Pass 3: Entity-based search
-            print("🔍 Pass 3: Entity-based search...")
-            entities = question_analysis.get('entity_mentions', [])
-            if entities:
-                entity_query = ' '.join(entities[:5])
-                try:
-                    results3 = self.collection.query(
-                        query_texts=[entity_query],
-                        n_results=30
-                    )
-                    if results3['documents'] and results3['documents'][0]:
-                        for doc in results3['documents'][0]:
-                            if doc not in seen_docs:
-                                all_docs.append(doc)
-                                seen_docs.add(doc)
-                except Exception as e:
-                    print(f"⚠️ Pass 3 failed: {e}")
-
-            print(f"✅ Retrieved {len(all_docs)} unique documents from all passes")
-
-            # Rerank the aggregated results
-            print("🎯 Reranking aggregated documents...")
-            reranked_docs = self.smart_rerank_candidates(normalized_query, all_docs, topn=40) 
+            # Step 1: Single strong semantic recall (60 candidates)
+            print("🔍 Step 1: Single semantic recall with 60 candidates...")
+            candidates, candidate_embeddings = self.retrieve_candidates(
+                question_analysis['original_question'],
+                question_analysis['question_embedding']
+            )
             
+            if not candidates:
+                print("⚠️ No candidates retrieved from semantic recall")
+                return "I couldn't find relevant information to answer your question."
+            
+            # Step 2: In-memory vector similarity pre-filter (60 → 20)
+            print("🔍 Step 2: Vector pre-filter...")
+            filtered_docs, filtered_embeddings = self.vector_prefilter(
+                question_analysis['question_embedding'],
+                candidates,
+                candidate_embeddings,
+                topk=20
+            )
+            
+            if not filtered_docs:
+                print("⚠️ No documents after vector pre-filter")
+                return "I couldn't find relevant information to answer your question."
+            
+            # Step 3: CrossEncoder reranking on filtered documents (20 → 6)
+            print("🎯 Step 3: CrossEncoder reranking on filtered documents...")
+            reranked_docs = self.smart_rerank_candidates(
+                question_analysis['original_question'],
+                filtered_docs,
+                topn=6
+            )
+            
+            if not reranked_docs:
+                print("⚠️ No documents after reranking")
+                return "I couldn't find relevant information to answer your question."
+            
+            print(f"✅ Final candidate set: {len(reranked_docs)} documents ready for Gemini")
+
             # Backend-only RAG observability: log top chunks sent to LLM
             print(f"\n{'='*80}")
             print(f"RAG RETRIEVAL — TOP CHUNKS USED FOR ANSWER")
@@ -1935,6 +2016,7 @@ async def health_check():
 async def _handle_chat_request(request: QuestionRequest) -> AnswerResponse:
     print(f"🔍 DEBUG - Received session_id: '{request.session_id}'")
     print(f"🔍 DEBUG - Query: '{request.query}'")
+    print(f"🔍 DEBUG - bot_id: '{request.bot_id}'")
     query_text = (request.query or "").strip()
     if not query_text:
         raise HTTPException(status_code=400, detail="Query text is required")
@@ -1953,6 +2035,31 @@ async def _handle_chat_request(request: QuestionRequest) -> AnswerResponse:
         resource_id=request.resource_id,
         user_id=request.user_id
     )
+    
+    # Validate API key is provided
+    if not request.api_key or not request.api_key.strip():
+        raise HTTPException(
+            status_code=400, 
+            detail="Gemini API key not provided. Please configure your API key in the Admin Dashboard under Manage Users."
+        )
+    
+    # Configure Gemini API with the provided key (per-request dynamic configuration)
+    try:
+        genai.configure(api_key=request.api_key.strip())
+        chatbot_instance.model = genai.GenerativeModel('gemini-2.5-flash')
+        print(f"✅ Gemini API configured for session {session_identifier}")
+    except Exception as api_error:
+        print(f"❌ Error configuring Gemini API: {api_error}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to configure Gemini API: {str(api_error)}"
+        )
+    
+    # Store bot_id in session context for lead creation (MUST happen before chat())
+    if request.bot_id:
+        chatbot_instance.conversation_contexts.setdefault(session_identifier, {})
+        chatbot_instance.conversation_contexts[session_identifier]["bot_id"] = request.bot_id
+    
     try:
         answer = chatbot_instance.chat(query_text, session_identifier)
 

@@ -15,21 +15,21 @@ const authOrAgent = (req, res, next) => {
   // Try user auth first
   const authHeader = req.headers['authorization'];
   if (!authHeader) {
-    return res.status(401).json({ 
+    return res.status(401).json({
       error: 'No authorization header provided',
       message: 'Please provide a valid authentication token'
     });
   }
-  
+
   // Check token and decode to determine type
   const jwt = require('jsonwebtoken');
   const token = authHeader.split(' ')[1];
-  
+
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET, {
       algorithms: ['HS256']
     });
-    
+
     // Check if it's an agent token or user token
     if (decoded.agentId) {
       // Agent token - use agent middleware
@@ -39,7 +39,7 @@ const authOrAgent = (req, res, next) => {
       return auth(req, res, next);
     }
   } catch (error) {
-    return res.status(401).json({ 
+    return res.status(401).json({
       error: 'Invalid token',
       message: 'Authentication failed'
     });
@@ -162,6 +162,14 @@ router.get('/:botId/scheduler/status', auth, botScrapeController.getBotScheduler
  * @returns { success: boolean, history: Array }
  */
 router.get('/:botId/scrape-history', auth, botController.getScrapeHistory);
+
+/**
+ * @route   GET /api/bot/:botId/leads
+ * @desc    Get all leads for this bot
+ * @access  Protected (requires JWT, validates bot ownership)
+ * @returns { success: boolean, leads: Array, count: number }
+ */
+router.get('/:botId/leads', auth, botController.getLeadsByBot);
 
 /**
  * @route   POST /api/bot/:botId/manual-knowledge

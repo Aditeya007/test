@@ -48,6 +48,32 @@ exports.runBotForUser = async (tenantContext, userInput, options = {}) => {
   const timeout = parseInt(process.env.BOT_REQUEST_TIMEOUT, 10) || 30000;
 
   try {
+    // Fetch the user to get their admin and API key
+    const User = require('../models/User');
+    const user = await User.findById(userId);
+
+    if (!user) {
+      throw new Error(`User not found: ${userId}`);
+    }
+
+    // Get the admin's API key
+    let adminApiKey = null;
+    if (user.role === 'admin') {
+      // User is an admin, use their own API key
+      adminApiKey = user.apiKey;
+    } else if (user.adminId) {
+      // User is a regular user, get their admin's API key
+      const admin = await User.findById(user.adminId);
+      if (admin) {
+        adminApiKey = admin.apiKey;
+      }
+    }
+
+    // Validate API key is present
+    if (!adminApiKey || !adminApiKey.trim()) {
+      throw new Error('Gemini API key not configured for this account. Please set your API key in the Admin Dashboard under Manage Users.');
+    }
+
     if (process.env.NODE_ENV === 'development') {
       console.log(`🤖 Calling FastAPI bot at ${botApiUrl}`);
       console.log(`   User: ${username || userId}`);
@@ -57,6 +83,7 @@ exports.runBotForUser = async (tenantContext, userInput, options = {}) => {
       }
       console.log(`   Session ID: ${sessionId}`);
       console.log(`   Query: ${userInput}`);
+      console.log(`   API Key: ${adminApiKey ? '✓ Configured' : '✗ Missing'}`);
       console.log(`   Timeout: ${timeout}ms`);
     } else {
       console.log(`🤖 Bot API call: ${sessionId}`);
@@ -70,7 +97,9 @@ exports.runBotForUser = async (tenantContext, userInput, options = {}) => {
         user_id: userId,
         resource_id: effectiveResourceId,
         vector_store_path: effectiveVectorPath,
-        database_uri: effectiveDatabaseUri
+        database_uri: effectiveDatabaseUri,
+        bot_id: tenantContext.botId || null,
+        api_key: adminApiKey, // Pass admin's API key to Python
       },
       {
         timeout,
@@ -213,7 +242,7 @@ exports.reloadVectors = async (tenantContext) => {
 
     const docCount = response.data.document_count;
     const actionTaken = response.data.action_taken;
-    
+
     console.log(`✅ Vector reload successful!`);
     console.log(`   Action: ${actionTaken}`);
     if (docCount !== undefined) {

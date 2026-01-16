@@ -131,12 +131,16 @@ exports.getMe = async (req, res) => {
  */
 exports.updateMe = async (req, res) => {
   const updates = {};
-  const { name, email, username, password } = req.body;
+  const { name, email, username, password, apiKey } = req.body;
 
-  // Build updates object
   if (name) updates.name = name.trim();
   if (email) updates.email = email.toLowerCase().trim();
   if (username) updates.username = username.trim();
+
+  // Allow admins to update their API key
+  if (typeof apiKey !== "undefined") {
+    updates.apiKey = apiKey ? apiKey.trim() : null;
+  }
 
   // Hash password if provided
   if (password) {
@@ -231,9 +235,8 @@ exports.updateMe = async (req, res) => {
     if (err.code === 11000) {
       const field = Object.keys(err.keyPattern)[0];
       return res.status(400).json({
-        error: `${
-          field.charAt(0).toUpperCase() + field.slice(1)
-        } already in use`,
+        error: `${field.charAt(0).toUpperCase() + field.slice(1)
+          } already in use`,
         field,
       });
     }
@@ -289,10 +292,8 @@ exports.getAllUsers = async (req, res) => {
     const totalPages = Math.ceil(totalCount / limit);
 
     console.log(
-      `📄 Pagination: Page ${page}, Limit ${limit}, Search: "${
-        searchTerm || "none"
-      }", Total: ${totalCount}, Pages: ${totalPages}, Returning: ${
-        payload.length
+      `📄 Pagination: Page ${page}, Limit ${limit}, Search: "${searchTerm || "none"
+      }", Total: ${totalCount}, Pages: ${totalPages}, Returning: ${payload.length
       } users`
     );
 
@@ -311,7 +312,7 @@ exports.getAllUsers = async (req, res) => {
 };
 
 exports.createUser = async (req, res) => {
-  const { name, email, username, password, maxBots, maxAgents } = req.body;
+  const { name, email, username, password, maxBots, maxAgents, apiKey } = req.body;
   const requestedActive = req.body.isActive;
 
   try {
@@ -369,6 +370,7 @@ exports.createUser = async (req, res) => {
       adminId: currentUserId,
       maxBots: userMaxBots,
       maxAgents: userMaxAgents,
+      apiKey: apiKey ? apiKey.trim() : undefined, // Store API key if provided
     });
 
     // Provision user-level resources
@@ -406,9 +408,8 @@ exports.createUser = async (req, res) => {
     if (err.code === 11000) {
       const field = Object.keys(err.keyPattern)[0];
       return res.status(400).json({
-        error: `${
-          field.charAt(0).toUpperCase() + field.slice(1)
-        } already in use`,
+        error: `${field.charAt(0).toUpperCase() + field.slice(1)
+          } already in use`,
         field,
       });
     }
@@ -476,7 +477,7 @@ exports.getUserResources = async (req, res) => {
 
 exports.updateUser = async (req, res) => {
   const { id } = req.params;
-  const { name, email, username, password, isActive, maxBots, maxAgents } =
+  const { name, email, username, password, isActive, maxBots, maxAgents, apiKey } =
     req.body;
 
   const updates = {};
@@ -514,6 +515,10 @@ exports.updateUser = async (req, res) => {
       });
     }
     updates.maxAgents = parsedMaxAgents;
+  }
+  // Allow admins to update their API key
+  if (typeof apiKey !== "undefined") {
+    updates.apiKey = apiKey ? apiKey.trim() : null;
   }
 
   try {
@@ -699,8 +704,7 @@ exports.getApiToken = async (req, res) => {
     await user.save();
 
     console.log(
-      `🔑 API token ${regenerate ? "regenerated" : "generated"} for user: ${
-        user.username
+      `🔑 API token ${regenerate ? "regenerated" : "generated"} for user: ${user.username
       }`
     );
 
@@ -766,8 +770,7 @@ exports.getUserApiToken = async (req, res) => {
     await user.save();
 
     console.log(
-      `🔑 API token ${regenerate ? "regenerated" : "generated"} for user: ${
-        user.username
+      `🔑 API token ${regenerate ? "regenerated" : "generated"} for user: ${user.username
       } (by ${req.user.username})`
     );
 
@@ -896,8 +899,8 @@ exports.getUserBots = async (req, res) => {
 
     const totalPages = Math.ceil(totalCount / limit);
 
-    res.json({ 
-      bots: botsWithId, 
+    res.json({
+      bots: botsWithId,
       count: botsWithId.length,
       totalCount,
       page,
@@ -965,10 +968,10 @@ exports.getUserAgents = async (req, res) => {
 
     // Get agents from tenant database
     const Agent = await getAgentModel(user.databaseUri);
-    
+
     // Get total count for pagination
     const totalCount = await Agent.countDocuments();
-    
+
     // Find agents with pagination
     const agents = await Agent.find()
       .sort({ createdAt: -1 })
@@ -1005,7 +1008,7 @@ exports.getUserAgents = async (req, res) => {
 exports.getConversations = async (req, res) => {
   try {
     const userId = req.user.userId;
-    
+
     // Get tenant context
     const tenantContext = await getUserTenantContext(userId);
     if (!tenantContext.databaseUri) {
@@ -1069,7 +1072,7 @@ exports.getConversations = async (req, res) => {
       }
     });
 
-    const Conversation = tenantConn.models.Conversation || 
+    const Conversation = tenantConn.models.Conversation ||
       tenantConn.model('Conversation', ConversationSchema);
 
     // Fetch all conversations for this tenant, sorted by most recent first
@@ -1189,7 +1192,7 @@ exports.getAgentConversations = async (req, res) => {
       }
     });
 
-    const Conversation = tenantConn.models.Conversation || 
+    const Conversation = tenantConn.models.Conversation ||
       tenantConn.model('Conversation', ConversationSchema);
 
     // Fetch conversations for this specific agent, sorted by most recent first
@@ -1298,7 +1301,7 @@ exports.getConversationMessages = async (req, res) => {
       }
     });
 
-    const Message = tenantConn.models.Message || 
+    const Message = tenantConn.models.Message ||
       tenantConn.model('Message', MessageSchema);
 
     // Fetch messages for this conversation

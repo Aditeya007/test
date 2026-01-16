@@ -17,13 +17,13 @@ exports.validateRegister = (req, res, next) => {
   if (!name || name.trim() === '') {
     errors.push('Name is required');
   }
-  
+
   if (!email || email.trim() === '') {
     errors.push('Email is required');
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     errors.push('Invalid email format');
   }
-  
+
   if (!username || username.trim() === '') {
     errors.push('Username is required');
   } else if (username.length < 3) {
@@ -31,7 +31,7 @@ exports.validateRegister = (req, res, next) => {
   } else if (!/^[a-zA-Z0-9_]+$/.test(username)) {
     errors.push('Username can only contain letters, numbers, and underscores');
   }
-  
+
   if (!password || password.trim() === '') {
     errors.push('Password is required');
   } else if (password.length < 6) {
@@ -136,7 +136,7 @@ exports.validateLogin = (req, res, next) => {
   if (!username || username.trim() === '') {
     errors.push('Username is required');
   }
-  
+
   if (!password || password.trim() === '') {
     errors.push('Password is required');
   }
@@ -156,14 +156,14 @@ exports.validateBotRun = (req, res, next) => {
   const { message } = req.body;
 
   if (!message || typeof message !== 'string' || message.trim() === '') {
-    return res.status(400).json({ 
+    return res.status(400).json({
       error: 'message is required and must be a non-empty string',
       widgetError: true
     });
   }
 
   if (message.length > 1000) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       error: 'Message is too long (max 1000 characters)',
       widgetError: true
     });
@@ -177,10 +177,10 @@ exports.validateBotRun = (req, res, next) => {
  * At least one field must be provided
  */
 exports.validateProfileUpdate = (req, res, next) => {
-  const { name, email, username, password } = req.body;
+  const { name, email, username, password, apiKey } = req.body;
 
   // Check if at least one field is provided
-  if (!name && !email && !username && !password) {
+  if (!name && !email && !username && !password && typeof apiKey === 'undefined') {
     return res.status(400).json({ error: 'At least one field must be provided for update' });
   }
 
