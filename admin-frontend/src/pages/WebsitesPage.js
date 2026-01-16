@@ -480,14 +480,14 @@ function WebsitesPage() {
               }
               return maxWebsites > 0 && websites.length < maxWebsites;
             })() && (
-                <button
-                  type="button"
-                  className="auth-btn auth-btn--success"
-                  onClick={() => setAddWebsiteModalOpen(true)}
-                >
-                  ➕ Add Website
-                </button>
-              )}
+              <button
+                type="button"
+                className="auth-btn auth-btn--success"
+                onClick={() => setAddWebsiteModalOpen(true)}
+              >
+                ➕ Add Website
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -544,10 +544,11 @@ function WebsitesPage() {
                       </td>
                       <td>
                         <span
-                          className={`status-badge ${website.botReady
-                            ? "status-badge--ready"
-                            : "status-badge--pending"
-                            }`}
+                          className={`status-badge ${
+                            website.botReady
+                              ? "status-badge--ready"
+                              : "status-badge--pending"
+                          }`}
                         >
                           {website.botReady ? "✓ Ready" : "⏳ Pending"}
                         </span>
@@ -555,33 +556,39 @@ function WebsitesPage() {
                       <td style={{ fontSize: "0.85rem" }}>
                         {website.lastScrapeAt
                           ? new Date(website.lastScrapeAt).toLocaleString(
-                            "en-US",
-                            {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            }
-                          )
+                              "en-US",
+                              {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }
+                            )
                           : "Never"}
                       </td>
                       <td style={{ fontSize: "0.85rem" }}>
                         {website.createdAt
                           ? new Date(website.createdAt).toLocaleString(
-                            "en-US",
-                            {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            }
-                          )
+                              "en-US",
+                              {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }
+                            )
                           : "—"}
                       </td>
                       <td>
-                        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "0.5rem",
+                            alignItems: "center",
+                          }}
+                        >
                           <button
                             type="button"
                             onClick={() => handleViewLeads(websiteId)}
@@ -724,7 +731,7 @@ function WebsitesPage() {
             Manage chatbot for:{" "}
             <strong>
               {selectedWebsite.scrapedWebsites &&
-                selectedWebsite.scrapedWebsites[0]
+              selectedWebsite.scrapedWebsites[0]
                 ? selectedWebsite.scrapedWebsites[0]
                 : "this website"}
             </strong>
@@ -849,15 +856,15 @@ function WebsitesPage() {
                 <div style={{ color: "#1e293b", fontWeight: "500" }}>
                   {selectedWebsite.lastScrapeAt
                     ? new Date(selectedWebsite.lastScrapeAt).toLocaleString(
-                      "en-US",
-                      {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }
-                    )
+                        "en-US",
+                        {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        }
+                      )
                     : "Never"}
                 </div>
               </div>
@@ -1014,8 +1021,6 @@ function WebsitesPage() {
             )}
           </div>
 
-
-
           {scrapeSuccess && (
             <div
               style={{
@@ -1065,12 +1070,12 @@ function WebsitesPage() {
               style={{
                 opacity:
                   scrapeLoading ||
-                    selectedWebsite.schedulerConfig?.status === "running"
+                  selectedWebsite.schedulerConfig?.status === "running"
                     ? 0.6
                     : 1,
                 cursor:
                   scrapeLoading ||
-                    selectedWebsite.schedulerConfig?.status === "running"
+                  selectedWebsite.schedulerConfig?.status === "running"
                     ? "not-allowed"
                     : "pointer",
                 flex: "1 1 200px",
@@ -1079,8 +1084,8 @@ function WebsitesPage() {
               {scrapeLoading
                 ? "⏳ Running..."
                 : selectedWebsite.schedulerConfig?.status === "running"
-                  ? "⏳ Crawling..."
-                  : "🔄 Run Crawl"}
+                ? "⏳ Crawling..."
+                : "🔄 Run Crawl"}
             </button>
             <button
               className="dashboard-action-btn"
@@ -1276,13 +1281,13 @@ function WebsitesPage() {
                   <div style={{ fontWeight: "500", color: "#1e293b" }}>
                     {schedulerConfig?.lastScrapeCompleted
                       ? new Date(
-                        schedulerConfig.lastScrapeCompleted
-                      ).toLocaleString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })
+                          schedulerConfig.lastScrapeCompleted
+                        ).toLocaleString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
                       : "Never"}
                   </div>
                 </div>
@@ -1484,54 +1489,72 @@ function WebsitesPage() {
         >
           <div
             className="leads-modal-content"
-            style={{ 
-              maxWidth: "1100px", 
-              maxHeight: "85vh", 
-              overflow: "hidden", 
-              display: "flex", 
+            style={{
+              maxWidth: "1100px",
+              maxHeight: "85vh",
+              overflow: "hidden",
+              display: "flex",
               flexDirection: "column",
               background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
               padding: "2px",
               borderRadius: "16px",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
+              boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
             }}
           >
-            <div style={{
-              background: "#1a1d2e",
-              borderRadius: "14px",
-              overflow: "hidden",
-              display: "flex",
-              flexDirection: "column",
-              height: "100%"
-            }}>
-              <div style={{
-                padding: "1.5rem 2rem",
-                borderBottom: "1px solid rgba(102, 126, 234, 0.2)",
-                background: "linear-gradient(to right, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1))"
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div
+              style={{
+                background: "#1a1d2e",
+                borderRadius: "14px",
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+                height: "100%",
+              }}
+            >
+              <div
+                style={{
+                  padding: "1.5rem 2rem",
+                  borderBottom: "1px solid rgba(102, 126, 234, 0.2)",
+                  background:
+                    "linear-gradient(to right, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1))",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
                   <div>
-                    <h3 style={{ 
-                      margin: 0, 
-                      fontSize: "1.5rem", 
-                      fontWeight: "700",
-                      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                      WebkitBackgroundClip: "text",
-                      WebkitTextFillColor: "transparent",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.5rem"
-                    }}>
+                    <h3
+                      style={{
+                        margin: 0,
+                        fontSize: "1.5rem",
+                        fontWeight: "700",
+                        background:
+                          "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                      }}
+                    >
                       <span style={{ fontSize: "1.75rem" }}>📊</span>
                       Lead Contacts
                     </h3>
-                    <p style={{ 
-                      margin: "0.25rem 0 0 0", 
-                      fontSize: "0.875rem", 
-                      color: "#94a3b8",
-                      fontWeight: "400"
-                    }}>
-                      {leadsData.length} {leadsData.length === 1 ? 'contact' : 'contacts'} collected
+                    <p
+                      style={{
+                        margin: "0.25rem 0 0 0",
+                        fontSize: "0.875rem",
+                        color: "#94a3b8",
+                        fontWeight: "400",
+                      }}
+                    >
+                      {leadsData.length}{" "}
+                      {leadsData.length === 1 ? "contact" : "contacts"}{" "}
+                      collected
                     </p>
                   </div>
                   <button
@@ -1553,7 +1576,7 @@ function WebsitesPage() {
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      transition: "all 0.2s ease"
+                      transition: "all 0.2s ease",
                     }}
                     onMouseEnter={(e) => {
                       e.target.style.background = "rgba(255, 255, 255, 0.15)";
@@ -1573,14 +1596,26 @@ function WebsitesPage() {
 
               <div style={{ flex: 1, overflow: "auto", padding: "1.5rem" }}>
                 {leadsLoading && (
-                  <div style={{ 
-                    textAlign: "center", 
-                    padding: "4rem 2rem", 
-                    color: "#94a3b8" 
-                  }}>
-                    <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>⏳</div>
-                    <div style={{ fontSize: "1.125rem", fontWeight: "500" }}>Loading leads...</div>
-                    <div style={{ fontSize: "0.875rem", marginTop: "0.5rem", opacity: 0.7 }}>
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "4rem 2rem",
+                      color: "#94a3b8",
+                    }}
+                  >
+                    <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>
+                      ⏳
+                    </div>
+                    <div style={{ fontSize: "1.125rem", fontWeight: "500" }}>
+                      Loading leads...
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "0.875rem",
+                        marginTop: "0.5rem",
+                        opacity: 0.7,
+                      }}
+                    >
                       Please wait while we fetch your data
                     </div>
                   </div>
@@ -1598,7 +1633,7 @@ function WebsitesPage() {
                       fontSize: "0.875rem",
                       display: "flex",
                       alignItems: "center",
-                      gap: "0.75rem"
+                      gap: "0.75rem",
                     }}
                   >
                     <span style={{ fontSize: "1.25rem" }}>⚠️</span>
@@ -1607,108 +1642,173 @@ function WebsitesPage() {
                 )}
 
                 {!leadsLoading && !leadsError && leadsData.length === 0 && (
-                  <div style={{ 
-                    textAlign: "center", 
-                    padding: "4rem 2rem",
-                    color: "#64748b"
-                  }}>
-                    <div style={{ fontSize: "4rem", marginBottom: "1rem", opacity: 0.5 }}>📭</div>
-                    <div style={{ fontSize: "1.25rem", fontWeight: "600", color: "#94a3b8", marginBottom: "0.5rem" }}>
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "4rem 2rem",
+                      color: "#64748b",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "4rem",
+                        marginBottom: "1rem",
+                        opacity: 0.5,
+                      }}
+                    >
+                      📭
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "1.25rem",
+                        fontWeight: "600",
+                        color: "#94a3b8",
+                        marginBottom: "0.5rem",
+                      }}
+                    >
                       No Leads Yet
                     </div>
                     <div style={{ fontSize: "0.875rem", color: "#64748b" }}>
-                      Leads will appear here once visitors submit their contact information
+                      Leads will appear here once visitors submit their contact
+                      information
                     </div>
                   </div>
                 )}
 
                 {!leadsLoading && !leadsError && leadsData.length > 0 && (
                   <div style={{ overflowX: "auto" }}>
-                    <table style={{ 
-                      width: "100%", 
-                      borderCollapse: "separate",
-                      borderSpacing: "0",
-                      fontSize: "0.875rem"
-                    }}>
+                    <table
+                      style={{
+                        width: "100%",
+                        borderCollapse: "separate",
+                        borderSpacing: "0",
+                        fontSize: "0.875rem",
+                      }}
+                    >
                       <thead>
                         <tr>
-                          <th style={{ 
-                            padding: "1rem", 
-                            background: "rgba(102, 126, 234, 0.15)",
-                            textAlign: "left",
-                            fontWeight: "600",
-                            color: "#e2e8f0",
-                            fontSize: "0.75rem",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            borderBottom: "2px solid rgba(102, 126, 234, 0.3)",
-                            whiteSpace: "nowrap"
-                          }}>
-                            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <th
+                            style={{
+                              padding: "1rem",
+                              background: "rgba(102, 126, 234, 0.15)",
+                              textAlign: "left",
+                              fontWeight: "600",
+                              color: "#e2e8f0",
+                              fontSize: "0.75rem",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.05em",
+                              borderBottom:
+                                "2px solid rgba(102, 126, 234, 0.3)",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "0.5rem",
+                              }}
+                            >
                               👤 Name
                             </span>
                           </th>
-                          <th style={{ 
-                            padding: "1rem", 
-                            background: "rgba(102, 126, 234, 0.15)",
-                            textAlign: "left",
-                            fontWeight: "600",
-                            color: "#e2e8f0",
-                            fontSize: "0.75rem",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            borderBottom: "2px solid rgba(102, 126, 234, 0.3)",
-                            whiteSpace: "nowrap"
-                          }}>
-                            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <th
+                            style={{
+                              padding: "1rem",
+                              background: "rgba(102, 126, 234, 0.15)",
+                              textAlign: "left",
+                              fontWeight: "600",
+                              color: "#e2e8f0",
+                              fontSize: "0.75rem",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.05em",
+                              borderBottom:
+                                "2px solid rgba(102, 126, 234, 0.3)",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "0.5rem",
+                              }}
+                            >
                               📧 Email
                             </span>
                           </th>
-                          <th style={{ 
-                            padding: "1rem", 
-                            background: "rgba(102, 126, 234, 0.15)",
-                            textAlign: "left",
-                            fontWeight: "600",
-                            color: "#e2e8f0",
-                            fontSize: "0.75rem",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            borderBottom: "2px solid rgba(102, 126, 234, 0.3)",
-                            whiteSpace: "nowrap"
-                          }}>
-                            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <th
+                            style={{
+                              padding: "1rem",
+                              background: "rgba(102, 126, 234, 0.15)",
+                              textAlign: "left",
+                              fontWeight: "600",
+                              color: "#e2e8f0",
+                              fontSize: "0.75rem",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.05em",
+                              borderBottom:
+                                "2px solid rgba(102, 126, 234, 0.3)",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "0.5rem",
+                              }}
+                            >
                               📱 Phone
                             </span>
                           </th>
-                          <th style={{ 
-                            padding: "1rem", 
-                            background: "rgba(102, 126, 234, 0.15)",
-                            textAlign: "left",
-                            fontWeight: "600",
-                            color: "#e2e8f0",
-                            fontSize: "0.75rem",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            borderBottom: "2px solid rgba(102, 126, 234, 0.3)",
-                            whiteSpace: "nowrap"
-                          }}>
-                            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <th
+                            style={{
+                              padding: "1rem",
+                              background: "rgba(102, 126, 234, 0.15)",
+                              textAlign: "left",
+                              fontWeight: "600",
+                              color: "#e2e8f0",
+                              fontSize: "0.75rem",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.05em",
+                              borderBottom:
+                                "2px solid rgba(102, 126, 234, 0.3)",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "0.5rem",
+                              }}
+                            >
                               💬 Question
                             </span>
                           </th>
-                          <th style={{ 
-                            padding: "1rem", 
-                            background: "rgba(102, 126, 234, 0.15)",
-                            textAlign: "left",
-                            fontWeight: "600",
-                            color: "#e2e8f0",
-                            fontSize: "0.75rem",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            borderBottom: "2px solid rgba(102, 126, 234, 0.3)",
-                            whiteSpace: "nowrap"
-                          }}>
-                            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <th
+                            style={{
+                              padding: "1rem",
+                              background: "rgba(102, 126, 234, 0.15)",
+                              textAlign: "left",
+                              fontWeight: "600",
+                              color: "#e2e8f0",
+                              fontSize: "0.75rem",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.05em",
+                              borderBottom:
+                                "2px solid rgba(102, 126, 234, 0.3)",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "0.5rem",
+                              }}
+                            >
                               📅 Date
                             </span>
                           </th>
@@ -1716,35 +1816,57 @@ function WebsitesPage() {
                       </thead>
                       <tbody>
                         {leadsData.map((lead, index) => (
-                          <tr 
+                          <tr
                             key={lead._id || index}
-                            style={{ 
-                              background: index % 2 === 0 ? "rgba(255, 255, 255, 0.03)" : "transparent",
-                              transition: "all 0.2s ease"
+                            style={{
+                              background:
+                                index % 2 === 0
+                                  ? "rgba(255, 255, 255, 0.03)"
+                                  : "transparent",
+                              transition: "all 0.2s ease",
                             }}
                             onMouseEnter={(e) => {
-                              e.currentTarget.style.background = "rgba(102, 126, 234, 0.1)";
+                              e.currentTarget.style.background =
+                                "rgba(102, 126, 234, 0.1)";
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.background = index % 2 === 0 ? "rgba(255, 255, 255, 0.03)" : "transparent";
+                              e.currentTarget.style.background =
+                                index % 2 === 0
+                                  ? "rgba(255, 255, 255, 0.03)"
+                                  : "transparent";
                             }}
                           >
-                            <td style={{ 
-                              padding: "1rem", 
-                              color: "#e2e8f0",
-                              fontWeight: "500",
-                              borderBottom: "1px solid rgba(255, 255, 255, 0.05)"
-                            }}>
-                              {lead.name || <span style={{ color: "#64748b", fontStyle: "italic" }}>N/A</span>}
+                            <td
+                              style={{
+                                padding: "1rem",
+                                color: "#e2e8f0",
+                                fontWeight: "500",
+                                borderBottom:
+                                  "1px solid rgba(255, 255, 255, 0.05)",
+                              }}
+                            >
+                              {lead.name || (
+                                <span
+                                  style={{
+                                    color: "#64748b",
+                                    fontStyle: "italic",
+                                  }}
+                                >
+                                  N/A
+                                </span>
+                              )}
                             </td>
-                            <td style={{ 
-                              padding: "1rem",
-                              borderBottom: "1px solid rgba(255, 255, 255, 0.05)"
-                            }}>
+                            <td
+                              style={{
+                                padding: "1rem",
+                                borderBottom:
+                                  "1px solid rgba(255, 255, 255, 0.05)",
+                              }}
+                            >
                               {lead.email ? (
-                                <a 
-                                  href={`mailto:${lead.email}`} 
-                                  style={{ 
+                                <a
+                                  href={`mailto:${lead.email}`}
+                                  style={{
                                     color: "#818cf8",
                                     textDecoration: "none",
                                     display: "inline-flex",
@@ -1752,10 +1874,11 @@ function WebsitesPage() {
                                     gap: "0.25rem",
                                     padding: "0.25rem 0.5rem",
                                     borderRadius: "4px",
-                                    transition: "all 0.2s ease"
+                                    transition: "all 0.2s ease",
                                   }}
                                   onMouseEnter={(e) => {
-                                    e.target.style.background = "rgba(129, 140, 248, 0.2)";
+                                    e.target.style.background =
+                                      "rgba(129, 140, 248, 0.2)";
                                     e.target.style.color = "#a5b4fc";
                                   }}
                                   onMouseLeave={(e) => {
@@ -1766,17 +1889,27 @@ function WebsitesPage() {
                                   {lead.email}
                                 </a>
                               ) : (
-                                <span style={{ color: "#64748b", fontStyle: "italic" }}>N/A</span>
+                                <span
+                                  style={{
+                                    color: "#64748b",
+                                    fontStyle: "italic",
+                                  }}
+                                >
+                                  N/A
+                                </span>
                               )}
                             </td>
-                            <td style={{ 
-                              padding: "1rem",
-                              borderBottom: "1px solid rgba(255, 255, 255, 0.05)"
-                            }}>
+                            <td
+                              style={{
+                                padding: "1rem",
+                                borderBottom:
+                                  "1px solid rgba(255, 255, 255, 0.05)",
+                              }}
+                            >
                               {lead.phone ? (
-                                <a 
-                                  href={`tel:${lead.phone}`} 
-                                  style={{ 
+                                <a
+                                  href={`tel:${lead.phone}`}
+                                  style={{
                                     color: "#818cf8",
                                     textDecoration: "none",
                                     display: "inline-flex",
@@ -1784,10 +1917,11 @@ function WebsitesPage() {
                                     gap: "0.25rem",
                                     padding: "0.25rem 0.5rem",
                                     borderRadius: "4px",
-                                    transition: "all 0.2s ease"
+                                    transition: "all 0.2s ease",
                                   }}
                                   onMouseEnter={(e) => {
-                                    e.target.style.background = "rgba(129, 140, 248, 0.2)";
+                                    e.target.style.background =
+                                      "rgba(129, 140, 248, 0.2)";
                                     e.target.style.color = "#a5b4fc";
                                   }}
                                   onMouseLeave={(e) => {
@@ -1798,42 +1932,81 @@ function WebsitesPage() {
                                   {lead.phone}
                                 </a>
                               ) : (
-                                <span style={{ color: "#64748b", fontStyle: "italic" }}>N/A</span>
+                                <span
+                                  style={{
+                                    color: "#64748b",
+                                    fontStyle: "italic",
+                                  }}
+                                >
+                                  N/A
+                                </span>
                               )}
                             </td>
-                            <td style={{ 
-                              padding: "1rem", 
-                              color: "#94a3b8",
-                              maxWidth: "300px",
-                              borderBottom: "1px solid rgba(255, 255, 255, 0.05)"
-                            }}>
-                              <div 
-                                style={{ 
-                                  overflow: "hidden", 
-                                  textOverflow: "ellipsis", 
-                                  whiteSpace: "nowrap" 
-                                }} 
-                                title={lead.originalQuestion || lead.original_question || ""}
+                            <td
+                              style={{
+                                padding: "1rem",
+                                color: "#94a3b8",
+                                maxWidth: "300px",
+                                borderBottom:
+                                  "1px solid rgba(255, 255, 255, 0.05)",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                                title={
+                                  lead.originalQuestion ||
+                                  lead.original_question ||
+                                  ""
+                                }
                               >
-                                {lead.originalQuestion || lead.original_question || <span style={{ color: "#64748b", fontStyle: "italic" }}>N/A</span>}
+                                {lead.originalQuestion ||
+                                  lead.original_question || (
+                                    <span
+                                      style={{
+                                        color: "#64748b",
+                                        fontStyle: "italic",
+                                      }}
+                                    >
+                                      N/A
+                                    </span>
+                                  )}
                               </div>
                             </td>
-                            <td style={{ 
-                              padding: "1rem", 
-                              color: "#94a3b8",
-                              whiteSpace: "nowrap",
-                              fontSize: "0.8125rem",
-                              borderBottom: "1px solid rgba(255, 255, 255, 0.05)"
-                            }}>
-                              {lead.createdAt
-                                ? new Date(lead.createdAt).toLocaleString("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })
-                                : <span style={{ color: "#64748b", fontStyle: "italic" }}>N/A</span>}
+                            <td
+                              style={{
+                                padding: "1rem",
+                                color: "#94a3b8",
+                                whiteSpace: "nowrap",
+                                fontSize: "0.8125rem",
+                                borderBottom:
+                                  "1px solid rgba(255, 255, 255, 0.05)",
+                              }}
+                            >
+                              {lead.createdAt ? (
+                                new Date(lead.createdAt).toLocaleString(
+                                  "en-US",
+                                  {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  }
+                                )
+                              ) : (
+                                <span
+                                  style={{
+                                    color: "#64748b",
+                                    fontStyle: "italic",
+                                  }}
+                                >
+                                  N/A
+                                </span>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -1843,16 +2016,22 @@ function WebsitesPage() {
                 )}
               </div>
 
-              <div style={{ 
-                borderTop: "1px solid rgba(102, 126, 234, 0.2)", 
-                padding: "1.25rem 2rem",
-                background: "rgba(102, 126, 234, 0.05)",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center"
-              }}>
+              <div
+                style={{
+                  borderTop: "1px solid rgba(102, 126, 234, 0.2)",
+                  padding: "1.25rem 2rem",
+                  background: "rgba(102, 126, 234, 0.05)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <div style={{ fontSize: "0.875rem", color: "#94a3b8" }}>
-                  Total: <span style={{ fontWeight: "600", color: "#e2e8f0" }}>{leadsData.length}</span> lead{leadsData.length !== 1 ? 's' : ''}
+                  Total:{" "}
+                  <span style={{ fontWeight: "600", color: "#e2e8f0" }}>
+                    {leadsData.length}
+                  </span>{" "}
+                  lead{leadsData.length !== 1 ? "s" : ""}
                 </div>
                 <button
                   type="button"
@@ -1862,7 +2041,8 @@ function WebsitesPage() {
                     setLeadsError("");
                   }}
                   style={{
-                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                    background:
+                      "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
                     border: "none",
                     color: "#fff",
                     padding: "0.625rem 1.5rem",
@@ -1871,15 +2051,17 @@ function WebsitesPage() {
                     fontSize: "0.875rem",
                     fontWeight: "600",
                     transition: "all 0.2s ease",
-                    boxShadow: "0 4px 12px rgba(102, 126, 234, 0.3)"
+                    boxShadow: "0 4px 12px rgba(102, 126, 234, 0.3)",
                   }}
                   onMouseEnter={(e) => {
                     e.target.style.transform = "translateY(-2px)";
-                    e.target.style.boxShadow = "0 6px 20px rgba(102, 126, 234, 0.4)";
+                    e.target.style.boxShadow =
+                      "0 6px 20px rgba(102, 126, 234, 0.4)";
                   }}
                   onMouseLeave={(e) => {
                     e.target.style.transform = "translateY(0)";
-                    e.target.style.boxShadow = "0 4px 12px rgba(102, 126, 234, 0.3)";
+                    e.target.style.boxShadow =
+                      "0 4px 12px rgba(102, 126, 234, 0.3)";
                   }}
                 >
                   Close

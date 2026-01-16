@@ -1,5 +1,5 @@
 // src/components/layout/AdminLayout.js
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
@@ -16,6 +16,10 @@ function AdminLayout({ children }) {
   const { user, logout } = useAuth();
   const dispatch = useAppDispatch();
   const { activeMenuItem, sidebarOpen } = useAppSelector((state) => state.ui);
+  
+  // User menu dropdown state
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef(null);
 
   // Close sidebar on mobile when route changes (but allow manual toggle)
   React.useEffect(() => {
@@ -102,6 +106,23 @@ function AdminLayout({ children }) {
     logout();
     navigate("/login");
   };
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setUserMenuOpen(false);
+      }
+    };
+
+    if (userMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [userMenuOpen]);
 
   const menuItems = [
     {
@@ -256,22 +277,41 @@ function AdminLayout({ children }) {
                     : "User"}
                 </span>
               )}
-              <button
-                className="profile-icon-btn"
-                onClick={() => navigate("/profile")}
-                title="View Profile"
-                aria-label="View Profile"
-              >
-                <span className="profile-icon">👤</span>
-              </button>
-              <button
-                className="logout-header-btn"
-                onClick={handleLogout}
-                title="Logout"
-                aria-label="Logout"
-              >
-                <span className="logout-icon">🚪</span>
-              </button>
+              <div className="user-menu-container" ref={userMenuRef}>
+                <button
+                  className="user-menu-trigger"
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  title="User Menu"
+                  aria-label="User Menu"
+                  aria-expanded={userMenuOpen}
+                >
+                  <span className="user-menu-icon">👤</span>
+                </button>
+                {userMenuOpen && (
+                  <div className="user-menu-dropdown">
+                    <button
+                      className="user-menu-item"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        navigate("/profile");
+                      }}
+                    >
+                      <span className="user-menu-item-icon">👤</span>
+                      <span className="user-menu-item-text">Profile</span>
+                    </button>
+                    <button
+                      className="user-menu-item user-menu-item-logout"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        handleLogout();
+                      }}
+                    >
+                      <span className="user-menu-item-icon">🚪</span>
+                      <span className="user-menu-item-text">Logout</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </header>

@@ -76,6 +76,10 @@ function AgentPanel() {
   // Sidebar collapsed state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  // User menu dropdown state
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef(null);
+
   // Socket.IO ref
   const socketRef = useRef(null);
   // Hold agent conversation handlers for cleanup
@@ -468,6 +472,23 @@ function AgentPanel() {
     }
   }, [messages.length, messagesLoading]);
 
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setUserMenuOpen(false);
+      }
+    };
+
+    if (userMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [userMenuOpen]);
+
   // Leave conversation room
   const leaveConversationRoom = useCallback((conversationId) => {
     if (!socketRef.current || !socketRef.current.connected) return;
@@ -809,22 +830,41 @@ function AgentPanel() {
             <div className="user-info">
               <span className="user-name">{agentUsername}</span>
               <span className="user-badge badge-agent">AGENT</span>
-              <button
-                className="profile-icon-btn"
-                onClick={() => navigate("/profile")}
-                title="View Profile"
-                aria-label="View Profile"
-              >
-                <span className="profile-icon">👤</span>
-              </button>
-              <button
-                className="logout-header-btn"
-                onClick={logout}
-                title="Logout"
-                aria-label="Logout"
-              >
-                <span className="logout-icon">🚪</span>
-              </button>
+              <div className="user-menu-container" ref={userMenuRef}>
+                <button
+                  className="user-menu-trigger"
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  title="User Menu"
+                  aria-label="User Menu"
+                  aria-expanded={userMenuOpen}
+                >
+                  <span className="user-menu-icon">👤</span>
+                </button>
+                {userMenuOpen && (
+                  <div className="user-menu-dropdown">
+                    <button
+                      className="user-menu-item"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        navigate("/profile");
+                      }}
+                    >
+                      <span className="user-menu-item-icon">👤</span>
+                      <span className="user-menu-item-text">Profile</span>
+                    </button>
+                    <button
+                      className="user-menu-item user-menu-item-logout"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        logout();
+                      }}
+                    >
+                      <span className="user-menu-item-icon">🚪</span>
+                      <span className="user-menu-item-text">Logout</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </header>
