@@ -216,6 +216,80 @@ This lead was submitted through your RAG chatbot widget.
   }
 
   /**
+   * Send password reset email
+   * @param {string} recipientEmail - Recipient email address
+   * @param {string} resetToken - Password reset token
+   * @param {string} userName - User's name for personalization
+   * @returns {Promise<boolean>} - True if email sent, false otherwise
+   */
+  async sendPasswordResetEmail(recipientEmail, resetToken, userName) {
+    // If SMTP not configured, silently skip
+    if (!this.transporter) {
+      console.log(`ℹ️ Email Service disabled - skipping password reset email to ${recipientEmail}`);
+      return false;
+    }
+
+    // Validate recipient email
+    if (!recipientEmail || !this.isValidEmail(recipientEmail)) {
+      console.warn(`⚠️ Invalid recipient email: ${recipientEmail}`);
+      return false;
+    }
+
+    try {
+      // Get frontend URL from environment or use default
+      const frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
+      const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+      const subject = 'Password Reset Request';
+      const htmlBody = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #333;">Password Reset Request</h2>
+          <p>Hello ${this.escapeHtml(userName || 'User')},</p>
+          <p>You have requested to reset your password. Click the button below to reset your password:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetUrl}" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
+              Reset Password
+            </a>
+          </div>
+          <p>Or copy and paste this link into your browser:</p>
+          <p style="word-break: break-all; color: #666; font-size: 12px;">${resetUrl}</p>
+          <p style="color: #999; font-size: 12px; margin-top: 30px;">
+            This link will expire in 1 hour. If you didn't request this password reset, please ignore this email.
+          </p>
+        </div>
+      `;
+
+      const textBody = `
+Password Reset Request
+
+Hello ${userName || 'User'},
+
+You have requested to reset your password. Click the link below to reset your password:
+
+${resetUrl}
+
+This link will expire in 1 hour. If you didn't request this password reset, please ignore this email.
+      `;
+
+      const mailOptions = {
+        from: this.fromEmail,
+        to: recipientEmail,
+        subject: subject,
+        html: htmlBody,
+        text: textBody
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ Password reset email sent successfully to ${recipientEmail} (Message ID: ${info.messageId})`);
+      return true;
+
+    } catch (err) {
+      console.error(`❌ Failed to send password reset email to ${recipientEmail}:`, err.message);
+      return false;
+    }
+  }
+
+  /**
    * Verify SMTP connection
    * @returns {Promise<boolean>} - True if connection successful
    */

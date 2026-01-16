@@ -13,6 +13,7 @@ import AdminLayout from './components/layout/AdminLayout';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import AgentLoginPage from './pages/AgentLoginPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminUsersPage from './pages/AdminUsersPage';
 import SiteSettingsPage from './pages/SiteSettingsPage';
@@ -41,6 +42,7 @@ function AppContent() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/user/login" element={<LoginPage userMode={true} />} />
         <Route path="/agent/login" element={<AgentLoginPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         {/* Protected routes - require authentication */}
         <Route

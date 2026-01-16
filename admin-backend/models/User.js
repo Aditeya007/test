@@ -148,6 +148,13 @@ const UserSchema = new mongoose.Schema(
       minlength: [30, 'API key appears to be invalid'],
       maxlength: [200, 'API key is too long']
     },
+    resetPasswordToken: {
+      type: String,
+      trim: true
+    },
+    resetPasswordExpires: {
+      type: Date
+    },
     // lastLogin: { 
     //   type: Date 
     // },
