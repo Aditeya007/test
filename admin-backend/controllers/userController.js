@@ -1100,21 +1100,42 @@ exports.getConversations = async (req, res) => {
       .lean();
     const leadMap = Object.fromEntries(leads.map((l) => [l.session_id, l.name]));
 
+    // Fetch bot details from ADMIN database
+    const Bot = require("../models/Bot");
+    const botIds = [...new Set(conversations.map((c) => c.botId?.toString()).filter(Boolean))];
+    const bots = await Bot.find({ _id: { $in: botIds } })
+      .select("_id name scrapedWebsites")
+      .lean();
+    const botMap = Object.fromEntries(
+      bots.map((b) => [
+        b._id.toString(),
+        {
+          name: b.name,
+          websiteUrl: b.scrapedWebsites?.[0] || "N/A"
+        }
+      ])
+    );
+
     res.json({
       success: true,
-      conversations: conversations.map(conv => ({
-        _id: conv._id,
-        botId: conv.botId,
-        sessionId: conv.sessionId,
-        visitorName: leadMap[conv.sessionId] || null, // Add visitor name from Lead collection
-        status: conv.status,
-        assignedAgent: conv.assignedAgent,
-        agentId: conv.agentId,
-        requestedAt: conv.requestedAt,
-        endedAt: conv.endedAt,
-        createdAt: conv.createdAt,
-        lastActiveAt: conv.lastActiveAt
-      }))
+      conversations: conversations.map(conv => {
+        const bot = botMap[conv.botId?.toString()];
+        return {
+          _id: conv._id,
+          botId: conv.botId,
+          botName: bot?.name || "Unknown Bot",
+          websiteUrl: bot?.websiteUrl || "Unknown Website",
+          sessionId: conv.sessionId,
+          visitorName: leadMap[conv.sessionId] || null,
+          status: conv.status,
+          assignedAgent: conv.assignedAgent,
+          agentId: conv.agentId,
+          requestedAt: conv.requestedAt,
+          endedAt: conv.endedAt,
+          createdAt: conv.createdAt,
+          lastActiveAt: conv.lastActiveAt
+        };
+      })
     });
   } catch (err) {
     console.error("❌ Error fetching conversations:", {
@@ -1245,21 +1266,42 @@ exports.getAgentConversations = async (req, res) => {
       .lean();
     const leadMap = Object.fromEntries(leads.map((l) => [l.session_id, l.name]));
 
+    // Fetch bot details from ADMIN database
+    const Bot = require("../models/Bot");
+    const botIds = [...new Set(conversations.map((c) => c.botId?.toString()).filter(Boolean))];
+    const bots = await Bot.find({ _id: { $in: botIds } })
+      .select("_id name scrapedWebsites")
+      .lean();
+    const botMap = Object.fromEntries(
+      bots.map((b) => [
+        b._id.toString(),
+        {
+          name: b.name,
+          websiteUrl: b.scrapedWebsites?.[0] || "N/A"
+        }
+      ])
+    );
+
     res.json({
       success: true,
-      conversations: conversations.map(conv => ({
-        _id: conv._id,
-        botId: conv.botId,
-        sessionId: conv.sessionId,
-        visitorName: leadMap[conv.sessionId] || null, // Add visitor name from Lead collection
-        status: conv.status,
-        assignedAgent: conv.assignedAgent,
-        agentId: conv.agentId,
-        requestedAt: conv.requestedAt,
-        endedAt: conv.endedAt,
-        createdAt: conv.createdAt,
-        lastActiveAt: conv.lastActiveAt
-      }))
+      conversations: conversations.map(conv => {
+        const bot = botMap[conv.botId?.toString()];
+        return {
+          _id: conv._id,
+          botId: conv.botId,
+          botName: bot?.name || "Unknown Bot",
+          websiteUrl: bot?.websiteUrl || "Unknown Website",
+          sessionId: conv.sessionId,
+          visitorName: leadMap[conv.sessionId] || null,
+          status: conv.status,
+          assignedAgent: conv.assignedAgent,
+          agentId: conv.agentId,
+          requestedAt: conv.requestedAt,
+          endedAt: conv.endedAt,
+          createdAt: conv.createdAt,
+          lastActiveAt: conv.lastActiveAt
+        };
+      })
     });
   } catch (err) {
     console.error("❌ Error fetching agent conversations:", {
