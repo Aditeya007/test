@@ -614,7 +614,8 @@ class FixedUniversalSpider(scrapy.Spider):
                 # Mark as fully processed only if no Playwright fallback is scheduled
                 self._mark_url_as_fully_processed(response.url)
         except Exception as e:
-            logger.error(f"Critical error processing page {response.url}: {e}")
+            # Only log URL and error type to prevent raw response content from being printed
+            logger.error(f"Critical error processing page {response.url}: {type(e).__name__}: {str(e)[:200]}")
 
     def _discover_and_follow_links(self, response):
         try:
@@ -707,7 +708,8 @@ class FixedUniversalSpider(scrapy.Spider):
                 if followed >= self.max_links_per_page:
                     break
         except Exception as e:
-            logger.warning(f"Link discovery error for {response.url}: {e}")
+            # Only log URL and error type to prevent raw response content from being printed
+            logger.warning(f"Link discovery error for {response.url}: {type(e).__name__}: {str(e)[:200]}")
 
     def _generate_pagination_candidates(self, response) -> List[str]:
         url = response.url
@@ -1039,7 +1041,8 @@ class FixedUniversalSpider(scrapy.Spider):
             if extracted_any:
                 self._mark_url_as_fully_processed(response.url)
         except Exception as e:
-            logger.error(f"Playwright rendered parse error {response.url}: {e}")
+            # Only log URL and error type to prevent raw response content from being printed
+            logger.error(f"Playwright rendered parse error {response.url}: {type(e).__name__}: {str(e)[:200]}")
 
     def handle_sitemap_error(self, failure):
         logger.warning(f"Sitemap failed: {getattr(failure, 'request', None) and failure.request.url}")
