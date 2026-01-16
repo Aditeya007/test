@@ -579,14 +579,12 @@ class FixedUniversalSpider(scrapy.Spider):
                 self.items_extracted += 1
                 yield item
 
-            # Mark as fully processed after content extraction
-            self._mark_url_as_fully_processed(response.url)
-
             # Discover links and pagination
             yield from self._discover_and_follow_links(response)
 
             # Fallback to Playwright if thin content
             if extracted_count < 3 and not response.meta.get("playwright", False) and PLAYWRIGHT_AVAILABLE:
+                # Don't mark as fully processed yet - let parse_rendered do it after extraction
                 yield scrapy.Request(
                     response.url,
                     callback=self.parse_rendered,
@@ -603,7 +601,7 @@ class FixedUniversalSpider(scrapy.Spider):
                                     });
                                 if (btn) btn.click();
                             }"""),
-                            PageMethod("wait_for_load_state", "networkidle"),
+                            PageMethod("wait_for_function", "() => document.body.innerText.length > 500"),
                         ],
                         "playwright_include_page": True,
                         "depth": current_depth,
@@ -612,6 +610,9 @@ class FixedUniversalSpider(scrapy.Spider):
                     priority=50,
                     dont_filter=True,
                 )
+            else:
+                # Mark as fully processed only if no Playwright fallback is scheduled
+                self._mark_url_as_fully_processed(response.url)
         except Exception as e:
             logger.error(f"Critical error processing page {response.url}: {e}")
 
@@ -1010,12 +1011,29 @@ class FixedUniversalSpider(scrapy.Spider):
                 return
             
             extracted_any = False
-            for text in response.xpath('//text()[normalize-space() and string-length(normalize-space()) > 10]').getall():
-                clean = re.sub(r"\s+", " ", text.strip())
-                if 20 < len(clean) < 50000:
-                    item = self._build_item(response, clean, content_type="rendered_text")
-                    yield item
-                    extracted_any = True
+            
+            # Extract from readable content elements first (preferred)
+            content_selectors = ['main', 'article', 'section', '[role="main"]', '.content', '#content']
+            for sel in content_selectors:
+                for elem in response.css(sel):
+                    text = elem.xpath('normalize-space(string(.))').get()
+                    if text and len(text.strip()) > 50:
+                        clean = re.sub(r"\s+", " ", text.strip())
+                        if len(clean) < 50000:
+                            item = self._build_item(response, clean, content_type="rendered_content")
+                            yield item
+                            extracted_any = True
+            
+            # Extract headings and paragraphs
+            for sel in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p']:
+                for elem in response.css(sel):
+                    text = elem.xpath('normalize-space(string(.))').get()
+                    if text and len(text.strip()) > 10:
+                        clean = re.sub(r"\s+", " ", text.strip())
+                        if 20 < len(clean) < 50000:
+                            item = self._build_item(response, clean, content_type=f"rendered_{sel}")
+                            yield item
+                            extracted_any = True
             
             # Mark as fully processed after content extraction
             if extracted_any:
