@@ -172,7 +172,7 @@ export function AuthProvider({ children }) {
         localStorage.removeItem('agentToken');
         localStorage.removeItem('isAgent');
         localStorage.removeItem('agentTenant');
-        return { success: true };
+        return { success: true, user: data.user || null };
       } else {
         setUser(null);
         return { 
@@ -209,7 +209,7 @@ export function AuthProvider({ children }) {
         localStorage.removeItem('agentToken');
         localStorage.removeItem('isAgent');
         localStorage.removeItem('agentTenant');
-        return { success: true };
+        return { success: true, user: data.user || null };
       } else {
         setUser(null);
         return { success: false, message: data.error || data.message || 'Registration failed' };

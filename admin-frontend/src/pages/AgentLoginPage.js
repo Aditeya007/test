@@ -24,8 +24,14 @@ function AgentLoginPage() {
   useEffect(() => {
     if (!authLoading && isAuthenticated && user) {
       startTransition(() => {
-        // Redirect agents to /agent, others to /dashboard
-        navigate(user.role === 'agent' ? '/agent' : '/dashboard', { replace: true });
+        // Redirect based on role: agents -> /agent, admins -> /admin/users, others -> /dashboard
+        let redirectPath = '/dashboard';
+        if (user.role === 'agent') {
+          redirectPath = '/agent';
+        } else if (user.role === 'admin') {
+          redirectPath = '/admin/users';
+        }
+        navigate(redirectPath, { replace: true });
       });
     }
   }, [authLoading, isAuthenticated, user, navigate]);

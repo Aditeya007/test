@@ -2818,6 +2818,8 @@ tbody td:first-child {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 0.4em;
+  position: relative;
+  width: 100%;
 }
 
 .profile-title {
@@ -2831,12 +2833,12 @@ tbody td:first-child {
 }
 
 .profile-close-btn {
-  background: transparent;
-  border: none;
-  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
   font-size: 1.5rem;
   cursor: pointer;
-  padding: 0.3em 0.5em;
+  padding: 0;
   line-height: 1;
   border-radius: 6px;
   transition: all 0.2s ease;
@@ -2846,16 +2848,24 @@ tbody td:first-child {
   width: 32px;
   height: 32px;
   margin-left: 1em;
+  flex-shrink: 0;
+  opacity: 1;
+  position: relative;
+  z-index: 10;
+  font-weight: 300;
 }
 
 .profile-close-btn:hover {
   color: #fff;
-  background: rgba(255, 131, 7, 0.15);
+  background: rgba(255, 131, 7, 0.3);
+  border-color: rgba(255, 131, 7, 0.5);
   transform: scale(1.1);
+  opacity: 1;
 }
 
 .profile-close-btn:active {
   transform: scale(0.95);
+  opacity: 1;
 }
 
 .profile-title::before {

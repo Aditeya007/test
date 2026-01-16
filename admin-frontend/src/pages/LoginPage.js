@@ -22,8 +22,14 @@ function LoginPage({ userMode = false }) {
   useEffect(() => {
     if (!loading && isAuthenticated && user) {
       startTransition(() => {
-        // Redirect agents to /agent, others to /dashboard
-        navigate(user.role === 'agent' ? '/agent' : '/dashboard', { replace: true });
+        // Redirect based on role: agents -> /agent, admins -> /admin/users, others -> /dashboard
+        let redirectPath = '/dashboard';
+        if (user.role === 'agent') {
+          redirectPath = '/agent';
+        } else if (user.role === 'admin') {
+          redirectPath = '/admin/users';
+        }
+        navigate(redirectPath, { replace: true });
       });
     }
   }, [loading, isAuthenticated, user, navigate]);
@@ -75,7 +81,15 @@ function LoginPage({ userMode = false }) {
     
     if (res.success) {
       startTransition(() => {
-        navigate('/dashboard');
+        // Redirect based on role: agents -> /agent, admins -> /admin/users, others -> /dashboard
+        const currentUser = res.user || user;
+        let redirectPath = '/dashboard';
+        if (currentUser?.role === 'agent') {
+          redirectPath = '/agent';
+        } else if (currentUser?.role === 'admin') {
+          redirectPath = '/admin/users';
+        }
+        navigate(redirectPath);
       });
     } else {
       setServerError(res.message);
