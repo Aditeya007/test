@@ -588,9 +588,18 @@ class FixedUniversalSpider(scrapy.Spider):
                     meta={
                         "playwright": True,
                         "playwright_page_methods": [
-                            PageMethod("wait_for_timeout", 1500),
+                            PageMethod("wait_for_load_state", "domcontentloaded"),
+                            PageMethod("evaluate", """() => {
+                                const btn = Array.from(document.querySelectorAll('button, a, [role="button"]'))
+                                    .find(el => {
+                                        const text = el.textContent.trim().toLowerCase();
+                                        return text.includes('continue') || text.includes('agree');
+                                    });
+                                if (btn) btn.click();
+                            }"""),
                             PageMethod("wait_for_load_state", "networkidle"),
                         ],
+                        "playwright_include_page": True,
                         "depth": current_depth,
                         "from_sitemap": response.meta.get("from_sitemap", False),
                     },
@@ -963,7 +972,7 @@ class FixedUniversalSpider(scrapy.Spider):
         except Exception as e:
             logger.debug(f"JSON parse error at {response.url}: {e}")
 
-    def parse_rendered(self, response):
+    async def parse_rendered(self, response):
         try:
             # Check if already processed before doing any work
             if self._is_url_already_processed(response.url):
@@ -972,6 +981,18 @@ class FixedUniversalSpider(scrapy.Spider):
                 
             # Mark as currently being processed (if not already)
             self._mark_url_as_processing(response.url)
+            
+            # Get final HTML from Playwright page if available
+            page = response.meta.get("playwright_page")
+            if page:
+                final_html = await page.content()
+                # Create a response-like object with the rendered HTML
+                from scrapy.http import HtmlResponse
+                response = HtmlResponse(
+                    url=response.url,
+                    body=final_html.encode('utf-8'),
+                    encoding='utf-8'
+                )
             
             if not getattr(response, "text", ""):
                 return
